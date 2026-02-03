@@ -35,13 +35,16 @@ CREATE TABLE IF NOT EXISTS entities (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,                -- Full qualified name
     entity_type VARCHAR(50) NOT NULL,  -- 'function', 'class', 'method', 'variable'
-    description TEXT,                  -- From docstring or LLM
+    description TEXT,                  -- From docstring
+    file_path TEXT NOT NULL,           -- Source file path
+    start_line INT,                    -- Start line number
+    end_line INT,                      -- End line number
     chunk_id UUID REFERENCES code_chunks(id) ON DELETE CASCADE,
     embedding vector(768),
     metadata JSONB DEFAULT '{}',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
 
-    UNIQUE(name, entity_type, chunk_id)
+    UNIQUE(name, entity_type, file_path)
 );
 
 -- ============================================
@@ -96,8 +99,9 @@ CREATE INDEX IF NOT EXISTS idx_relationships_source ON relationships(source_id);
 CREATE INDEX IF NOT EXISTS idx_relationships_target ON relationships(target_id);
 CREATE INDEX IF NOT EXISTS idx_relationships_type ON relationships(relation_type);
 
--- File path index (for incremental updates)
+-- File path indexes (for full rebuild: delete by repo)
 CREATE INDEX IF NOT EXISTS idx_chunks_file_path ON code_chunks(file_path);
+CREATE INDEX IF NOT EXISTS idx_entities_file_path ON entities(file_path);
 
 -- ============================================
 -- Helper Functions
@@ -163,7 +167,39 @@ FROM code_chunks
 GROUP BY file_path, language;
 
 -- ============================================
+-- Helper Functions for Full Rebuild (MVP)
+-- ============================================
+
+-- Delete all data for a repository (by file path prefix)
+-- Usage: SELECT delete_by_repo('/path/to/repo');
+CREATE OR REPLACE FUNCTION delete_by_repo(repo_path TEXT)
+RETURNS TABLE(deleted_chunks INT, deleted_entities INT, deleted_relationships INT) AS $$
+DECLARE
+    chunk_count INT;
+    entity_count INT;
+    rel_count INT;
+BEGIN
+    -- Delete relationships first (foreign key constraint)
+    DELETE FROM relationships
+    WHERE source_id IN (SELECT id FROM entities WHERE file_path LIKE repo_path || '%')
+       OR target_id IN (SELECT id FROM entities WHERE file_path LIKE repo_path || '%');
+    GET DIAGNOSTICS rel_count = ROW_COUNT;
+
+    -- Delete entities
+    DELETE FROM entities WHERE file_path LIKE repo_path || '%';
+    GET DIAGNOSTICS entity_count = ROW_COUNT;
+
+    -- Delete chunks
+    DELETE FROM code_chunks WHERE file_path LIKE repo_path || '%';
+    GET DIAGNOSTICS chunk_count = ROW_COUNT;
+
+    RETURN QUERY SELECT chunk_count, entity_count, rel_count;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ============================================
 -- Grant permissions
 -- ============================================
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO loomgraph;
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO loomgraph;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO loomgraph;
