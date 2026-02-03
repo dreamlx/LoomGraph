@@ -1,64 +1,79 @@
-"""Configuration management using pydantic-settings."""
+"""Configuration management for LoomGraph."""
+
+from pathlib import Path
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class DatabaseSettings(BaseSettings):
-    """PostgreSQL database configuration."""
+class ASTExtractionConfig(BaseSettings):
+    """AST extraction configuration."""
 
-    model_config = SettingsConfigDict(env_prefix="LOOMGRAPH_DB_")
+    enabled: bool = True
+    chunking: Literal["ast", "token"] = "ast"
+    extract_calls: bool = True
+    extract_inheritance: bool = True
 
-    host: str = Field(default="localhost", description="Database host")
-    port: int = Field(default=5432, description="Database port")
-    name: str = Field(default="loomgraph", description="Database name")
-    user: str = Field(default="loomgraph", description="Database user")
-    password: str = Field(default="", description="Database password")
-    pool_min_size: int = Field(default=5, description="Minimum pool size")
-    pool_max_size: int = Field(default=20, description="Maximum pool size")
+
+class SemanticEnhancementConfig(BaseSettings):
+    """LLM semantic enhancement configuration (disabled in MVP)."""
+
+    enabled: bool = False  # MVP default: disabled
+    description_generation: bool = False
+    pattern_recognition: bool = False
+
+
+class IndexingConfig(BaseSettings):
+    """Indexing pipeline configuration."""
+
+    ast_extraction: ASTExtractionConfig = Field(default_factory=ASTExtractionConfig)
+    semantic_enhancement: SemanticEnhancementConfig = Field(
+        default_factory=SemanticEnhancementConfig
+    )
+
+
+class EmbeddingConfig(BaseSettings):
+    """Jina Code V2 embedding configuration."""
+
+    provider: Literal["jina", "openai", "local"] = "jina"
+    model: str = "jinaai/jina-embeddings-v2-base-code"
+    base_url: str = "http://localhost:8080"
+    batch_size: int = 32
+    max_length: int = 8192
+    dimension: int = 768
+    timeout: float = 30.0
+
+
+class DatabaseConfig(BaseSettings):
+    """PostgreSQL + pgvector configuration."""
+
+    host: str = "localhost"
+    port: int = 5432
+    database: str = "loomgraph"
+    user: str = "loomgraph"
+    password: str = "loomgraph_dev"
+    min_connections: int = 5
+    max_connections: int = 20
 
     @property
-    def dsn(self) -> str:
-        """Generate PostgreSQL DSN."""
-        return f"postgresql://{self.user}:{self.password}@{self.host}:{self.port}/{self.name}"
+    def connection_string(self) -> str:
+        """Generate PostgreSQL connection string."""
+        return f"postgresql://{self.user}:{self.password}@{self.host}:{self.port}/{self.database}"
+
+    @property
+    def async_connection_string(self) -> str:
+        """Generate async PostgreSQL connection string."""
+        return f"postgresql+asyncpg://{self.user}:{self.password}@{self.host}:{self.port}/{self.database}"
 
 
-class EmbeddingSettings(BaseSettings):
-    """Jina Code V2 embedding service configuration."""
+class RetrievalConfig(BaseSettings):
+    """Retrieval configuration."""
 
-    model_config = SettingsConfigDict(env_prefix="LOOMGRAPH_EMBEDDING_")
-
-    base_url: str = Field(
-        default="http://localhost:8080",
-        description="Embedding service base URL (TEI)",
-    )
-    model_name: str = Field(
-        default="jinaai/jina-embeddings-v2-base-code",
-        description="Embedding model name",
-    )
-    dimension: int = Field(default=768, description="Embedding dimension")
-    max_length: int = Field(default=8192, description="Maximum input length")
-    batch_size: int = Field(default=32, description="Batch size for embedding")
-    timeout: float = Field(default=30.0, description="Request timeout in seconds")
-
-
-class LLMSettings(BaseSettings):
-    """vLLM service configuration for graph extraction."""
-
-    model_config = SettingsConfigDict(env_prefix="LOOMGRAPH_LLM_")
-
-    base_url: str = Field(
-        default="http://localhost:8000/v1",
-        description="vLLM OpenAI-compatible API base URL",
-    )
-    model_name: str = Field(
-        default="deepseek-ai/deepseek-coder-v2-lite-instruct",
-        description="LLM model name",
-    )
-    api_key: str = Field(default="EMPTY", description="API key (EMPTY for local)")
-    max_tokens: int = Field(default=4096, description="Maximum output tokens")
-    temperature: float = Field(default=0.1, description="Sampling temperature")
-    timeout: float = Field(default=120.0, description="Request timeout in seconds")
+    modes: list[str] = ["keyword", "semantic", "graph"]
+    default_mode: Literal["keyword", "semantic", "graph", "hybrid"] = "hybrid"
+    top_k: int = 10
+    similarity_threshold: float = 0.7
 
 
 class Settings(BaseSettings):
@@ -66,20 +81,39 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix="LOOMGRAPH_",
+        env_nested_delimiter="__",
         env_file=".env",
         env_file_encoding="utf-8",
-        env_nested_delimiter="__",
+        extra="ignore",
     )
 
     # Application
-    debug: bool = Field(default=False, description="Debug mode")
-    working_dir: str = Field(default=".loomgraph", description="Working directory")
+    app_name: str = "LoomGraph"
+    debug: bool = False
+    log_level: str = "INFO"
 
-    # Sub-settings
-    database: DatabaseSettings = Field(default_factory=DatabaseSettings)
-    embedding: EmbeddingSettings = Field(default_factory=EmbeddingSettings)
-    llm: LLMSettings = Field(default_factory=LLMSettings)
+    # Working directory for index storage
+    working_dir: Path = Path(".loomgraph")
+
+    # Sub-configurations
+    indexing: IndexingConfig = Field(default_factory=IndexingConfig)
+    embedding: EmbeddingConfig = Field(default_factory=EmbeddingConfig)
+    database: DatabaseConfig = Field(default_factory=DatabaseConfig)
+    retrieval: RetrievalConfig = Field(default_factory=RetrievalConfig)
+
+    def ensure_working_dir(self) -> Path:
+        """Ensure working directory exists and return it."""
+        self.working_dir.mkdir(parents=True, exist_ok=True)
+        return self.working_dir
 
 
-# Global settings instance
-settings = Settings()
+# Global settings instance (lazy loaded)
+_settings: Settings | None = None
+
+
+def get_settings() -> Settings:
+    """Get or create global settings instance."""
+    global _settings
+    if _settings is None:
+        _settings = Settings()
+    return _settings

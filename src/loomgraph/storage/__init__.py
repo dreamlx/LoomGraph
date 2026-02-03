@@ -1,1 +1,1 @@
-"""Storage layer: PostgreSQL + pgvector repositories."""
+"""Storage module: PostgreSQL + pgvector repository implementations."""

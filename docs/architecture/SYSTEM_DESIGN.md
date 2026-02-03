@@ -60,6 +60,46 @@
 
 ---
 
+## 1.1 MVP 配置 (v0.1.0)
+
+```yaml
+# loomgraph.yaml - MVP 默认配置
+indexing:
+  # Layer 1: AST 提取 (始终启用)
+  ast_extraction:
+    enabled: true
+    chunking: "ast"           # 按函数/类边界切分
+    extract_calls: true       # 提取调用关系
+    extract_inheritance: true # 提取继承关系
+
+  # Layer 2: LLM 语义增强 (MVP 默认关闭)
+  semantic_enhancement:
+    enabled: false  # v0.2.0 可启用
+    # features:
+    #   - description_generation
+    #   - pattern_recognition
+
+embedding:
+  provider: "jina"
+  model: "jinaai/jina-embeddings-v2-base-code"
+  base_url: "http://localhost:8080"
+  batch_size: 32
+  max_length: 8192
+
+storage:
+  type: "postgresql"
+  connection_string: "${DATABASE_URL}"
+
+retrieval:
+  modes:
+    - keyword   # 精准匹配
+    - semantic  # 向量检索
+    - graph     # 图遍历
+  default_mode: "hybrid"
+```
+
+---
+
 ## 2. 数据流架构
 
 ### 2.1 索引流程 (Indexing Pipeline)

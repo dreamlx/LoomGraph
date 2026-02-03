@@ -176,12 +176,24 @@
 
 ## 版本计划
 
-| 版本 | 里程碑 | 主要功能 | 目标日期 |
-|------|--------|----------|----------|
-| v0.1.0-alpha | M1 | 存储层 + Embedding 管道 | TBD |
-| v0.2.0-alpha | M2 | AST 切片 + LightRAG 图谱 | TBD |
-| v0.3.0-beta | M3 | CLI + MCP Server | TBD |
-| v1.0.0 | M4 | 生产就绪 | TBD |
+| 版本 | 里程碑 | 主要功能 | semantic_enhancement |
+|------|--------|----------|---------------------|
+| v0.1.0 (MVP) | M1 | AST 关系 + 向量检索 + CLI | `false` |
+| v0.2.0 | M2 | LLM 语义增强 + MCP 服务 | `true` (可选) |
+| v0.3.0 | M3 | 增量更新 + 性能优化 | `true` (可选) |
+| v1.0.0 | M4 | 生产就绪 | 按需配置 |
+
+### MVP v0.1.0 范围
+
+```
+✅ 包含                          ❌ 不包含 (v0.2.0+)
+├── codeindex AST 提取           ├── LLM 语义增强
+├── Call/Inheritance 关系        ├── 架构模式识别
+├── Jina Code V2 向量化          ├── MCP 服务接口
+├── PostgreSQL 存储              └── File Watcher 增量更新
+├── CLI: index / search
+└── 向量 + 图谱混合检索
+```
 
 ---
 
