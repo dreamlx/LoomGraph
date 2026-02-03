@@ -52,7 +52,7 @@ dev = [
 ]
 
 [project.scripts]
-loomgraph = "loomgraph.cli:main"
+loomgraph = "loomgraph.cli.main:main"
 
 [build-system]
 requires = ["hatchling"]
