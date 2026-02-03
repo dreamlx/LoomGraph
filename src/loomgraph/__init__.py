@@ -1,10 +1,11 @@
 """
 LoomGraph: Enterprise Code Intelligence Engine
 
-H200 optimized GraphRAG for massive codebases.
+A high-performance code understanding and retrieval system optimized for
+NVIDIA H200, combining LightRAG graph technology with Jina Code V2 embeddings.
 """
 
-__version__ = "0.1.0-dev"
+__version__ = "0.1.0"
 __author__ = "DreamLinx"
 
 from loomgraph.core.config import Settings

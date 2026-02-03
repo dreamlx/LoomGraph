@@ -59,6 +59,17 @@
 - 管理 H200 资源分配 (Embedding vs LLM)
 - 提供统一的 CLI 和 MCP 接口
 
+## 提取策略
+
+详见 **[ADR-005: 实体/关系提取策略](./ADR-005-extraction-strategy.md)**
+
+核心决策：
+- **AST 优先**: codeindex 做 Chunking + 实体/关系提取 (100% 准确)
+- **LLM 可选**: 语义增强默认关闭 (`semantic_enhancement: false`)
+- **MVP 范围**: 仅 AST 关系，v0.2.0 再启用语义增强
+
+---
+
 ## 本地开发路径
 
 ```

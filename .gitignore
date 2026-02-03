@@ -20,11 +20,9 @@ parts/
 sdist/
 var/
 wheels/
-share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-MANIFEST
 
 # PyInstaller
 *.manifest
@@ -47,57 +45,10 @@ coverage.xml
 *.py,cover
 .hypothesis/
 .pytest_cache/
-cover/
 
 # Translations
 *.mo
 *.pot
-
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
-
-# Flask stuff:
-instance/
-.webassets-cache
-
-# Scrapy stuff:
-.scrapy
-
-# Sphinx documentation
-docs/_build/
-
-# PyBuilder
-.pybuilder/
-target/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# IPython
-profile_default/
-ipython_config.py
-
-# pyenv
-.python-version
-
-# pipenv
-Pipfile.lock
-
-# UV
-uv.lock
-
-# PEP 582
-__pypackages__/
-
-# Celery stuff
-celerybeat-schedule
-celerybeat.pid
-
-# SageMath parsed files
-*.sage.py
 
 # Environments
 .env
@@ -110,20 +61,34 @@ ENV/
 env.bak/
 venv.bak/
 
-# Spyder project settings
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+*.sublime-project
+*.sublime-workspace
 .spyderproject
 .spyproject
 
-# Rope project settings
-.ropeproject
+# Jupyter Notebook
+.ipynb_checkpoints
 
-# mkdocs documentation
-/site
+# IPython
+profile_default/
+ipython_config.py
 
 # mypy
 .mypy_cache/
 .dmypy.json
 dmypy.json
+
+# ruff
+.ruff_cache/
 
 # Pyre type checker
 .pyre/
@@ -134,45 +99,27 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-*~
-.project
-.pydevproject
-.settings/
-*.iml
-.nb-gradle/
-nbproject/
-
 # macOS
 .DS_Store
 .AppleDouble
 .LSOverride
-._*
 
-# Project specific
+# LoomGraph specific
 *.db
 *.sqlite
-index_data/
+*.log
+loomgraph_index/
 .loomgraph/
-lightrag_cache/
 
-# Secrets (never commit these!)
-.env.production
-secrets.yaml
-credentials.json
+# Secrets
 *.pem
 *.key
+secrets.yaml
+secrets.yml
+
+# UV
+uv.lock
 
 # Test artifacts
 test_output/
-.benchmarks/
-
-# Ruff
-.ruff_cache/
-
-# Serena
-.serena/
+test_index/
