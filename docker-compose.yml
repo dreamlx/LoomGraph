@@ -1,0 +1,78 @@
+version: '3.8'
+
+services:
+  # PostgreSQL with pgvector extension
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: loomgraph-postgres
+    environment:
+      POSTGRES_DB: loomgraph
+      POSTGRES_USER: loomgraph
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-loomgraph_dev}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U loomgraph -d loomgraph"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Text Embeddings Inference (TEI) - Jina Code V2
+  # NOTE: This is CPU mode for development. Use GPU version for production.
+  embedding:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.5
+    container_name: loomgraph-embedding
+    command: --model-id jinaai/jina-embeddings-v2-base-code --max-client-batch-size 32
+    ports:
+      - "8080:80"
+    volumes:
+      - embedding-cache:/data
+    environment:
+      - HUGGING_FACE_HUB_TOKEN=${HF_TOKEN:-}
+
+  # Adminer - Database management UI (optional)
+  adminer:
+    image: adminer:4
+    container_name: loomgraph-adminer
+    ports:
+      - "8081:8080"
+    depends_on:
+      - postgres
+    profiles:
+      - tools
+
+volumes:
+  pgdata:
+    driver: local
+  embedding-cache:
+    driver: local
+
+# Production override example (docker-compose.prod.yml):
+#
+# services:
+#   embedding:
+#     image: ghcr.io/huggingface/text-embeddings-inference:89-1.5
+#     command: --model-id jinaai/jina-embeddings-v2-base-code --max-batch-tokens 65536
+#     deploy:
+#       resources:
+#         reservations:
+#           devices:
+#             - driver: nvidia
+#               count: 1
+#               capabilities: [gpu]
+#
+#   llm:
+#     image: vllm/vllm-openai:latest
+#     command: --model deepseek-ai/deepseek-coder-v2-lite-instruct --tensor-parallel-size 1
+#     ports:
+#       - "8000:8000"
+#     deploy:
+#       resources:
+#         reservations:
+#           devices:
+#             - driver: nvidia
+#               count: 1
+#               capabilities: [gpu]
