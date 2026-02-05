@@ -1,10 +1,10 @@
 version: '3.8'
 
 services:
-  # PostgreSQL with pgvector extension
+  # PostgreSQL with pgvector (LightRAG storage backend)
   postgres:
     image: pgvector/pgvector:pg16
-    container_name: loomgraph-postgres
+    container_name: lightrag-postgres
     environment:
       POSTGRES_DB: loomgraph
       POSTGRES_USER: loomgraph

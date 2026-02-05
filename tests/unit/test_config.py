@@ -4,8 +4,8 @@ import pytest
 
 from loomgraph.core.config import (
     ASTExtractionConfig,
-    DatabaseConfig,
     EmbeddingConfig,
+    LightRAGConfig,
     SemanticEnhancementConfig,
     Settings,
 )
@@ -50,26 +50,29 @@ class TestEmbeddingConfig:
         assert config.batch_size == 32
 
 
-class TestDatabaseConfig:
-    """Tests for database configuration."""
+class TestLightRAGConfig:
+    """Tests for LightRAG connection configuration."""
 
-    def test_connection_string(self) -> None:
-        """Test connection string generation."""
-        config = DatabaseConfig(
-            host="localhost",
-            port=5432,
-            database="testdb",
-            user="testuser",
-            password="testpass",
+    def test_pg_connection_string(self) -> None:
+        """Test PostgreSQL connection string generation."""
+        config = LightRAGConfig(
+            pg_host="localhost",
+            pg_port=5432,
+            pg_database="testdb",
+            pg_user="testuser",
+            pg_password="testpass",
         )
 
-        assert "postgresql://testuser:testpass@localhost:5432/testdb" == config.connection_string
+        assert config.pg_connection_string == "postgresql://testuser:testpass@localhost:5432/testdb"
 
-    def test_async_connection_string(self) -> None:
-        """Test async connection string generation."""
-        config = DatabaseConfig()
+    def test_default_storage_backends(self) -> None:
+        """Test default LightRAG storage backend settings."""
+        config = LightRAGConfig()
 
-        assert "postgresql+asyncpg://" in config.async_connection_string
+        assert config.graph_storage == "PGGraphStorage"
+        assert config.vector_storage == "PGVectorStorage"
+        assert config.kv_storage == "PGKVStorage"
+        assert config.doc_status_storage == "PGDocStatusStorage"
 
 
 class TestSettings:
@@ -94,8 +97,8 @@ class TestSettings:
         # Embedding
         assert settings.embedding.dimension == 768
 
-        # Database
-        assert settings.database.database == "loomgraph"
+        # LightRAG
+        assert settings.lightrag.pg_database == "loomgraph"
 
         # Retrieval
         assert settings.retrieval.default_mode == "hybrid"

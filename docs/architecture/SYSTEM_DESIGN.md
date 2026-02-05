@@ -1,83 +1,96 @@
 # LoomGraph 系统架构设计
 
-**版本**: 0.1.0
+**版本**: 0.2.0
 **更新日期**: 2025-02-03
-**状态**: 📝 草稿
+**状态**: ✅ 确认
 
 ---
 
 ## 1. 架构概览
 
+### 1.1 三仓库分层架构
+
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                           应用层 (Application)                           │
-├──────────────────────────────┬──────────────────────────────────────────┤
-│          CLI Tool            │            MCP Server                    │
-│   loomgraph index/search     │    Claude Desktop / Cursor              │
-└──────────────┬───────────────┴──────────────────┬───────────────────────┘
-               │                                   │
-               ▼                                   ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                           服务层 (Service)                               │
-├─────────────────────────────────────────────────────────────────────────┤
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐    │
-│  │ IndexService│  │SearchService│  │ GraphService│  │ WatchService│    │
-│  │ 索引管道    │  │ 混合检索    │  │ 图谱查询    │  │ 增量更新    │    │
-│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘    │
-└─────────┼────────────────┼────────────────┼────────────────┼───────────┘
-          │                │                │                │
-          ▼                ▼                ▼                ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                           核心层 (Core)                                  │
-├─────────────────────────────────────────────────────────────────────────┤
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────────────┐  │
-│  │   AST Chunker   │  │   LightRAG      │  │    配置管理             │  │
-│  │   (tree-sitter) │  │   Integration   │  │    (Settings)           │  │
-│  └────────┬────────┘  └────────┬────────┘  └─────────────────────────┘  │
-└───────────┼────────────────────┼────────────────────────────────────────┘
-            │                    │
-            ▼                    ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         基础设施层 (Infrastructure)                      │
-├─────────────────────────────────────────────────────────────────────────┤
-│  ┌───────────────┐  ┌───────────────┐  ┌───────────────────────────┐   │
-│  │ EmbeddingClient│  │   LLMClient   │  │   StorageRepository       │   │
-│  │ (Jina V2)     │  │   (vLLM)      │  │   (PostgreSQL+pgvector)   │   │
-│  └───────┬───────┘  └───────┬───────┘  └─────────────┬─────────────┘   │
-└──────────┼──────────────────┼────────────────────────┼─────────────────┘
-           │                  │                        │
-           ▼                  ▼                        ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         外部服务 (External)                              │
-├─────────────────────────────────────────────────────────────────────────┤
-│  ┌───────────────┐  ┌───────────────┐  ┌───────────────────────────┐   │
-│  │   H200 GPU    │  │   H200 GPU    │  │      PostgreSQL           │   │
-│  │  Jina TEI     │  │    vLLM       │  │     + pgvector            │   │
-│  │  :8080        │  │    :8000      │  │       :5432               │   │
-│  └───────────────┘  └───────────────┘  └───────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              应用层 (Application)                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│    ┌─────────────────────────────────────────────────────────────────────┐  │
+│    │                      LoomGraph (指挥部)                              │  │
+│    │                                                                     │  │
+│    │   ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                │  │
+│    │   │  CLI Tool   │  │ MCP Server  │  │  Indexer    │                │  │
+│    │   │ index/search│  │ Claude/IDE  │  │  Pipeline   │                │  │
+│    │   └──────┬──────┘  └──────┬──────┘  └──────┬──────┘                │  │
+│    │          │                │                │                        │  │
+│    │          └────────────────┼────────────────┘                        │  │
+│    │                           │                                         │  │
+│    │   ┌───────────────────────┴───────────────────────┐                │  │
+│    │   │              Core Layer                        │                │  │
+│    │   │  ┌─────────┐ ┌─────────┐ ┌─────────┐         │                │  │
+│    │   │  │ Mapper  │ │Injector │ │Embedding│         │                │  │
+│    │   │  │         │ │         │ │ Client  │         │                │  │
+│    │   │  └─────────┘ └─────────┘ └─────────┘         │                │  │
+│    │   └───────────────────────────────────────────────┘                │  │
+│    └─────────────────────────────────────────────────────────────────────┘  │
+│                              │                    │                         │
+│                              │                    │                         │
+│              ┌───────────────┘                    └───────────────┐         │
+│              │                                                   │         │
+│              ▼                                                   ▼         │
+│    ┌─────────────────────┐                         ┌─────────────────────┐ │
+│    │      codeindex      │                         │       LightRAG      │ │
+│    │   (AST 解析层)      │                         │    (RAG 引擎层)     │ │
+│    │                     │                         │                     │ │
+│    │  • Symbol 提取      │    ParseResult          │  • acreate_entity() │ │
+│    │  • Call 提取        │ ──────────────────────► │  • acreate_relation│ │
+│    │  • Inheritance 提取 │                         │  • aquery()         │ │
+│    │  • Import 提取      │                         │  • PGGraphStorage   │ │
+│    └─────────────────────┘                         └──────────┬──────────┘ │
+│                                                               │            │
+└───────────────────────────────────────────────────────────────┼────────────┘
+                                                                │
+                                                                ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              外部服务 (External)                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌───────────────┐  ┌───────────────┐  ┌───────────────────────────────┐   │
+│  │   H200 GPU    │  │   H200 GPU    │  │         PostgreSQL            │   │
+│  │  Jina TEI     │  │    vLLM       │  │  ┌─────────┬─────────────┐   │   │
+│  │  :8080        │  │    :8000      │  │  │pgvector │ Apache AGE  │   │   │
+│  │               │  │  (可选)       │  │  │         │ (图存储)     │   │   │
+│  └───────────────┘  └───────────────┘  │  └─────────┴─────────────┘   │   │
+│                                        │            :5432              │   │
+│                                        └───────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
+
+### 1.2 职责分工
+
+| 仓库 | 职责 | 输入 | 输出 |
+|------|------|------|------|
+| **codeindex** | AST 解析，提取代码结构 | 源代码文件 | ParseResult (Symbol, Call, Inheritance, Import) |
+| **LoomGraph** | 协调调度，数据映射 | ParseResult | LightRAG API 调用 |
+| **LightRAG** | 存储检索，图谱管理 | Entity/Relation Data | 查询结果 |
 
 ---
 
-## 1.1 MVP 配置 (v0.1.0)
+## 2. MVP 配置 (v0.1.0)
 
 ```yaml
 # loomgraph.yaml - MVP 默认配置
 indexing:
-  # Layer 1: AST 提取 (始终启用)
+  # Layer 1: AST 提取 (始终启用，由 codeindex 完成)
   ast_extraction:
     enabled: true
-    chunking: "ast"           # 按函数/类边界切分
+    chunking: "ast"           # 按 Symbol 边界 (函数/类/方法)
     extract_calls: true       # 提取调用关系
     extract_inheritance: true # 提取继承关系
 
   # Layer 2: LLM 语义增强 (MVP 默认关闭)
   semantic_enhancement:
-    enabled: false  # v0.2.0 可启用
-    # features:
-    #   - description_generation
-    #   - pattern_recognition
+    enabled: false  # v0.2.0+ 可启用
 
 embedding:
   provider: "jina"
@@ -85,46 +98,48 @@ embedding:
   base_url: "http://localhost:8080"
   batch_size: 32
   max_length: 8192
+  dimension: 768
+  timeout: 30.0
 
-storage:
-  type: "postgresql"
-  connection_string: "${DATABASE_URL}"
+database:
+  host: "localhost"
+  port: 5432
+  database: "loomgraph"
+  user: "loomgraph"
+  password: "loomgraph_dev"
 
 retrieval:
-  modes:
-    - keyword   # 精准匹配
-    - semantic  # 向量检索
-    - graph     # 图遍历
+  modes: ["keyword", "semantic", "graph"]
   default_mode: "hybrid"
+  top_k: 10
 ```
 
 ---
 
-## 2. 数据流架构
+## 3. 数据流架构
 
-### 2.1 索引流程 (Indexing Pipeline)
+### 3.1 索引流程 (MVP: 全量重建)
 
 ```
 ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐
-│  源代码  │───▶│ AST解析  │───▶│ 代码切片 │───▶│ 向量化   │───▶│ 图谱提取 │
-│  Files   │    │ Parser   │    │ Chunks   │    │ Jina V2  │    │ LightRAG │
+│  源代码  │───▶│codeindex │───▶│ LoomGraph│───▶│  Jina    │───▶│ LightRAG │
+│  Files   │    │ parse()  │    │ mapper   │    │ embed()  │    │ create() │
 └──────────┘    └──────────┘    └──────────┘    └──────────┘    └──────────┘
-                                                     │               │
-                                                     ▼               ▼
-                                              ┌──────────────────────────┐
-                                              │      PostgreSQL          │
-                                              │  ┌────────┬────────────┐ │
-                                              │  │ Vectors│   Graph    │ │
-                                              │  │pgvector│   Tables   │ │
-                                              │  └────────┴────────────┘ │
-                                              └──────────────────────────┘
+                     │                │               │               │
+                     │                │               │               │
+                     ▼                ▼               ▼               ▼
+               ParseResult      EntityData/     Embeddings      PostgreSQL
+               • Symbol        RelationData    list[float]     • PGKVStorage
+               • Call                                          • PGVectorStorage
+               • Inheritance                                   • PGGraphStorage
+               • Import
 ```
 
-### 2.2 检索流程 (Query Pipeline)
+### 3.2 检索流程
 
 ```
 ┌──────────┐    ┌───────────────────────────────────────┐    ┌──────────┐
-│  Query   │───▶│            LightRAG Query             │───▶│ Results  │
+│  Query   │───▶│            LightRAG aquery()          │───▶│ Results  │
 │ "用户登录"│    │  ┌─────────┐ ┌─────────┐ ┌─────────┐ │    │  排序    │
 └──────────┘    │  │Keyword  │ │Semantic │ │ Graph   │ │    │  融合    │
                 │  │Search   │ │ Search  │ │ Search  │ │    └──────────┘
@@ -137,293 +152,310 @@ retrieval:
                 └───────────────────────────────────────┘
 ```
 
+### 3.3 Pipeline 架构 (AI Agent 友好)
+
+#### 3.3.1 设计理念
+
+LoomGraph 设计为 **Claude Code Skill**，主要用户是 AI Agent：
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     Claude Code (AI Agent)                       │
+│                                                                 │
+│  • 读取 docs/ 理解工作流程                                        │
+│  • 执行 CLI 命令                                                 │
+│  • 解读 JSON 错误信息                                            │
+│  • 自动修复问题 (安装依赖、调整参数)                               │
+│  • 按需分步执行或一键执行                                         │
+└─────────────────────────────────────────────────────────────────┘
+         │              │              │              │
+         ▼              ▼              ▼              ▼
+    ┌─────────┐   ┌─────────┐   ┌─────────┐   ┌─────────┐
+    │codeindex│   │loomgraph│   │loomgraph│   │loomgraph│
+    │  scan   │   │  embed  │   │ inject  │   │ search  │
+    └─────────┘   └─────────┘   └─────────┘   └─────────┘
+```
+
+**Pipeline 不在代码里，在 AI Agent 的推理中。**
+
+#### 3.3.2 设计原则
+
+| 原则 | 传统设计 (人类) | AI Agent 设计 |
+|------|----------------|---------------|
+| 复杂度 | 隐藏，自动处理 | 暴露，让 AI 理解 |
+| 错误恢复 | 自动重试 | 返回详细错误，AI 决定 |
+| 命令风格 | 单命令完成 | 原子命令可组合 |
+| 输出格式 | 人类友好文本 | 机器可读 JSON |
+| 依赖检查 | 内置自动安装 | 错误信息说明缺什么 |
+
+#### 3.3.3 4-Step Pipeline
+
+```
+┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐
+│codeindex │───▶│loomgraph │───▶│loomgraph │───▶│ LightRAG │
+│  scan    │    │  embed   │    │  inject  │    │    DB    │
+└──────────┘    └──────────┘    └──────────┘    └──────────┘
+     │               │               │               │
+     ▼               ▼               ▼               ▼
+  JSON file      JSON file      JSON file       Graph DB
+```
+
+| Step | CLI 命令 | 输入 | 输出 |
+|------|----------|------|------|
+| **Parse** | `codeindex scan <repo> --output json` | 源代码目录 | `parse_results.json` |
+| **Embed** | `loomgraph embed <json>` | ParseResult JSON | `embeddings.json` |
+| **Inject** | `loomgraph inject <parse> <embed>` | 两个 JSON | LightRAG DB |
+| **Search** | `loomgraph search <query>` | 查询文本 | 搜索结果 JSON |
+
+#### 3.3.4 codeindex CLI 集成
+
+LoomGraph 通过 **CLI 调用** codeindex（非 Library 导入），确保三个项目完全独立：
+
+```bash
+# codeindex 作为独立工具
+codeindex scan /path/to/repo --output json > parse_results.json
+```
+
+**codeindex CLI 输出格式**：
+
+```json
+{
+  "success": true,
+  "results": [
+    {
+      "path": "src/auth/user.py",
+      "symbols": [
+        {"name": "UserService", "kind": "class", "signature": "class UserService:", ...}
+      ],
+      "calls": [{"caller": "UserService.login", "callee": "db.find", "line": 15}],
+      "inheritances": [{"child": "UserService", "parent": "BaseService"}],
+      "imports": [{"module": "typing", "names": ["Optional"]}]
+    }
+  ],
+  "summary": {"total_files": 5, "total_symbols": 120, "errors": 0}
+}
+```
+
+#### 3.3.5 错误处理策略
+
+**简单原则：快速失败 + 详细错误信息**
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "CODEINDEX_NOT_FOUND",
+    "message": "codeindex command not found in PATH",
+    "suggestion": "pip install matrix-codeindex",
+    "docs": "https://github.com/dreamlx/codeindex#installation"
+  }
+}
+```
+
+AI Agent 看到这个输出后会：
+1. 理解问题：codeindex 未安装
+2. 执行修复：`pip install matrix-codeindex`
+3. 重试命令
+
+**不需要 LoomGraph 内置复杂的重试/恢复逻辑。**
+
+#### 3.3.6 使用示例
+
+**AI Agent 分步执行**:
+```bash
+# 1. 检查环境
+loomgraph status
+
+# 2. 解析代码
+codeindex scan /repo --output json > parse_results.json
+
+# 3. 生成向量
+loomgraph embed parse_results.json --output embeddings.json
+
+# 4. 注入图谱
+loomgraph inject parse_results.json embeddings.json
+
+# 5. 搜索
+loomgraph search "用户认证逻辑"
+```
+
+**AI Agent 一键执行**:
+```bash
+loomgraph index /repo  # 内部调用上述步骤
+```
+
+详见: [CLI_DESIGN.md](../api/CLI_DESIGN.md)
+
 ---
 
-## 3. 核心模块设计
+## 4. 核心模块设计
 
-### 3.1 存储层 (Storage Layer)
+### 4.1 Mapper 模块 (`src/loomgraph/core/mapper.py`)
 
-#### 3.1.1 数据库 Schema
-
-```sql
--- 代码块表
-CREATE TABLE code_chunks (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    file_path TEXT NOT NULL,
-    chunk_type VARCHAR(50) NOT NULL,  -- 'function', 'class', 'module'
-    name TEXT,                         -- 函数/类名
-    start_line INT NOT NULL,
-    end_line INT NOT NULL,
-    content TEXT NOT NULL,
-    content_hash VARCHAR(64) NOT NULL, -- SHA256
-    language VARCHAR(20) NOT NULL,
-    embedding vector(768),             -- Jina Code V2 维度
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
-
-    UNIQUE(file_path, content_hash)
-);
-
--- 实体表 (LightRAG 提取)
-CREATE TABLE entities (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name TEXT NOT NULL,
-    entity_type VARCHAR(50) NOT NULL,  -- 'function', 'class', 'variable', 'module'
-    description TEXT,
-    chunk_id UUID REFERENCES code_chunks(id),
-    embedding vector(768),
-    metadata JSONB,
-
-    UNIQUE(name, entity_type, chunk_id)
-);
-
--- 关系表
-CREATE TABLE relationships (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    source_id UUID REFERENCES entities(id),
-    target_id UUID REFERENCES entities(id),
-    relation_type VARCHAR(50) NOT NULL,  -- 'calls', 'imports', 'inherits', 'uses'
-    weight FLOAT DEFAULT 1.0,
-    metadata JSONB,
-
-    UNIQUE(source_id, target_id, relation_type)
-);
-
--- 向量索引
-CREATE INDEX idx_chunks_embedding ON code_chunks
-    USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
-
-CREATE INDEX idx_entities_embedding ON entities
-    USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
-
--- 图查询索引
-CREATE INDEX idx_relationships_source ON relationships(source_id);
-CREATE INDEX idx_relationships_target ON relationships(target_id);
-CREATE INDEX idx_relationships_type ON relationships(relation_type);
-```
-
-#### 3.1.2 Repository 接口
+将 codeindex 输出映射为 LightRAG 输入格式。
 
 ```python
-from abc import ABC, abstractmethod
-from typing import List, Optional
-from uuid import UUID
+def map_symbol_to_entity(symbol: Symbol, file_path: str, language: str) -> EntityData:
+    """Symbol → LightRAG entity_data"""
+    return EntityData(
+        entity_name=symbol.name,
+        entity_data={
+            "entity_type": symbol.kind,
+            "description": symbol.docstring or f"{symbol.kind}: {symbol.name}",
+            "source_id": f"{file_path}:{symbol.line_start}-{symbol.line_end}",
+            "file_path": file_path,
+            "start_line": symbol.line_start,
+            "end_line": symbol.line_end,
+            "signature": symbol.signature,
+            "language": language,
+        }
+    )
 
-class ChunkRepository(ABC):
-    @abstractmethod
-    async def save(self, chunk: CodeChunk) -> UUID: ...
-
-    @abstractmethod
-    async def find_by_hash(self, content_hash: str) -> Optional[CodeChunk]: ...
-
-    @abstractmethod
-    async def search_by_vector(
-        self,
-        embedding: List[float],
-        limit: int = 10
-    ) -> List[CodeChunk]: ...
-
-    @abstractmethod
-    async def delete_by_file(self, file_path: str) -> int: ...
-
-
-class EntityRepository(ABC):
-    @abstractmethod
-    async def save_batch(self, entities: List[Entity]) -> List[UUID]: ...
-
-    @abstractmethod
-    async def find_by_name(self, name: str) -> List[Entity]: ...
-
-
-class RelationshipRepository(ABC):
-    @abstractmethod
-    async def save_batch(self, relationships: List[Relationship]) -> List[UUID]: ...
-
-    @abstractmethod
-    async def find_callers(self, entity_id: UUID, depth: int = 1) -> List[Entity]: ...
-
-    @abstractmethod
-    async def find_callees(self, entity_id: UUID, depth: int = 1) -> List[Entity]: ...
-```
-
-### 3.2 Embedding 模块
-
-#### 3.2.1 Jina Client
-
-```python
-from dataclasses import dataclass
-from typing import List, Protocol
-import numpy as np
-
-@dataclass
-class EmbeddingConfig:
-    base_url: str = "http://localhost:8080"
-    model_name: str = "jinaai/jina-embeddings-v2-base-code"
-    batch_size: int = 32
-    max_length: int = 8192
-    timeout: float = 30.0
-
-class EmbeddingClient(Protocol):
-    async def embed(self, texts: List[str]) -> np.ndarray:
-        """将文本列表转换为向量矩阵"""
-        ...
-
-class JinaEmbeddingClient:
-    def __init__(self, config: EmbeddingConfig):
-        self.config = config
-
-    async def embed(self, texts: List[str]) -> np.ndarray:
-        """批量调用 Jina TEI 服务"""
-        # 实现批量请求，利用 H200 吞吐量
-        ...
-```
-
-#### 3.2.2 LightRAG 适配器
-
-```python
-from lightrag.utils import EmbeddingFunc
-
-def create_embedding_func(client: EmbeddingClient) -> EmbeddingFunc:
-    """创建 LightRAG 兼容的 embedding 函数"""
-
-    async def embedding_func(texts: list[str]) -> np.ndarray:
-        return await client.embed(texts)
-
-    return EmbeddingFunc(
-        embedding_dim=768,      # Jina Code V2
-        max_token_size=8192,    # 8k context
-        func=embedding_func
+def map_call_to_relation(call: Call, file_path: str) -> RelationData:
+    """Call → LightRAG edge_data"""
+    return RelationData(
+        src_id=call.caller,
+        tgt_id=call.callee,
+        edge_data={
+            "relation_type": "CALLS",
+            "weight": 1.0,
+            "file_path": file_path,
+            "line_number": call.line,
+        }
     )
 ```
 
-### 3.3 AST Chunker 模块
+### 4.2 Injector 模块 (`src/loomgraph/core/injector.py`)
 
-#### 3.3.1 切片策略
+批量注入 ParseResult 到 LightRAG。
 
 ```python
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import List
-import tree_sitter_python as tspython
-from tree_sitter import Language, Parser
+async def inject_parse_result(
+    rag: LightRAG,
+    result: ParseResult,
+    embeddings: dict[str, list[float]] | None = None,
+) -> InjectResult:
+    """将 codeindex 解析结果注入 LightRAG"""
 
-@dataclass
-class CodeChunk:
-    file_path: str
-    chunk_type: str      # 'function', 'class', 'module'
-    name: str
-    content: str
-    start_line: int
-    end_line: int
-    language: str
-    docstring: Optional[str] = None
+    # 1. 注入实体
+    for symbol in result.symbols:
+        entity = map_symbol_to_entity(symbol, file_path, language)
+        if embeddings:
+            entity.entity_data["embedding"] = embeddings[entity.entity_name]
+        await rag.acreate_entity(entity.entity_name, entity.entity_data)
 
-class Chunker(ABC):
-    @abstractmethod
-    def chunk(self, source_code: str, file_path: str) -> List[CodeChunk]:
-        """将源代码切分为逻辑块"""
+    # 2. 注入调用关系
+    for call in result.calls:
+        rel = map_call_to_relation(call, file_path)
+        await rag.acreate_relation(rel.src_id, rel.tgt_id, rel.edge_data)
+
+    # 3. 注入继承关系
+    for inh in result.inheritances:
+        rel = map_inheritance_to_relation(inh, file_path)
+        await rag.acreate_relation(rel.src_id, rel.tgt_id, rel.edge_data)
+```
+
+### 4.3 Indexer 模块 (`src/loomgraph/core/indexer.py`)
+
+完整索引流水线。
+
+```python
+async def index_repository(
+    repo_path: str,
+    rag: LightRAG,
+    embedding_client: EmbeddingClient,
+    parse_file: Callable,
+) -> IndexResult:
+    """MVP 索引策略：全量重建"""
+
+    # Step 1: 清空该仓库的旧数据
+    await clear_repo_entities(rag, repo_path)
+
+    # Step 2: 扫描代码文件
+    files = scan_code_files(repo_path)
+
+    # Step 3: 解析 → 向量化 → 注入
+    for file_path in files:
+        result = parse_file(file_path)
+        if result.error:
+            continue
+
+        texts = [s.signature or s.name for s in result.symbols]
+        embeddings = await embedding_client.embed(texts)
+        embedding_map = {s.name: emb for s, emb in zip(result.symbols, embeddings)}
+
+        await inject_parse_result(rag, result, embedding_map)
+
+    return IndexResult(repo_path=repo_path, files=len(files), ...)
+```
+
+### 4.4 Embedding 模块 (`src/loomgraph/embedding/jina.py`)
+
+Jina Code V2 客户端，支持 TEI 和 Jina API。
+
+```python
+class JinaEmbeddingClient(EmbeddingClient):
+    """Jina Code V2 via TEI (8K context)"""
+
+    async def embed(self, texts: list[str]) -> EmbeddingResult:
+        """批量向量化，自动分批"""
+        all_embeddings = []
+        for batch in batched(texts, self._config.batch_size):
+            result = await self._embed_batch(batch)
+            all_embeddings.extend(result)
+        return EmbeddingResult(embeddings=all_embeddings, ...)
+
+    async def embed_with_retry(self, texts: list[str], max_retries: int = 3):
+        """带重试的向量化"""
         ...
-
-class PythonChunker(Chunker):
-    def __init__(self):
-        self.parser = Parser()
-        self.parser.set_language(Language(tspython.language(), "python"))
-
-    def chunk(self, source_code: str, file_path: str) -> List[CodeChunk]:
-        tree = self.parser.parse(bytes(source_code, "utf8"))
-        chunks = []
-
-        # 遍历 AST，提取 function_definition 和 class_definition
-        for node in self._traverse(tree.root_node):
-            if node.type in ("function_definition", "class_definition"):
-                chunk = self._extract_chunk(node, source_code, file_path)
-                chunks.append(chunk)
-
-        return chunks
-```
-
-#### 3.3.2 多语言支持
-
-```python
-class ChunkerFactory:
-    _chunkers = {
-        "python": PythonChunker,
-        "javascript": JavaScriptChunker,
-        "typescript": TypeScriptChunker,
-    }
-
-    @classmethod
-    def get_chunker(cls, language: str) -> Chunker:
-        if language not in cls._chunkers:
-            raise ValueError(f"Unsupported language: {language}")
-        return cls._chunkers[language]()
-
-    @classmethod
-    def detect_language(cls, file_path: str) -> str:
-        ext_map = {
-            ".py": "python",
-            ".js": "javascript",
-            ".ts": "typescript",
-            ".tsx": "typescript",
-        }
-        ext = Path(file_path).suffix
-        return ext_map.get(ext, "unknown")
-```
-
-### 3.4 LightRAG 集成
-
-#### 3.4.1 初始化配置
-
-```python
-from lightrag import LightRAG, QueryParam
-
-class LoomGraphRAG:
-    def __init__(
-        self,
-        working_dir: str,
-        embedding_client: EmbeddingClient,
-        llm_client: LLMClient,
-        storage: StorageRepository
-    ):
-        self.rag = LightRAG(
-            working_dir=working_dir,
-            llm_model_func=self._create_llm_func(llm_client),
-            embedding_func=create_embedding_func(embedding_client),
-            # PostgreSQL 存储适配（需要定制）
-            # kv_storage=PostgresKVStorage(storage),
-            # graph_storage=PostgresGraphStorage(storage),
-        )
-
-    async def index(self, chunks: List[CodeChunk]) -> None:
-        """索引代码块到图谱"""
-        # 将 chunks 转换为 LightRAG 可接受的格式
-        texts = [self._format_chunk(chunk) for chunk in chunks]
-        await self.rag.ainsert(texts)
-
-    async def search(
-        self,
-        query: str,
-        mode: str = "hybrid"
-    ) -> List[SearchResult]:
-        """混合检索"""
-        return await self.rag.aquery(
-            query,
-            param=QueryParam(mode=mode)
-        )
 ```
 
 ---
 
-## 4. API 设计
+## 5. 存储架构
 
-### 4.1 CLI 接口
+### 5.1 使用 LightRAG 内置存储
+
+LoomGraph **不自定义数据库表结构**，完全复用 LightRAG 的 PostgreSQL 存储：
+
+| 组件 | LightRAG 类 | 用途 |
+|------|------------|------|
+| KV 存储 | `PGKVStorage` | 配置、缓存 |
+| 向量存储 | `PGVectorStorage` | Embedding 检索 |
+| 图存储 | `PGGraphStorage` | 实体关系图 (Apache AGE) |
+| 文档状态 | `PGDocStatusStorage` | 索引状态追踪 |
+
+### 5.2 数据库初始化
+
+```sql
+-- scripts/init-db.sql (仅启用扩展)
+CREATE EXTENSION IF NOT EXISTS vector;       -- pgvector
+CREATE EXTENSION IF NOT EXISTS pg_trgm;      -- 文本模糊搜索
+-- Apache AGE 由 LightRAG 自动管理
+```
+
+---
+
+## 6. 关系类型定义
+
+| 类型 | 说明 | 来源 |
+|------|------|------|
+| `CALLS` | 函数/方法调用 | codeindex.Call |
+| `INHERITS` | 类继承 | codeindex.Inheritance |
+| `IMPORTS` | 模块导入 | codeindex.Import |
+
+---
+
+## 7. API 设计
+
+### 7.1 CLI 接口
 
 ```bash
 # 初始化配置
 loomgraph init --db-url postgresql://... --embedding-url http://...
 
-# 索引代码库
-loomgraph index --path /path/to/repo [--incremental]
+# 索引代码库 (全量重建)
+loomgraph index --path /path/to/repo
 
 # 代码搜索
 loomgraph search "处理用户登录的函数" [--mode hybrid|semantic|keyword]
@@ -435,7 +467,7 @@ loomgraph graph --entity "UserService.login" --query callers
 loomgraph serve --port 8080
 ```
 
-### 4.2 MCP Tools
+### 7.2 MCP Tools (v0.2.0+)
 
 ```json
 {
@@ -446,21 +478,21 @@ loomgraph serve --port 8080
       "inputSchema": {
         "type": "object",
         "properties": {
-          "query": { "type": "string", "description": "搜索查询" },
-          "mode": { "type": "string", "enum": ["hybrid", "semantic", "keyword"] },
+          "query": { "type": "string" },
+          "mode": { "enum": ["hybrid", "semantic", "keyword"] },
           "limit": { "type": "integer", "default": 10 }
         },
         "required": ["query"]
       }
     },
     {
-      "name": "get_dependencies",
-      "description": "获取代码实体的依赖关系",
+      "name": "get_callers",
+      "description": "获取调用指定函数的所有函数",
       "inputSchema": {
         "type": "object",
         "properties": {
-          "entity": { "type": "string", "description": "实体名称" },
-          "direction": { "type": "string", "enum": ["callers", "callees", "both"] }
+          "entity": { "type": "string" },
+          "depth": { "type": "integer", "default": 1 }
         },
         "required": ["entity"]
       }
@@ -471,9 +503,9 @@ loomgraph serve --port 8080
 
 ---
 
-## 5. 部署架构
+## 8. 部署架构
 
-### 5.1 开发环境 (Docker Compose)
+### 8.1 开发环境 (Docker Compose)
 
 ```yaml
 version: '3.8'
@@ -484,13 +516,12 @@ services:
     environment:
       POSTGRES_DB: loomgraph
       POSTGRES_USER: loomgraph
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-loomgraph_dev}
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
 
-  # Jina Embedding (开发模式，CPU)
   embedding:
     image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.1
     command: --model-id jinaai/jina-embeddings-v2-base-code
@@ -501,10 +532,9 @@ volumes:
   pgdata:
 ```
 
-### 5.2 生产环境 (H200)
+### 8.2 生产环境 (H200)
 
 ```yaml
-# H200 专用配置
 services:
   embedding:
     image: ghcr.io/huggingface/text-embeddings-inference:89-1.1
@@ -516,24 +546,13 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
-
-  llm:
-    image: vllm/vllm-openai:latest
-    command: --model deepseek-ai/deepseek-coder-v2-lite-instruct --tensor-parallel-size 1
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
 ```
 
 ---
 
-## 6. 测试策略
+## 9. 测试策略
 
-### 6.1 测试金字塔
+### 9.1 测试金字塔
 
 ```
                     ┌─────────────┐
@@ -548,36 +567,38 @@ services:
                            │
      ┌─────────────────────┴─────────────────────┐
      │              Unit Tests                    │  60%
-     │  (Chunker, Repository, Services)          │
+     │  (Mapper, Injector, Indexer, Embedding)   │
      └───────────────────────────────────────────┘
 ```
 
-### 6.2 测试分类
+### 9.2 当前测试覆盖
 
-| 类型 | 目录 | 工具 | 说明 |
-|------|------|------|------|
-| 单元测试 | `tests/unit/` | pytest | 纯逻辑测试，mock 外部依赖 |
-| 集成测试 | `tests/integration/` | pytest + testcontainers | 真实 DB/服务 |
-| E2E 测试 | `tests/e2e/` | pytest | CLI/MCP 端到端 |
-| 性能测试 | `tests/benchmark/` | pytest-benchmark | 吞吐量/延迟 |
+| 模块 | 测试文件 | 测试数 |
+|------|----------|--------|
+| Config | `tests/unit/test_config.py` | 7 |
+| Mapper | `tests/unit/test_mapper.py` | 26 |
+| Injector | `tests/unit/test_injector.py` | 9 |
+| Embedding | `tests/unit/test_embedding.py` | 11 |
+| Indexer | `tests/unit/test_indexer.py` | 11 |
+| **Total** | | **64** |
 
 ---
 
-## 7. 附录
+## 10. 附录
 
-### 7.1 技术选型理由
+### 10.1 技术选型
 
 | 选项 | 选择 | 理由 |
 |------|------|------|
-| 向量数据库 | pgvector | 简化运维，事务一致性 |
-| 图数据库 | PostgreSQL 表 | 避免引入 Neo4j 复杂度 |
-| AST 解析 | tree-sitter | 速度快，多语言支持 |
-| RAG 框架 | LightRAG | 轻量，易定制 |
+| 向量存储 | pgvector (via LightRAG) | 简化运维，事务一致性 |
+| 图存储 | Apache AGE (via LightRAG) | LightRAG 内置支持 |
+| AST 解析 | codeindex (tree-sitter) | 外部依赖，职责分离 |
+| RAG 框架 | LightRAG | 轻量，已有 API 可复用 |
+| Embedding | Jina Code V2 | 8K context，代码优化 |
 
-### 7.2 性能估算
+### 10.2 相关文档
 
-基于 H200 141GB 显存：
-
-- Jina Code V2: ~50,000 texts/min (batch=32, 8k tokens)
-- DeepSeek-Coder 图谱提取: ~1,000 chunks/min
-- 预估索引速度: ~10,000 files/min (主要瓶颈在 LLM 提取)
+- [DATA_CONTRACT.md](../api/DATA_CONTRACT.md) - 数据映射契约
+- [ADR-005](../adr/ADR-005-extraction-strategy.md) - AST 优先策略
+- [ADR-006](../adr/ADR-006-mvp-simplification.md) - MVP 简化决策
+- [WORKSTREAM_ASSIGNMENT.md](../WORKSTREAM_ASSIGNMENT.md) - 工作流分配
