@@ -45,26 +45,30 @@ class EmbeddingConfig(BaseSettings):
     timeout: float = 30.0
 
 
-class DatabaseConfig(BaseSettings):
-    """PostgreSQL + pgvector configuration."""
+class LightRAGConfig(BaseSettings):
+    """LightRAG connection configuration.
 
-    host: str = "localhost"
-    port: int = 5432
-    database: str = "loomgraph"
-    user: str = "loomgraph"
-    password: str = "loomgraph_dev"
-    min_connections: int = 5
-    max_connections: int = 20
+    LoomGraph delegates all storage to LightRAG.
+    These settings are passed to LightRAG for initialization.
+    """
+
+    # PostgreSQL (LightRAG storage backend)
+    pg_host: str = "localhost"
+    pg_port: int = 5432
+    pg_database: str = "loomgraph"
+    pg_user: str = "loomgraph"
+    pg_password: str = "loomgraph_dev"
+
+    # LightRAG storage backends
+    graph_storage: str = "PGGraphStorage"
+    vector_storage: str = "PGVectorStorage"
+    kv_storage: str = "PGKVStorage"
+    doc_status_storage: str = "PGDocStatusStorage"
 
     @property
-    def connection_string(self) -> str:
-        """Generate PostgreSQL connection string."""
-        return f"postgresql://{self.user}:{self.password}@{self.host}:{self.port}/{self.database}"
-
-    @property
-    def async_connection_string(self) -> str:
-        """Generate async PostgreSQL connection string."""
-        return f"postgresql+asyncpg://{self.user}:{self.password}@{self.host}:{self.port}/{self.database}"
+    def pg_connection_string(self) -> str:
+        """Generate PostgreSQL connection string for LightRAG."""
+        return f"postgresql://{self.pg_user}:{self.pg_password}@{self.pg_host}:{self.pg_port}/{self.pg_database}"
 
 
 class RetrievalConfig(BaseSettings):
@@ -98,7 +102,7 @@ class Settings(BaseSettings):
     # Sub-configurations
     indexing: IndexingConfig = Field(default_factory=IndexingConfig)
     embedding: EmbeddingConfig = Field(default_factory=EmbeddingConfig)
-    database: DatabaseConfig = Field(default_factory=DatabaseConfig)
+    lightrag: LightRAGConfig = Field(default_factory=LightRAGConfig)
     retrieval: RetrievalConfig = Field(default_factory=RetrievalConfig)
 
     def ensure_working_dir(self) -> Path:
