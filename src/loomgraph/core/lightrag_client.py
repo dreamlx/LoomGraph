@@ -51,7 +51,7 @@ class LightRAGClient:
         Raises:
             LightRAGAPIError: If service is unhealthy or unreachable
         """
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with httpx.AsyncClient(timeout=self.timeout, trust_env=False) as client:
             try:
                 response = await client.get(f"{self.base_url}/health")
                 response.raise_for_status()
@@ -84,7 +84,7 @@ class LightRAGClient:
         Raises:
             LightRAGAPIError: If entity creation fails
         """
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with httpx.AsyncClient(timeout=self.timeout, trust_env=False) as client:
             try:
                 response = await client.post(
                     f"{self.base_url}/graph/entity/create",
@@ -130,7 +130,7 @@ class LightRAGClient:
         Raises:
             LightRAGAPIError: If relation creation fails
         """
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with httpx.AsyncClient(timeout=self.timeout, trust_env=False) as client:
             try:
                 response = await client.post(
                     f"{self.base_url}/graph/relation/create",
@@ -172,7 +172,7 @@ class LightRAGClient:
         Raises:
             LightRAGAPIError: If query fails
         """
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with httpx.AsyncClient(timeout=self.timeout, trust_env=False) as client:
             try:
                 response = await client.post(
                     f"{self.base_url}/query",
@@ -205,7 +205,7 @@ class LightRAGClient:
         Returns:
             True if entity exists, False otherwise
         """
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with httpx.AsyncClient(timeout=self.timeout, trust_env=False) as client:
             try:
                 response = await client.get(
                     f"{self.base_url}/graph/entity/exists",
