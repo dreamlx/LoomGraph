@@ -122,10 +122,9 @@ def check_lightrag_api(settings: Any) -> dict[str, Any]:
     try:
         import httpx
 
-        response = httpx.get(
-            f"{settings.lightrag.api_url}/health",
-            timeout=5.0,
-        )
+        # trust_env=False to bypass system proxy (H200 is internal)
+        with httpx.Client(timeout=5.0, trust_env=False) as client:
+            response = client.get(f"{settings.lightrag.api_url}/health")
         if response.status_code == 200:
             data = response.json()
             return {
@@ -146,10 +145,9 @@ def check_embedding(settings: Any) -> dict[str, Any]:
     try:
         import httpx
 
-        response = httpx.get(
-            f"{settings.embedding.base_url}/health",
-            timeout=5.0,
-        )
+        # trust_env=False to bypass system proxy (H200 is internal)
+        with httpx.Client(timeout=5.0, trust_env=False) as client:
+            response = client.get(f"{settings.embedding.base_url}/health")
         if response.status_code == 200:
             return {
                 "connected": True,
