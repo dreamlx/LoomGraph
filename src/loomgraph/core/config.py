@@ -46,7 +46,8 @@ class EmbeddingConfig(BaseSettings):
 
     provider: Literal["jina", "openai", "local"] = "jina"
     model: str = "jinaai/jina-embeddings-v2-base-code"
-    base_url: str = "http://localhost:8080"
+    # Default: H200 TEI Jina Code V2 service
+    base_url: str = "http://117.131.45.179:3002"
     batch_size: int = 32
     max_length: int = 8192
     dimension: int = 768
@@ -59,8 +60,8 @@ class LightRAGConfig(BaseSettings):
     LoomGraph delegates all storage to LightRAG via HTTP API.
     """
 
-    # LightRAG API endpoint
-    api_url: str = "http://localhost:9621"
+    # Default: H200 LightRAG API service
+    api_url: str = "http://117.131.45.179:3001"
     api_timeout: float = 30.0
 
     # Query settings
