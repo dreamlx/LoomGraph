@@ -454,8 +454,8 @@ class TestDependencyChecks:
         assert result["installed"] is True
         assert result["path"] == "/usr/bin/codeindex"
 
-    @patch("httpx.get")
-    def test_check_lightrag_api_connected(self, mock_get: MagicMock) -> None:
+    @patch("httpx.Client")
+    def test_check_lightrag_api_connected(self, mock_client_class: MagicMock) -> None:
         """Test LightRAG API check when connected."""
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -463,7 +463,11 @@ class TestDependencyChecks:
             "status": "healthy",
             "core_version": "1.4.9",
         }
-        mock_get.return_value = mock_response
+        mock_client = MagicMock()
+        mock_client.get.return_value = mock_response
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client_class.return_value = mock_client
 
         from loomgraph.core.config import get_settings
         settings = get_settings()
@@ -472,10 +476,14 @@ class TestDependencyChecks:
         assert result["connected"] is True
         assert result["status"] == "healthy"
 
-    @patch("httpx.get")
-    def test_check_lightrag_api_error(self, mock_get: MagicMock) -> None:
+    @patch("httpx.Client")
+    def test_check_lightrag_api_error(self, mock_client_class: MagicMock) -> None:
         """Test LightRAG API check when connection fails."""
-        mock_get.side_effect = Exception("Connection refused")
+        mock_client = MagicMock()
+        mock_client.get.side_effect = Exception("Connection refused")
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client_class.return_value = mock_client
 
         from loomgraph.core.config import get_settings
         settings = get_settings()
