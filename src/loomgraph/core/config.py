@@ -1,8 +1,16 @@
-"""Configuration management for LoomGraph."""
+"""Configuration management for LoomGraph.
+
+Configuration priority (highest to lowest):
+1. Environment variables (LOOMGRAPH_*)
+2. .loomgraph.yaml in current directory
+3. ~/.config/loomgraph/config.yaml
+4. Default values
+"""
 
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
+import yaml
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -102,10 +110,82 @@ class Settings(BaseSettings):
 # Global settings instance (lazy loaded)
 _settings: Settings | None = None
 
+# Config file locations (in priority order)
+CONFIG_LOCATIONS = [
+    Path(".loomgraph.yaml"),
+    Path(".loomgraph.yml"),
+    Path.home() / ".config" / "loomgraph" / "config.yaml",
+    Path.home() / ".config" / "loomgraph" / "config.yml",
+]
+
+
+def load_yaml_config() -> dict[str, Any]:
+    """Load configuration from YAML file.
+
+    Searches for config files in priority order:
+    1. .loomgraph.yaml in current directory
+    2. .loomgraph.yml in current directory
+    3. ~/.config/loomgraph/config.yaml
+    4. ~/.config/loomgraph/config.yml
+
+    Returns:
+        Configuration dict, or empty dict if no config file found
+    """
+    for config_path in CONFIG_LOCATIONS:
+        if config_path.exists():
+            try:
+                with open(config_path) as f:
+                    config = yaml.safe_load(f) or {}
+                return config
+            except yaml.YAMLError:
+                # Skip invalid YAML files
+                continue
+    return {}
+
+
+def flatten_dict(d: dict[str, Any], parent_key: str = "", sep: str = "__") -> dict[str, Any]:
+    """Flatten nested dict for pydantic-settings compatibility.
+
+    Example:
+        {"lightrag": {"api_url": "http://..."}}
+        becomes
+        {"lightrag__api_url": "http://..."}
+    """
+    items: list[tuple[str, Any]] = []
+    for k, v in d.items():
+        new_key = f"{parent_key}{sep}{k}" if parent_key else k
+        if isinstance(v, dict):
+            items.extend(flatten_dict(v, new_key, sep=sep).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)
+
 
 def get_settings() -> Settings:
-    """Get or create global settings instance."""
+    """Get or create global settings instance.
+
+    Configuration priority:
+    1. Environment variables (LOOMGRAPH_*)
+    2. YAML config file (.loomgraph.yaml)
+    3. Default values
+    """
     global _settings
     if _settings is None:
-        _settings = Settings()
+        # Load YAML config first
+        yaml_config = load_yaml_config()
+
+        if yaml_config:
+            # Flatten for pydantic-settings
+            flat_config = flatten_dict(yaml_config)
+            # Create settings with YAML values as defaults
+            _settings = Settings(**yaml_config)
+        else:
+            _settings = Settings()
+
     return _settings
+
+
+def reset_settings() -> None:
+    """Reset settings (useful for testing)."""
+    global _settings
+    _settings = None
