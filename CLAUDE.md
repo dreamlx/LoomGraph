@@ -153,8 +153,31 @@ mypy src/
 
 ### H200 服务器
 
-- Jina Code V2 服务: `http://<H200_IP>:8080/embed`
-- vLLM 服务: `http://<H200_IP>:8000/v1`
+| 服务 | 端口 | URL |
+|------|------|-----|
+| GLM-4.7-fp8 (LLM) | 3000 | http://internal.example.invalid:3000 |
+| LightRAG API | 3001 | http://internal.example.invalid:3001 |
+| TEI Jina Code V2 | 3002 | http://internal.example.invalid:3002 |
+
+### 配置文件
+
+创建 `.loomgraph.yaml` 配置 H200 连接：
+
+```yaml
+# .loomgraph.yaml
+lightrag:
+  api_url: "http://internal.example.invalid:3001"
+  api_timeout: 30.0
+
+embedding:
+  base_url: "http://internal.example.invalid:3002"
+```
+
+配置优先级：
+1. 环境变量 (`LOOMGRAPH_LIGHTRAG__API_URL`)
+2. `.loomgraph.yaml` 当前目录
+3. `~/.config/loomgraph/config.yaml`
+4. 默认值
 
 ## 关键设计决策
 
@@ -195,22 +218,18 @@ mypy src/
 
 所有命令输出 JSON 格式，便于 AI 解析。
 
-### 索引代码库
+### 检查状态
 
 ```bash
-# 一键索引
-loomgraph index /path/to/repo
-
-# 或分步执行
-codeindex scan /repo --output json > parse_results.json
-loomgraph embed parse_results.json --output embeddings.json
-loomgraph inject parse_results.json embeddings.json
+loomgraph status  # 检查 codeindex、LightRAG、embedding 服务
 ```
 
-### 搜索代码
+### 语义搜索
 
 ```bash
-loomgraph search "用户认证逻辑" --mode hybrid --limit 10
+# 搜索代码（使用 LightRAG 语义查询）
+loomgraph search "用户认证逻辑"
+loomgraph search "how to validate password" --mode local
 ```
 
 ### 查询调用图
@@ -223,10 +242,18 @@ loomgraph graph "UserService.login" --direction callers
 loomgraph graph "UserService.login" --direction callees
 ```
 
-### 检查状态
+注意：调用图查询依赖 codeindex 输出 calls 关系（v0.9.0 尚不支持）。
+
+### 索引代码库（开发中）
 
 ```bash
-loomgraph status  # 检查依赖和服务状态
+# 一键索引
+loomgraph index /path/to/repo
+
+# 或分步执行
+codeindex scan /repo --output json > parse_results.json
+loomgraph embed parse_results.json --output embeddings.json
+loomgraph inject parse_results.json embeddings.json
 ```
 
 ### 错误处理
@@ -239,7 +266,7 @@ loomgraph status  # 检查依赖和服务状态
   "error": {
     "code": "CODEINDEX_NOT_FOUND",
     "message": "codeindex command not found",
-    "suggestion": "pip install matrix-codeindex"
+    "suggestion": "pip install ai-codeindex"
   }
 }
 ```

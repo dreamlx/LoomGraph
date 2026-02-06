@@ -110,6 +110,8 @@ cython_debug/
 *.log
 loomgraph_index/
 .loomgraph/
+.loomgraph.yaml
+.loomgraph.yml
 
 # Secrets
 *.pem
