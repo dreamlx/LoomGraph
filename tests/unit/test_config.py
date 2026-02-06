@@ -54,10 +54,10 @@ class TestLightRAGConfig:
     """Tests for LightRAG HTTP API configuration."""
 
     def test_default_api_url(self) -> None:
-        """Test default API URL."""
+        """Test default API URL (H200 enterprise service)."""
         config = LightRAGConfig()
 
-        assert config.api_url == "http://localhost:9621"
+        assert config.api_url == "http://internal.example.invalid:3001"
         assert config.api_timeout == 30.0
 
     def test_default_query_mode(self) -> None:
@@ -89,8 +89,8 @@ class TestSettings:
         # Embedding
         assert settings.embedding.dimension == 768
 
-        # LightRAG API
-        assert settings.lightrag.api_url == "http://localhost:9621"
+        # LightRAG API (H200 enterprise service)
+        assert settings.lightrag.api_url == "http://internal.example.invalid:3001"
 
         # Retrieval
         assert settings.retrieval.default_mode == "hybrid"
