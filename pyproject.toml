@@ -35,8 +35,8 @@ dependencies = [
     "click>=8.0",
     "rich>=13.0",
 
-    # Code parsing (from codeindex)
-    # "matrix-codeindex>=0.5.0",  # 发布后启用
+    # Code parsing
+    "ai-codeindex>=0.7.0",
 ]
 
 [project.optional-dependencies]
@@ -73,9 +73,9 @@ dev-dependencies = [
 ]
 
 [tool.uv.sources]
-# 开发时使用本地路径
-matrix-codeindex = { path = "/Users/dreamlinx/Projects/codeindex" }
-lightrag-hku = { path = "/Users/dreamlinx/Projects/LightRAG" }
+# 开发时使用本地路径（可选）
+# ai-codeindex = { path = "/Users/dreamlinx/Projects/codeindex" }
+# lightrag-hku = { path = "/Users/dreamlinx/Projects/LightRAG" }
 
 [tool.ruff]
 line-length = 100

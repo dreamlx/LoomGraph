@@ -51,28 +51,20 @@ class TestEmbeddingConfig:
 
 
 class TestLightRAGConfig:
-    """Tests for LightRAG connection configuration."""
+    """Tests for LightRAG HTTP API configuration."""
 
-    def test_pg_connection_string(self) -> None:
-        """Test PostgreSQL connection string generation."""
-        config = LightRAGConfig(
-            pg_host="localhost",
-            pg_port=5432,
-            pg_database="testdb",
-            pg_user="testuser",
-            pg_password="testpass",
-        )
-
-        assert config.pg_connection_string == "postgresql://testuser:testpass@localhost:5432/testdb"
-
-    def test_default_storage_backends(self) -> None:
-        """Test default LightRAG storage backend settings."""
+    def test_default_api_url(self) -> None:
+        """Test default API URL."""
         config = LightRAGConfig()
 
-        assert config.graph_storage == "PGGraphStorage"
-        assert config.vector_storage == "PGVectorStorage"
-        assert config.kv_storage == "PGKVStorage"
-        assert config.doc_status_storage == "PGDocStatusStorage"
+        assert config.api_url == "http://localhost:9621"
+        assert config.api_timeout == 30.0
+
+    def test_default_query_mode(self) -> None:
+        """Test default query mode."""
+        config = LightRAGConfig()
+
+        assert config.default_query_mode == "hybrid"
 
 
 class TestSettings:
@@ -97,8 +89,8 @@ class TestSettings:
         # Embedding
         assert settings.embedding.dimension == 768
 
-        # LightRAG
-        assert settings.lightrag.pg_database == "loomgraph"
+        # LightRAG API
+        assert settings.lightrag.api_url == "http://localhost:9621"
 
         # Retrieval
         assert settings.retrieval.default_mode == "hybrid"
