@@ -2,13 +2,34 @@
 
 import tempfile
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from typing import Any
 
 import pytest
 
 from loomgraph.core.indexer import index_file, index_repository, scan_code_files
 from loomgraph.core.models import ParseResult, Symbol
-from loomgraph.embedding.base import EmbeddingResult
+
+
+class MockLightRAGClient:
+    """Mock LightRAG HTTP client for testing."""
+
+    def __init__(self):
+        self.entities: list[dict[str, Any]] = []
+        self.relations: list[dict[str, Any]] = []
+
+    async def create_entity(self, entity_name: str, entity_data: dict[str, Any]) -> dict[str, Any]:
+        self.entities.append({"name": entity_name, "data": entity_data})
+        return {"status": "success", "message": f"Entity '{entity_name}' created"}
+
+    async def create_relation(
+        self, source_entity: str, target_entity: str, relation_data: dict[str, Any]
+    ) -> dict[str, Any]:
+        self.relations.append({
+            "src": source_entity,
+            "tgt": target_entity,
+            "data": relation_data,
+        })
+        return {"status": "success", "message": "Relation created"}
 
 
 @pytest.fixture
@@ -36,28 +57,13 @@ def temp_repo() -> Path:
 
 
 @pytest.fixture
-def mock_rag() -> MagicMock:
-    """Create mock LightRAG instance."""
-    rag = MagicMock()
-    rag.acreate_entity = AsyncMock()
-    rag.acreate_relation = AsyncMock()
-    rag.graph_storage = MagicMock()
-    rag.graph_storage.remove_nodes = AsyncMock()
-    return rag
+def mock_client() -> MockLightRAGClient:
+    """Create mock LightRAG client."""
+    return MockLightRAGClient()
 
 
 @pytest.fixture
-def mock_embedding_client() -> MagicMock:
-    """Create mock embedding client."""
-    client = MagicMock()
-    client.embed = AsyncMock(
-        return_value=EmbeddingResult(embeddings=[[0.1] * 768], model="test")
-    )
-    return client
-
-
-@pytest.fixture
-def mock_parse_file() -> MagicMock:
+def mock_parse_file():
     """Create mock parse function."""
 
     def parse(path: Path) -> ParseResult:
@@ -123,15 +129,13 @@ class TestIndexRepository:
     async def test_index_repository_basic(
         self,
         temp_repo: Path,
-        mock_rag: MagicMock,
-        mock_embedding_client: MagicMock,
-        mock_parse_file: MagicMock,
+        mock_client: MockLightRAGClient,
+        mock_parse_file,
     ) -> None:
         """Should index all code files in repository."""
         result = await index_repository(
             temp_repo,
-            mock_rag,
-            mock_embedding_client,
+            mock_client,
             mock_parse_file,
             clear_existing=False,
         )
@@ -145,8 +149,7 @@ class TestIndexRepository:
     async def test_index_repository_with_parse_error(
         self,
         temp_repo: Path,
-        mock_rag: MagicMock,
-        mock_embedding_client: MagicMock,
+        mock_client: MockLightRAGClient,
     ) -> None:
         """Should handle parse errors gracefully."""
         call_count = 0
@@ -172,8 +175,7 @@ class TestIndexRepository:
 
         result = await index_repository(
             temp_repo,
-            mock_rag,
-            mock_embedding_client,
+            mock_client,
             parse_with_error,
             clear_existing=False,
         )
@@ -185,9 +187,8 @@ class TestIndexRepository:
     async def test_index_repository_progress_callback(
         self,
         temp_repo: Path,
-        mock_rag: MagicMock,
-        mock_embedding_client: MagicMock,
-        mock_parse_file: MagicMock,
+        mock_client: MockLightRAGClient,
+        mock_parse_file,
     ) -> None:
         """Should call progress callback."""
         progress_calls: list[tuple[str, int, int]] = []
@@ -197,8 +198,7 @@ class TestIndexRepository:
 
         await index_repository(
             temp_repo,
-            mock_rag,
-            mock_embedding_client,
+            mock_client,
             mock_parse_file,
             clear_existing=False,
             batch_size=1,  # Callback every file
@@ -218,17 +218,15 @@ class TestIndexFile:
     async def test_index_single_file(
         self,
         temp_repo: Path,
-        mock_rag: MagicMock,
-        mock_embedding_client: MagicMock,
-        mock_parse_file: MagicMock,
+        mock_client: MockLightRAGClient,
+        mock_parse_file,
     ) -> None:
         """Should index a single file."""
         file_path = temp_repo / "src" / "main.py"
 
         result = await index_file(
             file_path,
-            mock_rag,
-            mock_embedding_client,
+            mock_client,
             mock_parse_file,
         )
 
@@ -240,8 +238,7 @@ class TestIndexFile:
     async def test_index_file_with_error(
         self,
         temp_repo: Path,
-        mock_rag: MagicMock,
-        mock_embedding_client: MagicMock,
+        mock_client: MockLightRAGClient,
     ) -> None:
         """Should handle file parse error."""
         file_path = temp_repo / "src" / "main.py"
@@ -251,8 +248,7 @@ class TestIndexFile:
 
         result = await index_file(
             file_path,
-            mock_rag,
-            mock_embedding_client,
+            mock_client,
             parse_error,
         )
 

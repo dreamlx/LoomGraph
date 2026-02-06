@@ -6,22 +6,22 @@ docs/api/DATA_CONTRACT.md Section 5 (Full Rebuild Strategy).
 Pipeline:
 1. Scan code files in repository
 2. Parse files using codeindex
-3. Generate embeddings using Jina
-4. Inject into LightRAG
+3. Inject into LightRAG via HTTP API
 """
 
 from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Callable
 
 from loomgraph.core.injector import inject_parse_result
+from loomgraph.core.lightrag_client import LightRAGClient
 from loomgraph.core.mapper import detect_language
 from loomgraph.core.models import IndexResult, ParseResult
 
 if TYPE_CHECKING:
-    from loomgraph.embedding.base import EmbeddingClient
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -132,8 +132,7 @@ def scan_code_files(
 
 async def index_repository(
     repo_path: str | Path,
-    rag: Any,  # LightRAG instance
-    embedding_client: EmbeddingClient,
+    client: LightRAGClient,
     parse_file: Callable[[Path], ParseResult],
     *,
     clear_existing: bool = True,
@@ -145,14 +144,13 @@ async def index_repository(
     MVP Strategy (ADR-006):
     1. Delete all existing entities for this repo (if clear_existing=True)
     2. Scan all code files
-    3. Parse, embed, and inject each file
+    3. Parse and inject each file
 
     Args:
         repo_path: Path to the repository
-        rag: LightRAG instance with acreate_entity/acreate_relation
-        embedding_client: Client for generating embeddings
+        client: LightRAGClient for HTTP API calls
         parse_file: Function to parse a file (from codeindex)
-        clear_existing: Whether to delete existing data first
+        clear_existing: Whether to delete existing data first (not implemented in MVP)
         batch_size: Number of files to process before progress callback
         on_progress: Optional callback(message, current, total)
 
@@ -160,11 +158,10 @@ async def index_repository(
         IndexResult with counts and any errors
 
     Example:
-        >>> from lightrag import LightRAG
+        >>> from loomgraph.core import LightRAGClient
         >>> from codeindex import parse_file
-        >>> rag = LightRAG(...)
-        >>> embedding = JinaEmbeddingClient()
-        >>> result = await index_repository("/repo", rag, embedding, parse_file)
+        >>> client = LightRAGClient("http://localhost:3001")
+        >>> result = await index_repository("/repo", client, parse_file)
         >>> print(f"Indexed {result.entities} entities")
     """
     repo = Path(repo_path)
@@ -172,13 +169,9 @@ async def index_repository(
     skipped_files: list[str] = []
 
     # Step 1: Clear existing data if requested
+    # Note: MVP doesn't implement clearing, just log a warning
     if clear_existing:
-        try:
-            await _clear_repo_entities(rag, str(repo))
-            logger.info(f"Cleared existing entities for {repo}")
-        except Exception as e:
-            logger.warning(f"Failed to clear existing entities: {e}")
-            errors.append(f"Clear failed: {e}")
+        logger.warning("clear_existing=True but clearing is not implemented in MVP")
 
     # Step 2: Scan code files
     files = scan_code_files(repo)
@@ -204,15 +197,8 @@ async def index_repository(
                 # No symbols to index
                 continue
 
-            # Generate embeddings
-            texts = [s.signature or s.name for s in result.symbols]
-            embed_result = await embedding_client.embed(texts)
-            embedding_map = {
-                s.name: emb for s, emb in zip(result.symbols, embed_result.embeddings)
-            }
-
-            # Inject into LightRAG
-            inject_result = await inject_parse_result(rag, result, embedding_map)
+            # Inject into LightRAG via HTTP API
+            inject_result = await inject_parse_result(client, result)
             total_entities += inject_result.entities
             total_relations += inject_result.relations
             errors.extend(inject_result.errors)
@@ -240,46 +226,9 @@ async def index_repository(
     )
 
 
-async def _clear_repo_entities(rag: Any, repo_path: str) -> None:
-    """Clear all entities belonging to a repository.
-
-    This queries for all entities with file_path starting with repo_path
-    and removes them from the graph storage.
-
-    Args:
-        rag: LightRAG instance
-        repo_path: Repository path prefix to match
-    """
-    # Note: This implementation depends on LightRAG's graph_storage API
-    # The actual implementation may need adjustment based on LightRAG's API
-    if hasattr(rag, "graph_storage") and hasattr(rag.graph_storage, "remove_nodes"):
-        # Query entities by file_path prefix
-        # This is a placeholder - actual query depends on LightRAG API
-        entities = await _get_entities_by_file_prefix(rag, repo_path)
-        if entities:
-            node_ids = [e["entity_name"] for e in entities]
-            await rag.graph_storage.remove_nodes(node_ids)
-            logger.info(f"Removed {len(node_ids)} entities from {repo_path}")
-
-
-async def _get_entities_by_file_prefix(rag: Any, prefix: str) -> list[dict[str, Any]]:
-    """Get all entities with file_path starting with prefix.
-
-    Note: This is a placeholder implementation. The actual query
-    depends on LightRAG's graph storage query capabilities.
-    """
-    # Placeholder - actual implementation depends on LightRAG API
-    # This might use:
-    # - Direct Cypher query via Apache AGE
-    # - LightRAG's query API
-    # - Direct SQL query on the underlying tables
-    return []
-
-
 async def index_file(
     file_path: str | Path,
-    rag: Any,
-    embedding_client: EmbeddingClient,
+    client: LightRAGClient,
     parse_file: Callable[[Path], ParseResult],
 ) -> IndexResult:
     """Index a single file.
@@ -288,15 +237,13 @@ async def index_file(
 
     Args:
         file_path: Path to the file
-        rag: LightRAG instance
-        embedding_client: Embedding client
+        client: LightRAGClient for HTTP API
         parse_file: Parse function
 
     Returns:
         IndexResult for the single file
     """
     path = Path(file_path)
-    language = detect_language(path)
     errors: list[str] = []
 
     # Parse
@@ -319,13 +266,8 @@ async def index_file(
             relations=0,
         )
 
-    # Embed
-    texts = [s.signature or s.name for s in result.symbols]
-    embed_result = await embedding_client.embed(texts)
-    embedding_map = {s.name: emb for s, emb in zip(result.symbols, embed_result.embeddings)}
-
-    # Inject
-    inject_result = await inject_parse_result(rag, result, embedding_map)
+    # Inject via HTTP API
+    inject_result = await inject_parse_result(client, result)
 
     return IndexResult(
         repo_path=str(path.parent),

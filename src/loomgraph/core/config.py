@@ -48,27 +48,15 @@ class EmbeddingConfig(BaseSettings):
 class LightRAGConfig(BaseSettings):
     """LightRAG connection configuration.
 
-    LoomGraph delegates all storage to LightRAG.
-    These settings are passed to LightRAG for initialization.
+    LoomGraph delegates all storage to LightRAG via HTTP API.
     """
 
-    # PostgreSQL (LightRAG storage backend)
-    pg_host: str = "localhost"
-    pg_port: int = 5432
-    pg_database: str = "loomgraph"
-    pg_user: str = "loomgraph"
-    pg_password: str = "loomgraph_dev"
+    # LightRAG API endpoint
+    api_url: str = "http://localhost:9621"
+    api_timeout: float = 30.0
 
-    # LightRAG storage backends
-    graph_storage: str = "PGGraphStorage"
-    vector_storage: str = "PGVectorStorage"
-    kv_storage: str = "PGKVStorage"
-    doc_status_storage: str = "PGDocStatusStorage"
-
-    @property
-    def pg_connection_string(self) -> str:
-        """Generate PostgreSQL connection string for LightRAG."""
-        return f"postgresql://{self.pg_user}:{self.pg_password}@{self.pg_host}:{self.pg_port}/{self.pg_database}"
+    # Query settings
+    default_query_mode: Literal["local", "global", "hybrid", "naive"] = "hybrid"
 
 
 class RetrievalConfig(BaseSettings):
