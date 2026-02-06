@@ -140,6 +140,28 @@ loomgraph index <repo_path>
 
 ---
 
+## CLI 命令总览
+
+### MVP 已实现命令
+
+| 命令 | 说明 | 示例 |
+|------|------|------|
+| `loomgraph status` | 检查服务状态（codeindex、LightRAG、embedding） | `loomgraph status` |
+| `loomgraph index <repo>` | 全量索引（Cold Rebuild） | `loomgraph index ./my-project` |
+| `loomgraph search <query>` | 语义搜索代码 | `loomgraph search "用户认证逻辑"` |
+| `loomgraph graph <entity>` | 查询调用关系 | `loomgraph graph "UserService.login"` |
+| `loomgraph embed <json>` | 生成 embeddings（分步调试） | `loomgraph embed parse.json` |
+| `loomgraph inject <parse> <embed>` | 注入到 LightRAG（分步调试） | `loomgraph inject parse.json embed.json` |
+
+### v0.2.0+ 计划命令
+
+| 命令 | 说明 | 用途 |
+|------|------|------|
+| `loomgraph embed-only <file>` | 仅更新向量，不动图 | Hot Update |
+| `loomgraph index --mode=incremental <repo>` | 增量更新图 | Warm Update |
+
+---
+
 ## 实现参考
 
 ### MVP (Cold Rebuild Only)
