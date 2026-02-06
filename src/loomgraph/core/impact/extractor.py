@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -210,6 +208,8 @@ class ChangedSymbolExtractor:
     def _run_codeindex(self, file_path: Path) -> list[dict]:
         """Run codeindex to get symbols from a file.
 
+        Uses codeindex Python API directly for better performance.
+
         Args:
             file_path: Path to the file
 
@@ -217,28 +217,27 @@ class ChangedSymbolExtractor:
             List of symbol dicts from codeindex
         """
         try:
-            result = subprocess.run(
-                ["codeindex", "scan", str(file_path), "--output", "json"],
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
+            from codeindex.parser import parse_file
 
-            if result.returncode != 0:
-                return []
+            result = parse_file(file_path)
 
-            # Parse JSON output (skip non-JSON lines)
-            lines = result.stdout.strip().split("\n")
-            for i, line in enumerate(lines):
-                if line.startswith("{"):
-                    json_str = "\n".join(lines[i:])
-                    data = json.loads(json_str)
-                    results = data.get("results", [])
-                    if results:
-                        return results[0].get("symbols", [])
-                    return []
+            # Convert Symbol objects to dicts
+            symbols = []
+            for s in result.symbols:
+                symbols.append({
+                    "name": s.name,
+                    "kind": s.kind,
+                    "line_start": s.line_start,
+                    "line_end": s.line_end,
+                    "signature": getattr(s, "signature", ""),
+                    "docstring": getattr(s, "docstring", ""),
+                })
 
+            return symbols
+
+        except ImportError:
+            # codeindex not installed
             return []
-
-        except (subprocess.TimeoutExpired, json.JSONDecodeError, FileNotFoundError):
+        except Exception:
+            # Parse error or other issues
             return []
