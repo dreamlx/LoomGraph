@@ -117,30 +117,26 @@ def check_codeindex() -> dict[str, Any]:
         return {"installed": False, "error": str(e)}
 
 
-def check_postgres(settings: Any) -> dict[str, Any]:
-    """Check PostgreSQL connection."""
+def check_lightrag_api(settings: Any) -> dict[str, Any]:
+    """Check LightRAG API connectivity."""
     try:
-        import psycopg2
+        import httpx
 
-        conn = psycopg2.connect(
-            host=settings.lightrag.pg_host,
-            port=settings.lightrag.pg_port,
-            database=settings.lightrag.pg_database,
-            user=settings.lightrag.pg_user,
-            password=settings.lightrag.pg_password,
-            connect_timeout=5,
+        response = httpx.get(
+            f"{settings.lightrag.api_url}/health",
+            timeout=5.0,
         )
-        cursor = conn.cursor()
-        cursor.execute("SELECT version()")
-        version = cursor.fetchone()[0]
-        conn.close()
-        return {
-            "connected": True,
-            "version": version.split(",")[0] if "," in version else version,
-            "host": f"{settings.lightrag.pg_host}:{settings.lightrag.pg_port}",
-        }
+        if response.status_code == 200:
+            data = response.json()
+            return {
+                "connected": True,
+                "status": data.get("status", "unknown"),
+                "version": data.get("core_version", "unknown"),
+                "url": settings.lightrag.api_url,
+            }
+        return {"connected": False, "error": f"HTTP {response.status_code}"}
     except ImportError:
-        return {"connected": False, "error": "psycopg2 not installed"}
+        return {"connected": False, "error": "httpx not installed"}
     except Exception as e:
         return {"connected": False, "error": str(e)}
 
@@ -167,17 +163,6 @@ def check_embedding(settings: Any) -> dict[str, Any]:
         return {"connected": False, "error": str(e)}
 
 
-def check_lightrag() -> dict[str, Any]:
-    """Check if LightRAG is installed."""
-    try:
-        import lightrag
-
-        version = getattr(lightrag, "__version__", "unknown")
-        return {"installed": True, "version": version}
-    except ImportError:
-        return {"installed": False, "error": "lightrag not installed"}
-
-
 # ============================================
 # CLI Commands
 # ============================================
@@ -199,48 +184,51 @@ def status() -> None:
 
     Returns status of all required dependencies:
     - codeindex: Code parsing tool
-    - postgres: Database storage
-    - embedding: Vector embedding service
-    - lightrag: Graph storage framework
+    - lightrag: LightRAG API service
+    - embedding: Vector embedding service (optional, managed by LightRAG)
     """
     settings = get_settings()
 
     # Check all dependencies
     codeindex_status = check_codeindex()
-    postgres_status = check_postgres(settings)
+    lightrag_status = check_lightrag_api(settings)
     embedding_status = check_embedding(settings)
-    lightrag_status = check_lightrag()
 
     dependencies = {
         "codeindex": codeindex_status,
-        "postgres": postgres_status,
+        "lightrag_api": lightrag_status,
         "embedding": embedding_status,
-        "lightrag": lightrag_status,
     }
 
     # Collect suggestions for missing dependencies
     suggestions: list[str] = []
     if not codeindex_status.get("installed"):
         suggestions.append("Install codeindex: pip install matrix-codeindex")
-    if not postgres_status.get("connected"):
-        suggestions.append("Start database: docker compose up -d postgres")
+    if not lightrag_status.get("connected"):
+        suggestions.append(f"Check LightRAG API at {settings.lightrag.api_url}")
     if not embedding_status.get("connected"):
-        suggestions.append("Start embedding service: docker compose up -d embedding")
-    if not lightrag_status.get("installed"):
-        suggestions.append("Install lightrag: pip install lightrag-hku")
+        suggestions.append("Embedding service not reachable (may be managed by LightRAG)")
 
     data = {
         "version": __version__,
+        "config": {
+            "lightrag_url": settings.lightrag.api_url,
+            "embedding_url": settings.embedding.base_url,
+        },
         "dependencies": dependencies,
     }
 
-    if suggestions:
+    if not lightrag_status.get("connected"):
         output_partial_error(
             code=ErrorCode.DEPENDENCIES_MISSING,
-            message="Some dependencies are not available",
+            message="LightRAG API not available",
             suggestions=suggestions,
             data=data,
         )
+    elif suggestions:
+        # Non-critical issues
+        data["warnings"] = suggestions
+        output_success(data)
     else:
         output_success(data)
 
@@ -330,8 +318,8 @@ def index(repo_path: str, clear: bool, verbose: bool) -> None:
 
 async def _async_index_pipeline(parse_results: dict[str, Any], clear: bool) -> dict[str, Any]:
     """Run the async indexing pipeline."""
-    from loomgraph.core.config import get_settings
     from loomgraph.core.injector import inject_parse_result
+    from loomgraph.core.lightrag_client import LightRAGClient
     from loomgraph.core.models import (
         Call,
         Import,
@@ -339,25 +327,25 @@ async def _async_index_pipeline(parse_results: dict[str, Any], clear: bool) -> d
         ParseResult,
         Symbol,
     )
-    from loomgraph.embedding.jina import JinaEmbeddingClient
 
     settings = get_settings()
-    embedding_client = JinaEmbeddingClient(settings.embedding)
+    client = LightRAGClient(
+        base_url=settings.lightrag.api_url,
+        timeout=settings.lightrag.api_timeout,
+    )
 
-    # Convert JSON to ParseResult objects
+    # Convert JSON to ParseResult objects and inject
     files_scanned = 0
     files_indexed = 0
     files_skipped = 0
     entities_created = 0
     relations_created = 0
     skipped_files: list[dict[str, str]] = []
+    errors: list[str] = []
 
     results = parse_results.get("results", [])
     files_scanned = len(results)
 
-    # Note: In production, this would use LightRAG instance
-    # For now, we process and count but don't actually inject
-    # (LightRAG integration is pending)
     for file_result in results:
         path = Path(file_result.get("path", ""))
 
@@ -421,12 +409,22 @@ async def _async_index_pipeline(parse_results: dict[str, Any], clear: bool) -> d
             file_lines=file_result.get("file_lines", 0),
         )
 
-        # Count entities and relations
-        entities_created += len(symbols)
-        relations_created += len(calls) + len(inheritances) + len(imports)
-        files_indexed += 1
+        # Inject into LightRAG
+        try:
+            inject_result = await inject_parse_result(client, parse_result)
+            entities_created += inject_result.entities
+            relations_created += inject_result.relations
+            errors.extend(inject_result.errors)
+            files_indexed += 1
+        except Exception as e:
+            files_skipped += 1
+            skipped_files.append({
+                "path": str(path),
+                "reason": "inject_error",
+                "detail": str(e),
+            })
 
-    return {
+    result = {
         "files_scanned": files_scanned,
         "files_indexed": files_indexed,
         "files_skipped": files_skipped,
@@ -434,6 +432,13 @@ async def _async_index_pipeline(parse_results: dict[str, Any], clear: bool) -> d
         "relations_created": relations_created,
         "skipped_files": skipped_files,
     }
+
+    if errors:
+        result["injection_errors"] = errors[:10]  # Limit to first 10 errors
+        if len(errors) > 10:
+            result["injection_errors_total"] = len(errors)
+
+    return result
 
 
 @main.command()
@@ -612,26 +617,45 @@ async def _async_inject(
 @click.argument("query")
 @click.option(
     "--mode",
-    type=click.Choice(["keyword", "semantic", "graph", "hybrid"]),
+    type=click.Choice(["local", "global", "hybrid", "naive"]),
     default="hybrid",
-    help="Search mode",
+    help="LightRAG query mode",
 )
-@click.option("--limit", "-n", default=10, help="Number of results")
+@click.option("--limit", "-n", default=10, help="Number of results (not yet implemented)")
 def search(query: str, mode: str, limit: int) -> None:
-    """Search the code index.
+    """Search the code index using LightRAG.
 
-    QUERY: Natural language or code pattern query
+    QUERY: Natural language query about the code
     """
-    # Note: Full LightRAG integration pending
-    # For now, return placeholder response
-    output_success({
+    try:
+        result = asyncio.run(_async_search(query, mode))
+        output_success(result)
+    except Exception as e:
+        output_error(
+            code=ErrorCode.LIGHTRAG_ERROR,
+            message=f"Search failed: {e}",
+            suggestion="Check LightRAG status with: loomgraph status",
+        )
+
+
+async def _async_search(query: str, mode: str) -> dict[str, Any]:
+    """Run async search via LightRAG API."""
+    from loomgraph.core.lightrag_client import LightRAGClient
+
+    settings = get_settings()
+    client = LightRAGClient(
+        base_url=settings.lightrag.api_url,
+        timeout=settings.lightrag.api_timeout,
+    )
+
+    result = await client.query(query, mode=mode)
+
+    return {
         "query": query,
         "mode": mode,
-        "results": [],
-        "total": 0,
-        "returned": 0,
-        "message": "Search requires LightRAG integration (pending)",
-    })
+        "response": result.get("response", ""),
+        "references": result.get("references", []),
+    }
 
 
 @main.command()
@@ -653,19 +677,57 @@ def graph(entity_name: str, direction: str, depth: int, relation_type: str) -> N
     """Query entity relationships in the graph.
 
     ENTITY_NAME: Name of the entity to query
+
+    Note: Currently uses LightRAG query API. Direct graph traversal
+    requires codeindex to output call relationships.
     """
-    # Note: Full LightRAG integration pending
-    # For now, return placeholder response
+    try:
+        result = asyncio.run(_async_graph_query(entity_name, direction, relation_type))
+        output_success(result)
+    except Exception as e:
+        output_error(
+            code=ErrorCode.LIGHTRAG_ERROR,
+            message=f"Graph query failed: {e}",
+            suggestion="Check LightRAG status with: loomgraph status",
+        )
+
+
+async def _async_graph_query(
+    entity_name: str,
+    direction: str,
+    relation_type: str,
+) -> dict[str, Any]:
+    """Run async graph query via LightRAG API."""
+    from loomgraph.core.lightrag_client import LightRAGClient
+
+    settings = get_settings()
+    client = LightRAGClient(
+        base_url=settings.lightrag.api_url,
+        timeout=settings.lightrag.api_timeout,
+    )
+
     result: dict[str, Any] = {"entity": entity_name}
 
+    # Build query based on direction
     if direction in ("callers", "both"):
-        result["callers"] = []
+        query = f"What functions or methods call {entity_name}?"
+        callers_result = await client.query(query, mode="local")
+        result["callers"] = {
+            "query": query,
+            "response": callers_result.get("response", ""),
+        }
+
     if direction in ("callees", "both"):
-        result["callees"] = []
+        query = f"What functions or methods does {entity_name} call?"
+        callees_result = await client.query(query, mode="local")
+        result["callees"] = {
+            "query": query,
+            "response": callees_result.get("response", ""),
+        }
 
-    result["message"] = "Graph query requires LightRAG integration (pending)"
+    result["note"] = "Graph traversal uses LightRAG query. For precise call graph, codeindex needs to output call relationships."
 
-    output_success(result)
+    return result
 
 
 @main.command()

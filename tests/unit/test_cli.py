@@ -13,7 +13,7 @@ from click.testing import CliRunner
 from loomgraph.cli.main import (
     ErrorCode,
     check_codeindex,
-    check_lightrag,
+    check_lightrag_api,
     main,
     output_error,
     output_success,
@@ -106,22 +106,19 @@ class TestStatusCommand:
     """Tests for the status command."""
 
     @patch("loomgraph.cli.main.check_codeindex")
-    @patch("loomgraph.cli.main.check_postgres")
+    @patch("loomgraph.cli.main.check_lightrag_api")
     @patch("loomgraph.cli.main.check_embedding")
-    @patch("loomgraph.cli.main.check_lightrag")
     def test_status_all_ok(
         self,
-        mock_lightrag: MagicMock,
         mock_embedding: MagicMock,
-        mock_postgres: MagicMock,
+        mock_lightrag: MagicMock,
         mock_codeindex: MagicMock,
         runner: CliRunner,
     ) -> None:
         """Test status when all dependencies are available."""
         mock_codeindex.return_value = {"installed": True, "version": "1.0.0"}
-        mock_postgres.return_value = {"connected": True, "version": "16.1"}
+        mock_lightrag.return_value = {"connected": True, "status": "healthy", "version": "1.0.0"}
         mock_embedding.return_value = {"connected": True, "model": "jina"}
-        mock_lightrag.return_value = {"installed": True, "version": "1.0.0"}
 
         result = runner.invoke(main, ["status"])
         assert result.exit_code == 0
@@ -131,22 +128,19 @@ class TestStatusCommand:
         assert "dependencies" in data["data"]
 
     @patch("loomgraph.cli.main.check_codeindex")
-    @patch("loomgraph.cli.main.check_postgres")
+    @patch("loomgraph.cli.main.check_lightrag_api")
     @patch("loomgraph.cli.main.check_embedding")
-    @patch("loomgraph.cli.main.check_lightrag")
-    def test_status_missing_dependencies(
+    def test_status_lightrag_unavailable(
         self,
-        mock_lightrag: MagicMock,
         mock_embedding: MagicMock,
-        mock_postgres: MagicMock,
+        mock_lightrag: MagicMock,
         mock_codeindex: MagicMock,
         runner: CliRunner,
     ) -> None:
-        """Test status when some dependencies are missing."""
-        mock_codeindex.return_value = {"installed": False, "error": "not found"}
-        mock_postgres.return_value = {"connected": False, "error": "refused"}
+        """Test status when LightRAG API is not available."""
+        mock_codeindex.return_value = {"installed": True, "version": "1.0.0"}
+        mock_lightrag.return_value = {"connected": False, "error": "connection refused"}
         mock_embedding.return_value = {"connected": True, "model": "jina"}
-        mock_lightrag.return_value = {"installed": True, "version": "1.0.0"}
 
         result = runner.invoke(main, ["status"])
         assert result.exit_code == 1
@@ -154,8 +148,6 @@ class TestStatusCommand:
         data = json.loads(result.output)
         assert data["success"] is False
         assert data["error"]["code"] == ErrorCode.DEPENDENCIES_MISSING
-        assert "suggestions" in data["error"]
-        assert len(data["error"]["suggestions"]) >= 2
 
 
 class TestIndexCommand:
@@ -202,23 +194,33 @@ class TestIndexCommand:
         assert data["success"] is False
         assert data["error"]["code"] == ErrorCode.CODEINDEX_FAILED
 
+    @patch("loomgraph.cli.main.asyncio.run")
     @patch("subprocess.run")
     @patch("loomgraph.cli.main.check_codeindex")
     def test_index_success(
         self,
         mock_check: MagicMock,
-        mock_run: MagicMock,
+        mock_subprocess: MagicMock,
+        mock_asyncio: MagicMock,
         runner: CliRunner,
         tmp_path: Path,
         sample_parse_results: dict[str, Any],
     ) -> None:
         """Test successful index."""
         mock_check.return_value = {"installed": True, "version": "1.0.0"}
-        mock_run.return_value = MagicMock(
+        mock_subprocess.return_value = MagicMock(
             returncode=0,
             stdout=json.dumps(sample_parse_results),
             stderr="",
         )
+        mock_asyncio.return_value = {
+            "files_scanned": 1,
+            "files_indexed": 1,
+            "files_skipped": 0,
+            "entities_created": 2,
+            "relations_created": 2,
+            "skipped_files": [],
+        }
 
         result = runner.invoke(main, ["index", str(tmp_path)])
         assert result.exit_code == 0
@@ -227,7 +229,7 @@ class TestIndexCommand:
         assert data["success"] is True
         assert data["data"]["files_scanned"] == 1
         assert data["data"]["entities_created"] == 2
-        assert data["data"]["relations_created"] == 2  # 1 call + 1 import
+        assert data["data"]["relations_created"] == 2
 
 
 class TestEmbedCommand:
@@ -330,8 +332,16 @@ class TestInjectCommand:
 class TestSearchCommand:
     """Tests for the search command."""
 
-    def test_search_basic(self, runner: CliRunner) -> None:
+    @patch("loomgraph.cli.main.asyncio.run")
+    def test_search_basic(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test basic search command."""
+        mock_run.return_value = {
+            "query": "user login",
+            "mode": "hybrid",
+            "response": "Found user login function",
+            "references": [],
+        }
+
         result = runner.invoke(main, ["search", "user login"])
         assert result.exit_code == 0
 
@@ -340,22 +350,38 @@ class TestSearchCommand:
         assert data["data"]["query"] == "user login"
         assert data["data"]["mode"] == "hybrid"
 
-    def test_search_with_options(self, runner: CliRunner) -> None:
+    @patch("loomgraph.cli.main.asyncio.run")
+    def test_search_with_options(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test search with options."""
+        mock_run.return_value = {
+            "query": "authentication",
+            "mode": "local",
+            "response": "Authentication methods found",
+            "references": [],
+        }
+
         result = runner.invoke(
-            main, ["search", "authentication", "--mode", "semantic", "--limit", "5"]
+            main, ["search", "authentication", "--mode", "local", "--limit", "5"]
         )
         assert result.exit_code == 0
 
         data = json.loads(result.output)
-        assert data["data"]["mode"] == "semantic"
+        assert data["data"]["mode"] == "local"
 
 
 class TestGraphCommand:
     """Tests for the graph command."""
 
-    def test_graph_basic(self, runner: CliRunner) -> None:
+    @patch("loomgraph.cli.main.asyncio.run")
+    def test_graph_basic(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test basic graph query."""
+        mock_run.return_value = {
+            "entity": "UserService.login",
+            "callers": {"query": "...", "response": "Found callers"},
+            "callees": {"query": "...", "response": "Found callees"},
+            "note": "Graph traversal uses LightRAG query.",
+        }
+
         result = runner.invoke(main, ["graph", "UserService.login"])
         assert result.exit_code == 0
 
@@ -365,8 +391,15 @@ class TestGraphCommand:
         assert "callers" in data["data"]
         assert "callees" in data["data"]
 
-    def test_graph_callers_only(self, runner: CliRunner) -> None:
+    @patch("loomgraph.cli.main.asyncio.run")
+    def test_graph_callers_only(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test graph query for callers only."""
+        mock_run.return_value = {
+            "entity": "func",
+            "callers": {"query": "...", "response": "Found callers"},
+            "note": "Graph traversal uses LightRAG query.",
+        }
+
         result = runner.invoke(
             main, ["graph", "func", "--direction", "callers"]
         )
@@ -376,8 +409,16 @@ class TestGraphCommand:
         assert "callers" in data["data"]
         assert "callees" not in data["data"]
 
-    def test_graph_with_relation_type(self, runner: CliRunner) -> None:
+    @patch("loomgraph.cli.main.asyncio.run")
+    def test_graph_with_relation_type(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test graph query with relation type filter."""
+        mock_run.return_value = {
+            "entity": "MyClass",
+            "callers": {"query": "...", "response": ""},
+            "callees": {"query": "...", "response": ""},
+            "note": "Graph traversal uses LightRAG query.",
+        }
+
         result = runner.invoke(
             main, ["graph", "MyClass", "--relation-type", "INHERITS"]
         )
@@ -413,18 +454,35 @@ class TestDependencyChecks:
         assert result["installed"] is True
         assert result["path"] == "/usr/bin/codeindex"
 
-    def test_check_lightrag_not_installed(self) -> None:
-        """Test lightrag check when not installed."""
-        with patch.dict("sys.modules", {"lightrag": None}):
-            # Unload the module if it's already imported
-            import sys
+    @patch("httpx.get")
+    def test_check_lightrag_api_connected(self, mock_get: MagicMock) -> None:
+        """Test LightRAG API check when connected."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "status": "healthy",
+            "core_version": "1.4.9",
+        }
+        mock_get.return_value = mock_response
 
-            if "lightrag" in sys.modules:
-                del sys.modules["lightrag"]
+        from loomgraph.core.config import get_settings
+        settings = get_settings()
+        result = check_lightrag_api(settings)
 
-            # The actual check
-            result = check_lightrag()
-            # May return installed or not depending on environment
+        assert result["connected"] is True
+        assert result["status"] == "healthy"
+
+    @patch("httpx.get")
+    def test_check_lightrag_api_error(self, mock_get: MagicMock) -> None:
+        """Test LightRAG API check when connection fails."""
+        mock_get.side_effect = Exception("Connection refused")
+
+        from loomgraph.core.config import get_settings
+        settings = get_settings()
+        result = check_lightrag_api(settings)
+
+        assert result["connected"] is False
+        assert "error" in result
 
 
 class TestCLIHelp:
