@@ -117,7 +117,35 @@ echo 'alias loomgraph="~/.loomgraph-venv/bin/loomgraph"' >> ~/.zshrc
 
 只需要 README 提供清晰的步骤说明。
 
-#### 经验 4: 配置优先级
+#### 经验 4: Checklist 格式更有效
+
+**问题**：普通 README 步骤容易被跳过，用户直接跳到"使用方式"
+
+**解决**：使用 Checklist 格式 `- [ ]`，并在开头添加指引：
+```markdown
+> **给 Claude Code**: 请按顺序执行下面的 Checklist，每完成一项就打勾 `[x]`。
+> **所有步骤都必须完成**，跳过任何一步都会导致功能异常。
+```
+
+**效果**：
+- Claude Code 明确知道需要逐项完成
+- 可以在 CLAUDE.md 中记录安装状态
+- 故障排除时可以追溯漏了哪一步
+
+#### 经验 5: 安装状态需要持久化
+
+**问题**：Claude Code 不会自动记住安装过程
+
+**解决**：在 README 末尾要求 Claude Code 更新项目 CLAUDE.md：
+```markdown
+## LoomGraph 安装状态
+
+- [x] LoomGraph v0.2.0 已安装
+- [x] Skills 已配置: /loomgraph-setup, /loomgraph-init
+- [x] 服务连接正常: http://117.131.45.179:3020
+```
+
+#### 经验 6: 配置优先级
 
 ```
 当前目录 .loomgraph.yaml  >  ~/.config/loomgraph/config.yaml
@@ -194,6 +222,7 @@ ls ~/.claude/skills/loomgraph-init/
 |------|------|------|------|
 | v0.1.0 | 2025-02-?? | pinbianyi | 首次发布 |
 | v0.2.0 | 2025-02-08 | zcyl | 优化安装流程 |
+| v0.2.1 | 2025-02-08 | all | README Checklist 格式优化 |
 
 ---
 

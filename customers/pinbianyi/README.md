@@ -1,63 +1,65 @@
 # LoomGraph - 拼便宜专用版
 
-> **Note**: 以下步骤由 Claude Code 读取后自动执行。
+> **给 Claude Code**: 请按顺序执行下面的 Checklist，每完成一项就打勾 `[x]`。
+> **所有步骤都必须完成**，跳过任何一步都会导致功能异常。
 
 ---
 
-## 1. 安装 LoomGraph
+## 安装 Checklist
 
-创建专用虚拟环境并安装：
+### 1. 创建虚拟环境并安装
 
+- [ ] 创建虚拟环境
 ```bash
 python3 -m venv ~/.loomgraph-venv
+```
+
+- [ ] 激活并安装
+```bash
 source ~/.loomgraph-venv/bin/activate
 pip install .
 ```
 
-这会自动安装 `ai-codeindex` 依赖。
+### 2. 配置服务连接
 
----
-
-## 2. 配置服务连接
-
+- [ ] 复制配置文件
 ```bash
 mkdir -p ~/.config/loomgraph
 cp config.yaml ~/.config/loomgraph/config.yaml
 ```
 
----
+### 3. 安装 Skills（必须！）
 
-## 3. 安装全局 Skills
+> ⚠️ **警告**：跳过此步骤会导致：
+> - 索引速度慢 10 倍（无并行配置）
+> - 无法使用 `/loomgraph-setup` 和 `/loomgraph-init` 命令
+> - PHP 项目可能索引失败（语言解析器未安装）
 
+- [ ] 安装 loomgraph-setup skill
 ```bash
 mkdir -p ~/.claude/skills
 cp -r skills/loomgraph-setup ~/.claude/skills/
+```
+
+- [ ] 安装 loomgraph-init skill
+```bash
 cp -r skills/loomgraph-init ~/.claude/skills/
 ```
 
-这会添加两个斜杠命令：
-- `/loomgraph-setup` - 配置 codeindex（检测语言、安装解析器、生成配置）
-- `/loomgraph-init` - 配置项目 CLAUDE.md
+### 4. 添加 Shell 别名
 
----
-
-## 4. 添加 Shell 别名（推荐）
-
+- [ ] 添加别名（可选但推荐）
 ```bash
 echo 'alias loomgraph="~/.loomgraph-venv/bin/loomgraph"' >> ~/.zshrc
 source ~/.zshrc
 ```
 
-这样不需要每次激活虚拟环境就能使用 loomgraph。
+### 5. 验证安装
 
----
-
-## 5. 验证安装
-
+- [ ] 检查服务状态
 ```bash
 loomgraph status
-# 或者（如果没有设置别名）
-~/.loomgraph-venv/bin/loomgraph status
+# 或: ~/.loomgraph-venv/bin/loomgraph status
 ```
 
 **预期输出**：
@@ -65,8 +67,22 @@ loomgraph status
 - `lightrag_api.url: http://117.131.45.179:3010`
 
 **如果失败**：
-- `codeindex installed: false` → 重新执行安装步骤
+- `codeindex installed: false` → 重新执行步骤 1
 - `lightrag connected: false` → 检查网络白名单权限
+
+---
+
+## 安装完成确认
+
+当所有步骤都打勾后，请在项目 CLAUDE.md 中添加：
+
+```markdown
+## LoomGraph 安装状态
+
+- [x] LoomGraph v0.2.0 已安装
+- [x] Skills 已配置: /loomgraph-setup, /loomgraph-init
+- [x] 服务连接正常: http://117.131.45.179:3010
+```
 
 ---
 
@@ -74,9 +90,9 @@ loomgraph status
 
 ### 初始化新项目（首次使用）
 
-进入你的代码项目目录，按顺序执行：
+进入代码项目目录，按顺序执行：
 
-#### Step 1: 配置 codeindex（重要！）
+#### Step 1: 配置 codeindex（必须先执行！）
 
 ```
 /loomgraph-setup
@@ -88,7 +104,7 @@ loomgraph status
 3. 生成 `.codeindex.yaml` 配置文件（设置并行、排除构建目录等）
 
 **为什么需要这一步？**
-- 大型项目不配置会非常慢
+- 大型项目不配置会非常慢（单线程 vs 8 并发 = 10 倍差距）
 - 需要安装对应语言的 tree-sitter 解析器
 - 排除 `vendor/`、`cache/` 等无用目录
 
@@ -135,6 +151,21 @@ loomgraph status
 ---
 
 ## 故障排除
+
+### `/loomgraph-setup` 命令找不到
+
+**原因**: 未安装 Skills（跳过了步骤 3）
+
+**解决**:
+```bash
+cp -r /path/to/loomgraph-package/skills/* ~/.claude/skills/
+```
+
+### 索引很慢（几分钟）
+
+**原因**: 未配置 `.codeindex.yaml`
+
+**解决**: 先执行 `/loomgraph-setup`，再执行 `loomgraph index .`
 
 ### 索引时出现大量 warning
 
