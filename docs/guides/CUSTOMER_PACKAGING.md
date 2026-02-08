@@ -72,12 +72,27 @@ loomgraph-{customer}-v{version}/
 6. 验证 loomgraph status
 ```
 
-**项目初始化（每个项目）：**
+**项目初始化（每个项目，三步走）：**
 ```
 1. /loomgraph-setup  - 配置 codeindex（检测语言、安装解析器、生成 .codeindex.yaml）
-2. /loomgraph-init   - 配置项目 CLAUDE.md
+2. /loomgraph-init   - 配置项目 CLAUDE.md（自动添加 LoomGraph 使用说明）
 3. loomgraph index . - 索引代码
 ```
+
+**`/loomgraph-init` 会自动添加到 CLAUDE.md 的内容：**
+```markdown
+## 代码搜索 (LoomGraph)
+
+本项目已用 LoomGraph 索引，可使用以下命令：
+
+- `loomgraph search "<查询>"` - 语义搜索代码
+- `loomgraph graph "<类名.方法名>"` - 查询调用关系
+- `loomgraph status` - 检查服务状态
+
+如需重新索引：`loomgraph index .`
+```
+
+这样客户的 Claude Code 在后续会话中就知道如何使用 LoomGraph。
 
 ### 关键学到的经验
 
