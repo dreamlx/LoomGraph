@@ -1,0 +1,219 @@
+# 客户打包部署指南
+
+本文档记录 LoomGraph 客户分发的完整流程和经验教训。
+
+---
+
+## 客户信息
+
+| 客户 | 代号 | LightRAG 端口 | 代码语言 |
+|------|------|--------------|----------|
+| 拼便宜 | customer | 3010 | PHP |
+| 智采云链 | customer | 3020 | Java |
+
+共享服务：
+- Embedding (TEI): `http://internal.example.invalid:3002`
+- LLM: `http://internal.example.invalid:3000`
+
+---
+
+## 打包流程
+
+### 1. 更新版本号
+
+```bash
+# pyproject.toml 和 src/loomgraph/__init__.py
+version = "x.y.z"
+__version__ = "x.y.z"
+```
+
+### 2. 生成客户包
+
+```bash
+# 打包指定客户
+python3 scripts/package.py --customer customer
+
+# 打包所有客户
+python3 scripts/package.py --all
+
+# 列出可用客户
+python3 scripts/package.py --list
+```
+
+### 3. 输出内容
+
+```
+dist/loomgraph-{customer}-v{version}.tar.gz
+
+解压后：
+loomgraph-{customer}-v{version}/
+├── README.md                    # 客户专属安装指南
+├── src/loomgraph/               # 源码
+├── pyproject.toml               # 安装配置
+├── config.yaml                  # 客户专属 LightRAG URL
+└── skills/
+    └── loomgraph-init/
+        └── SKILL.md             # 全局 skill
+```
+
+---
+
+## 客户安装流程
+
+### 预期流程（由客户 Claude Code 执行）
+
+```
+1. 创建虚拟环境 ~/.loomgraph-venv
+2. 安装 loomgraph + 依赖
+3. 复制配置到 ~/.config/loomgraph/
+4. 安装 skill 到 ~/.claude/skills/
+5. 添加 shell 别名
+6. 验证 loomgraph status
+```
+
+### 关键学到的经验
+
+#### 经验 1: 虚拟环境是必须的
+
+**问题**：macOS 默认 Python 禁止全局安装 (PEP 668)
+
+**解决**：README 直接给出完整的虚拟环境创建命令，而不是 `pip install .`
+
+```bash
+# 正确的方式
+python3 -m venv ~/.loomgraph-venv
+source ~/.loomgraph-venv/bin/activate
+pip install .
+
+# 错误的方式（会失败）
+pip install .
+uv pip install .
+```
+
+#### 经验 2: Shell 别名很有用
+
+Claude Code 在实际安装中自己添加了 shell 别名，这是个好实践：
+
+```bash
+echo 'alias loomgraph="~/.loomgraph-venv/bin/loomgraph"' >> ~/.zshrc
+```
+
+这样用户不需要每次激活虚拟环境就能使用 loomgraph。
+
+#### 经验 3: Claude Code 足够智能
+
+不需要 `install.sh` 脚本。Claude Code 能够：
+- 识别 PEP 668 错误并创建虚拟环境
+- 自动添加 shell 别名
+- 处理各种环境问题
+
+只需要 README 提供清晰的步骤说明。
+
+#### 经验 4: 配置优先级
+
+```
+当前目录 .loomgraph.yaml  >  ~/.config/loomgraph/config.yaml
+```
+
+客户项目中通常没有 `.loomgraph.yaml`，所以全局配置会生效。
+
+---
+
+## 客户 README 模板
+
+### 关键内容
+
+1. **明确的虚拟环境创建步骤**
+2. **Shell 别名设置**
+3. **服务连接验证**
+4. **常见问题解答**
+
+### 模板位置
+
+- `customers/{customer}/README.md`
+
+---
+
+## 验证清单
+
+发给客户前的验证步骤：
+
+### 功能验证
+
+```bash
+# 在无 .loomgraph.yaml 的目录中测试
+cd /tmp
+
+# 1. 状态检查
+loomgraph status
+# 确认 lightrag_url 是正确的客户端口
+
+# 2. 索引测试
+loomgraph index /path/to/test/project
+
+# 3. 搜索测试
+loomgraph search "某个功能"
+
+# 4. 调用图测试（如果有数据）
+loomgraph graph "SomeClass.method"
+```
+
+### 配置验证
+
+```bash
+# 确认配置文件内容正确
+cat ~/.config/loomgraph/config.yaml
+
+# 确认 skill 已安装
+ls ~/.claude/skills/loomgraph-init/
+```
+
+---
+
+## 已知问题
+
+| 问题 | 状态 | 说明 |
+|------|------|------|
+| 单文件索引 | ISSUE-001 | CLI 不支持，Core 层已支持 |
+| 索引 warning | ISSUE-002 | 预期行为，在 README 说明 |
+| 实体缺少代码内容 | Task #2 | 待实现 |
+
+---
+
+## 版本历史
+
+| 版本 | 日期 | 客户 | 说明 |
+|------|------|------|------|
+| v0.1.0 | 2025-02-?? | customer | 首次发布 |
+| v0.2.0 | 2025-02-08 | customer | 优化安装流程 |
+
+---
+
+## 文件结构
+
+```
+customers/
+├── customer/
+│   ├── config.yaml      # api_url: :3010
+│   └── README.md
+└── customer/
+    ├── config.yaml      # api_url: :3020
+    └── README.md
+
+skills/
+└── loomgraph-init/
+    └── SKILL.md
+
+scripts/
+└── package.py
+```
+
+---
+
+## 添加新客户
+
+1. 创建目录 `customers/{new_customer}/`
+2. 创建 `config.yaml`（修改 api_url 端口）
+3. 创建 `README.md`（修改客户名和端口）
+4. 在 H200 上部署新的 LightRAG 实例
+5. 运行 `python3 scripts/package.py --customer {new_customer}`
