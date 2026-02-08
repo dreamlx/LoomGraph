@@ -58,6 +58,23 @@ async def inject_parse_result(
     # Module name for import relations (derive from file path)
     module_name = _path_to_module_name(result.path)
 
+    # 0. Create module entity first (needed for import relations)
+    try:
+        module_data = {
+            "entity_type": "module",
+            "description": f"Python module | {file_path}",
+            "source_id": file_path,
+            "file_path": file_path,
+        }
+        await client.create_entity(module_name, module_data)
+        logger.debug(f"Created module entity: {module_name}")
+    except LightRAGAPIError as e:
+        # Module might already exist, that's OK
+        if "already exists" not in str(e.message).lower():
+            logger.warning(f"Failed to create module entity {module_name}: {e.message}")
+    except Exception as e:
+        logger.warning(f"Failed to create module entity {module_name}: {e}")
+
     # 1. Inject entities (symbols)
     entity_count = 0
     for symbol in result.symbols:
@@ -145,18 +162,29 @@ def _path_to_module_name(path: Path) -> str:
         path: File path (e.g., Path("src/auth/service.py"))
 
     Returns:
-        Module name (e.g., "src.auth.service")
+        Module name (e.g., "auth.service")
     """
     # Remove file extension
     stem = path.with_suffix("")
 
-    # Convert path separators to dots
-    parts = stem.parts
+    # Get parts, handling absolute paths
+    parts = list(stem.parts)
 
-    # Skip common root directories
-    skip_roots = {"src", "lib", "app"}
-    if parts and parts[0] in skip_roots:
-        parts = parts[1:]
+    # For absolute paths, find 'src' or similar and start from there
+    # e.g., /Users/.../src/loomgraph/core -> loomgraph.core
+    anchor_dirs = {"src", "lib", "app", "pkg", "packages"}
+    for i, part in enumerate(parts):
+        if part in anchor_dirs:
+            parts = parts[i + 1:]  # Skip the anchor dir itself
+            break
+    else:
+        # No anchor found, try to use just the last few parts
+        # This handles paths without src/ prefix
+        if len(parts) > 3:
+            parts = parts[-3:]  # Take last 3 parts as fallback
+
+    # Filter out root/drive parts (like "/" on Unix or "C:" on Windows)
+    parts = [p for p in parts if p and p != "/"]
 
     return ".".join(parts)
 

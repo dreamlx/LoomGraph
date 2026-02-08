@@ -100,13 +100,18 @@ class TestInjectParseResult:
         """Should inject all symbols as entities."""
         result = await inject_parse_result(mock_client, sample_parse_result)
 
+        # 2 symbols + 1 module entity = 3 entities total in mock
+        # But result.entities only counts symbols
         assert result.entities == 2
-        assert len(mock_client.entities) == 2
+        assert len(mock_client.entities) == 3  # includes module entity
 
-        # Verify first entity
-        first_entity = mock_client.entities[0]
-        assert first_entity["name"] == "UserService"
-        assert first_entity["data"]["entity_type"] == "class"
+        # First entity is the module, second is UserService
+        module_entity = mock_client.entities[0]
+        assert module_entity["data"]["entity_type"] == "module"
+
+        class_entity = mock_client.entities[1]
+        assert class_entity["name"] == "UserService"
+        assert class_entity["data"]["entity_type"] == "class"
 
     @pytest.mark.asyncio
     async def test_inject_call_relations(
@@ -163,8 +168,8 @@ class TestInjectParseResult:
         self, mock_client: MockLightRAGClient, sample_parse_result: ParseResult
     ) -> None:
         """Should continue and record errors when entity injection fails."""
-        # Fail on second call
-        mock_client._entity_error_on_call = 2
+        # Fail on third call (1=module, 2=UserService, 3=UserService.login)
+        mock_client._entity_error_on_call = 3
 
         result = await inject_parse_result(mock_client, sample_parse_result)
 
@@ -181,7 +186,7 @@ class TestInjectParseResult:
 
         result = await inject_parse_result(mock_client, sample_parse_result)
 
-        assert result.entities == 2  # Entities should still be injected
+        assert result.entities == 2  # Symbol entities should still be injected
         assert result.relations == 0
         assert len(result.errors) == 3  # 1 call + 1 inheritance + 1 import
 
@@ -226,7 +231,8 @@ class TestInjectParseResultsBatch:
         assert len(inject_results) == 2
         assert inject_results[0].file_path == "file1.py"
         assert inject_results[1].file_path == "file2.py"
-        assert len(mock_client.entities) == 2
+        # 2 files × (1 module + 1 symbol) = 4 entities
+        assert len(mock_client.entities) == 4
 
     @pytest.mark.asyncio
     async def test_batch_skips_files_with_parse_errors(
@@ -256,7 +262,8 @@ class TestInjectParseResultsBatch:
         inject_results = await inject_parse_results_batch(mock_client, results)
 
         assert len(inject_results) == 2
-        assert inject_results[0].entities == 1
+        assert inject_results[0].entities == 1  # 1 symbol (module not counted)
         assert inject_results[1].entities == 0
         assert "Parse error" in inject_results[1].errors[0]
-        assert len(mock_client.entities) == 1
+        # 1 good file × (1 module + 1 symbol) = 2 entities
+        assert len(mock_client.entities) == 2
