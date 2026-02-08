@@ -62,13 +62,21 @@ loomgraph-{customer}-v{version}/
 
 ### 预期流程（由客户 Claude Code 执行）
 
+**安装阶段（一次性）：**
 ```
 1. 创建虚拟环境 ~/.loomgraph-venv
 2. 安装 loomgraph + 依赖
 3. 复制配置到 ~/.config/loomgraph/
-4. 安装 skill 到 ~/.claude/skills/
+4. 安装 skills 到 ~/.claude/skills/（loomgraph-setup + loomgraph-init）
 5. 添加 shell 别名
 6. 验证 loomgraph status
+```
+
+**项目初始化（每个项目）：**
+```
+1. /loomgraph-setup  - 配置 codeindex（检测语言、安装解析器、生成 .codeindex.yaml）
+2. /loomgraph-init   - 配置项目 CLAUDE.md
+3. loomgraph index . - 索引代码
 ```
 
 ### 关键学到的经验
@@ -201,12 +209,37 @@ customers/
     └── README.md
 
 skills/
-└── loomgraph-init/
+├── loomgraph-setup/     # 项目配置向导（v0.3.0+）
+│   └── SKILL.md
+└── loomgraph-init/      # 项目 CLAUDE.md 配置
     └── SKILL.md
 
 scripts/
 └── package.py
 ```
+
+---
+
+## Skills 说明
+
+### /loomgraph-setup（v0.3.0+）
+
+**用途**：在索引前配置 codeindex
+
+**解决问题**：
+- 大型项目索引慢（没有并行、没有排除规则）
+- 语言解析器未安装（Java 需要 `ai-codeindex[java]`）
+
+**流程**：
+1. 检测项目语言
+2. 安装对应 tree-sitter 解析器
+3. 生成 `.codeindex.yaml` 配置
+
+### /loomgraph-init
+
+**用途**：在项目 CLAUDE.md 添加使用说明
+
+**流程**：追加 LoomGraph 命令参考到 CLAUDE.md
 
 ---
 

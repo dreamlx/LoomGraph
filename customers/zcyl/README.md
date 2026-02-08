@@ -27,14 +27,17 @@ cp config.yaml ~/.config/loomgraph/config.yaml
 
 ---
 
-## 3. 安装全局 Skill
+## 3. 安装全局 Skills
 
 ```bash
 mkdir -p ~/.claude/skills
+cp -r skills/loomgraph-setup ~/.claude/skills/
 cp -r skills/loomgraph-init ~/.claude/skills/
 ```
 
-这会添加 `/loomgraph-init` 斜杠命令，用于初始化新项目。
+这会添加两个斜杠命令：
+- `/loomgraph-setup` - 配置 codeindex（检测语言、安装解析器、生成配置）
+- `/loomgraph-init` - 配置项目 CLAUDE.md
 
 ---
 
@@ -69,9 +72,27 @@ loomgraph status
 
 ## 使用方式
 
-### 初始化新项目
+### 初始化新项目（首次使用）
 
-进入你的代码项目目录，执行：
+进入你的代码项目目录，按顺序执行：
+
+#### Step 1: 配置 codeindex（重要！）
+
+```
+/loomgraph-setup
+```
+
+这会引导你：
+1. 检测项目语言（Java/PHP/Python）
+2. 安装对应的语言解析器
+3. 生成 `.codeindex.yaml` 配置文件（设置并行、排除构建目录等）
+
+**为什么需要这一步？**
+- 大型项目不配置会非常慢
+- 需要安装对应语言的 tree-sitter 解析器
+- 排除 `target/`、`build/` 等无用目录
+
+#### Step 2: 配置项目 CLAUDE.md
 
 ```
 /loomgraph-init
@@ -79,11 +100,13 @@ loomgraph status
 
 这会在项目 CLAUDE.md 中添加 LoomGraph 使用说明。
 
-然后索引代码：
+#### Step 3: 索引代码
 
 ```bash
 loomgraph index .
 ```
+
+**注意**：首次索引大型项目可能需要几分钟，请耐心等待。
 
 ### 日常使用
 
