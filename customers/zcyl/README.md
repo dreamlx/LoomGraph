@@ -6,19 +6,9 @@
 
 ## 1. 安装 LoomGraph
 
-在此目录下执行：
+创建专用虚拟环境并安装：
 
 ```bash
-pip install .
-```
-
-如果遇到 PEP 668 错误（externally-managed-environment），使用以下方式之一：
-
-```bash
-# 方式 A: 使用 uv
-uv pip install .
-
-# 方式 B: 创建虚拟环境
 python3 -m venv ~/.loomgraph-venv
 source ~/.loomgraph-venv/bin/activate
 pip install .
@@ -40,6 +30,7 @@ cp config.yaml ~/.config/loomgraph/config.yaml
 ## 3. 安装全局 Skill
 
 ```bash
+mkdir -p ~/.claude/skills
 cp -r skills/loomgraph-init ~/.claude/skills/
 ```
 
@@ -47,10 +38,23 @@ cp -r skills/loomgraph-init ~/.claude/skills/
 
 ---
 
-## 4. 验证安装
+## 4. 添加 Shell 别名（推荐）
+
+```bash
+echo 'alias loomgraph="~/.loomgraph-venv/bin/loomgraph"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+这样不需要每次激活虚拟环境就能使用 loomgraph。
+
+---
+
+## 5. 验证安装
 
 ```bash
 loomgraph status
+# 或者（如果没有设置别名）
+~/.loomgraph-venv/bin/loomgraph status
 ```
 
 **预期输出**：
@@ -58,12 +62,12 @@ loomgraph status
 - `lightrag_api.url: http://117.131.45.179:3020`
 
 **如果失败**：
-- `codeindex installed: false` → 执行 `pip install ai-codeindex`
+- `codeindex installed: false` → 重新执行安装步骤
 - `lightrag connected: false` → 检查网络白名单权限
 
 ---
 
-## 5. 使用方式
+## 使用方式
 
 ### 初始化新项目
 
@@ -72,6 +76,8 @@ loomgraph status
 ```
 /loomgraph-init
 ```
+
+这会在项目 CLAUDE.md 中添加 LoomGraph 使用说明。
 
 然后索引代码：
 
@@ -87,6 +93,9 @@ loomgraph search "用户认证逻辑"
 
 # 查询调用关系
 loomgraph graph "UserService.login" --direction callers
+
+# 检查服务状态
+loomgraph status
 ```
 
 ---
@@ -112,6 +121,23 @@ loomgraph graph "UserService.login" --direction callers
 
 1. 确认已执行 `loomgraph index .`
 2. 代码变更后需重新索引
+
+### 命令找不到
+
+如果 `loomgraph` 命令找不到：
+
+```bash
+# 方式 1: 使用完整路径
+~/.loomgraph-venv/bin/loomgraph status
+
+# 方式 2: 激活虚拟环境
+source ~/.loomgraph-venv/bin/activate
+loomgraph status
+
+# 方式 3: 重新设置别名
+echo 'alias loomgraph="~/.loomgraph-venv/bin/loomgraph"' >> ~/.zshrc
+source ~/.zshrc
+```
 
 ---
 
