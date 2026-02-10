@@ -999,10 +999,16 @@ async def _async_warm_update(
     for file_path in changed_files:
         full_path = repo_path / file_path
 
-        # Parse single file with codeindex
+        # Check if file exists
+        if not full_path.exists():
+            files_skipped += 1
+            errors.append(f"File not found: {file_path}")
+            continue
+
+        # Parse single file with codeindex parse (not scan)
         try:
             result = subprocess.run(
-                ["codeindex", "scan", str(full_path), "--output", "json"],
+                ["codeindex", "parse", str(full_path)],
                 capture_output=True,
                 text=True,
                 timeout=60,
@@ -1013,78 +1019,79 @@ async def _async_warm_update(
                 errors.append(f"Parse failed: {file_path}")
                 continue
 
-            parse_output = json.loads(result.stdout)
+            file_result = json.loads(result.stdout)
 
         except (subprocess.TimeoutExpired, json.JSONDecodeError) as e:
             files_skipped += 1
             errors.append(f"Parse error {file_path}: {e}")
             continue
 
-        # Process results
-        for file_result in parse_output.get("results", []):
-            if file_result.get("error"):
-                continue
+        # Process single file result (codeindex parse outputs single file, not array)
+        if file_result.get("error"):
+            files_skipped += 1
+            errors.append(f"Parse error: {file_result.get('error')}")
+            continue
 
-            path = Path(file_result.get("path", ""))
+        path = Path(file_result.get("file_path", str(full_path)))
 
-            symbols = [
-                Symbol(
-                    name=s.get("name", ""),
-                    kind=s.get("kind", ""),
-                    signature=s.get("signature", ""),
-                    docstring=s.get("docstring", ""),
-                    line_start=s.get("line_start", 0),
-                    line_end=s.get("line_end", 0),
-                )
-                for s in file_result.get("symbols", [])
-            ]
-
-            calls = [
-                Call(
-                    caller=c.get("caller", ""),
-                    callee=c.get("callee", ""),
-                    line=c.get("line", 0),
-                    is_method=c.get("is_method", False),
-                )
-                for c in file_result.get("calls", [])
-            ]
-
-            inheritances = [
-                Inheritance(
-                    child=i.get("child", ""),
-                    parent=i.get("parent", ""),
-                )
-                for i in file_result.get("inheritances", [])
-            ]
-
-            imports = [
-                Import(
-                    module=i.get("module", ""),
-                    alias=i.get("alias"),
-                    names=i.get("names", []),
-                )
-                for i in file_result.get("imports", [])
-            ]
-
-            parse_result = ParseResult(
-                path=path,
-                symbols=symbols,
-                calls=calls,
-                inheritances=inheritances,
-                imports=imports,
-                module_docstring=file_result.get("module_docstring", ""),
-                file_lines=file_result.get("file_lines", 0),
+        symbols = [
+            Symbol(
+                name=s.get("name", ""),
+                kind=s.get("kind", ""),
+                signature=s.get("signature", ""),
+                docstring=s.get("docstring", ""),
+                line_start=s.get("line_start", 0),
+                line_end=s.get("line_end", 0),
             )
+            for s in file_result.get("symbols", [])
+        ]
 
-            # Inject (append mode - no deletion)
-            try:
-                inject_result = await inject_parse_result(client, parse_result)
-                entities_created += inject_result.entities
-                relations_created += inject_result.relations
-                files_indexed += 1
-            except Exception as e:
-                files_skipped += 1
-                errors.append(f"Inject failed {path}: {e}")
+        calls = [
+            Call(
+                caller=c.get("caller", ""),
+                callee=c.get("callee", ""),
+                line=c.get("line", 0),
+                is_method=c.get("is_method", False),
+            )
+            for c in file_result.get("calls", [])
+        ]
+
+        inheritances = [
+            Inheritance(
+                child=i.get("child", ""),
+                parent=i.get("parent", ""),
+            )
+            for i in file_result.get("inheritances", [])
+        ]
+
+        imports = [
+            Import(
+                module=i.get("module", ""),
+                alias=i.get("alias"),
+                names=i.get("names", []),
+            )
+            for i in file_result.get("imports", [])
+        ]
+
+        parse_result = ParseResult(
+            path=path,
+            symbols=symbols,
+            calls=calls,
+            inheritances=inheritances,
+            imports=imports,
+            module_docstring=file_result.get("module_docstring", ""),
+            file_lines=file_result.get("file_lines", 0),
+        )
+
+        # Inject (append mode - no deletion)
+        try:
+            inject_result = await inject_parse_result(client, parse_result)
+            entities_created += inject_result.entities
+            relations_created += inject_result.relations
+            files_indexed += 1
+        except Exception as e:
+            files_skipped += 1
+            errors.append(f"Inject failed {path}: {e}")
 
     result = {
         "mode": "warm",
