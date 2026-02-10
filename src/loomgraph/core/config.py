@@ -1,64 +1,80 @@
-"""Configuration management using pydantic-settings."""
+"""Configuration management for LoomGraph.
 
+Configuration priority (highest to lowest):
+1. Environment variables (LOOMGRAPH_*)
+2. .loomgraph.yaml in current directory
+3. ~/.config/loomgraph/config.yaml
+4. Default values
+"""
+
+from pathlib import Path
+from typing import Any, Literal
+
+import yaml
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class DatabaseSettings(BaseSettings):
-    """PostgreSQL database configuration."""
+class ASTExtractionConfig(BaseSettings):
+    """AST extraction configuration."""
 
-    model_config = SettingsConfigDict(env_prefix="LOOMGRAPH_DB_")
-
-    host: str = Field(default="localhost", description="Database host")
-    port: int = Field(default=5432, description="Database port")
-    name: str = Field(default="loomgraph", description="Database name")
-    user: str = Field(default="loomgraph", description="Database user")
-    password: str = Field(default="", description="Database password")
-    pool_min_size: int = Field(default=5, description="Minimum pool size")
-    pool_max_size: int = Field(default=20, description="Maximum pool size")
-
-    @property
-    def dsn(self) -> str:
-        """Generate PostgreSQL DSN."""
-        return f"postgresql://{self.user}:{self.password}@{self.host}:{self.port}/{self.name}"
+    enabled: bool = True
+    chunking: Literal["ast", "token"] = "ast"
+    extract_calls: bool = True
+    extract_inheritance: bool = True
 
 
-class EmbeddingSettings(BaseSettings):
-    """Jina Code V2 embedding service configuration."""
+class SemanticEnhancementConfig(BaseSettings):
+    """LLM semantic enhancement configuration (disabled in MVP)."""
 
-    model_config = SettingsConfigDict(env_prefix="LOOMGRAPH_EMBEDDING_")
+    enabled: bool = False  # MVP default: disabled
+    description_generation: bool = False
+    pattern_recognition: bool = False
 
-    base_url: str = Field(
-        default="http://localhost:8080",
-        description="Embedding service base URL (TEI)",
+
+class IndexingConfig(BaseSettings):
+    """Indexing pipeline configuration."""
+
+    ast_extraction: ASTExtractionConfig = Field(default_factory=ASTExtractionConfig)
+    semantic_enhancement: SemanticEnhancementConfig = Field(
+        default_factory=SemanticEnhancementConfig
     )
-    model_name: str = Field(
-        default="jinaai/jina-embeddings-v2-base-code",
-        description="Embedding model name",
-    )
-    dimension: int = Field(default=768, description="Embedding dimension")
-    max_length: int = Field(default=8192, description="Maximum input length")
-    batch_size: int = Field(default=32, description="Batch size for embedding")
-    timeout: float = Field(default=30.0, description="Request timeout in seconds")
 
 
-class LLMSettings(BaseSettings):
-    """vLLM service configuration for graph extraction."""
+class EmbeddingConfig(BaseSettings):
+    """Jina Code V2 embedding configuration."""
 
-    model_config = SettingsConfigDict(env_prefix="LOOMGRAPH_LLM_")
+    provider: Literal["jina", "openai", "local"] = "jina"
+    model: str = "jinaai/jina-embeddings-v2-base-code"
+    # Default: H200 TEI Jina Code V2 service
+    base_url: str = "http://117.131.45.179:3002"
+    batch_size: int = 32
+    max_length: int = 8192
+    dimension: int = 768
+    timeout: float = 30.0
 
-    base_url: str = Field(
-        default="http://localhost:8000/v1",
-        description="vLLM OpenAI-compatible API base URL",
-    )
-    model_name: str = Field(
-        default="deepseek-ai/deepseek-coder-v2-lite-instruct",
-        description="LLM model name",
-    )
-    api_key: str = Field(default="EMPTY", description="API key (EMPTY for local)")
-    max_tokens: int = Field(default=4096, description="Maximum output tokens")
-    temperature: float = Field(default=0.1, description="Sampling temperature")
-    timeout: float = Field(default=120.0, description="Request timeout in seconds")
+
+class LightRAGConfig(BaseSettings):
+    """LightRAG connection configuration.
+
+    LoomGraph delegates all storage to LightRAG via HTTP API.
+    """
+
+    # Default: H200 LightRAG API service
+    api_url: str = "http://117.131.45.179:3001"
+    api_timeout: float = 30.0
+
+    # Query settings
+    default_query_mode: Literal["local", "global", "hybrid", "naive"] = "hybrid"
+
+
+class RetrievalConfig(BaseSettings):
+    """Retrieval configuration."""
+
+    modes: list[str] = ["keyword", "semantic", "graph"]
+    default_mode: Literal["keyword", "semantic", "graph", "hybrid"] = "hybrid"
+    top_k: int = 10
+    similarity_threshold: float = 0.7
 
 
 class Settings(BaseSettings):
@@ -66,20 +82,111 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix="LOOMGRAPH_",
+        env_nested_delimiter="__",
         env_file=".env",
         env_file_encoding="utf-8",
-        env_nested_delimiter="__",
+        extra="ignore",
     )
 
     # Application
-    debug: bool = Field(default=False, description="Debug mode")
-    working_dir: str = Field(default=".loomgraph", description="Working directory")
+    app_name: str = "LoomGraph"
+    debug: bool = False
+    log_level: str = "INFO"
 
-    # Sub-settings
-    database: DatabaseSettings = Field(default_factory=DatabaseSettings)
-    embedding: EmbeddingSettings = Field(default_factory=EmbeddingSettings)
-    llm: LLMSettings = Field(default_factory=LLMSettings)
+    # Working directory for index storage
+    working_dir: Path = Path(".loomgraph")
+
+    # Sub-configurations
+    indexing: IndexingConfig = Field(default_factory=IndexingConfig)
+    embedding: EmbeddingConfig = Field(default_factory=EmbeddingConfig)
+    lightrag: LightRAGConfig = Field(default_factory=LightRAGConfig)
+    retrieval: RetrievalConfig = Field(default_factory=RetrievalConfig)
+
+    def ensure_working_dir(self) -> Path:
+        """Ensure working directory exists and return it."""
+        self.working_dir.mkdir(parents=True, exist_ok=True)
+        return self.working_dir
 
 
-# Global settings instance
-settings = Settings()
+# Global settings instance (lazy loaded)
+_settings: Settings | None = None
+
+# Config file locations (in priority order)
+CONFIG_LOCATIONS = [
+    Path(".loomgraph.yaml"),
+    Path(".loomgraph.yml"),
+    Path.home() / ".config" / "loomgraph" / "config.yaml",
+    Path.home() / ".config" / "loomgraph" / "config.yml",
+]
+
+
+def load_yaml_config() -> dict[str, Any]:
+    """Load configuration from YAML file.
+
+    Searches for config files in priority order:
+    1. .loomgraph.yaml in current directory
+    2. .loomgraph.yml in current directory
+    3. ~/.config/loomgraph/config.yaml
+    4. ~/.config/loomgraph/config.yml
+
+    Returns:
+        Configuration dict, or empty dict if no config file found
+    """
+    for config_path in CONFIG_LOCATIONS:
+        if config_path.exists():
+            try:
+                with open(config_path) as f:
+                    config = yaml.safe_load(f) or {}
+                return config
+            except yaml.YAMLError:
+                # Skip invalid YAML files
+                continue
+    return {}
+
+
+def flatten_dict(d: dict[str, Any], parent_key: str = "", sep: str = "__") -> dict[str, Any]:
+    """Flatten nested dict for pydantic-settings compatibility.
+
+    Example:
+        {"lightrag": {"api_url": "http://..."}}
+        becomes
+        {"lightrag__api_url": "http://..."}
+    """
+    items: list[tuple[str, Any]] = []
+    for k, v in d.items():
+        new_key = f"{parent_key}{sep}{k}" if parent_key else k
+        if isinstance(v, dict):
+            items.extend(flatten_dict(v, new_key, sep=sep).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)
+
+
+def get_settings() -> Settings:
+    """Get or create global settings instance.
+
+    Configuration priority:
+    1. Environment variables (LOOMGRAPH_*)
+    2. YAML config file (.loomgraph.yaml)
+    3. Default values
+    """
+    global _settings
+    if _settings is None:
+        # Load YAML config first
+        yaml_config = load_yaml_config()
+
+        if yaml_config:
+            # Flatten for pydantic-settings
+            flat_config = flatten_dict(yaml_config)
+            # Create settings with YAML values as defaults
+            _settings = Settings(**yaml_config)
+        else:
+            _settings = Settings()
+
+    return _settings
+
+
+def reset_settings() -> None:
+    """Reset settings (useful for testing)."""
+    global _settings
+    _settings = None

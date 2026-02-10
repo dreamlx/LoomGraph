@@ -7,39 +7,26 @@ import pytest
 def sample_python_code() -> str:
     """Sample Python code for testing."""
     return '''
-"""Sample module for testing."""
-
-from typing import Optional
-from hashlib import sha256
-
-
 class UserService:
-    """User authentication service."""
+    """Service for user operations."""
 
-    def __init__(self, db_connection):
-        self.db = db_connection
+    def __init__(self, db):
+        self.db = db
 
-    def login(self, username: str, password: str) -> Optional[dict]:
-        """Authenticate a user.
+    def login(self, username: str, password: str) -> bool:
+        """Authenticate user."""
+        user = self.db.find_user(username)
+        return check_password(user, password)
 
-        Args:
-            username: User's username
-            password: User's password
-
-        Returns:
-            User dict if authenticated, None otherwise
-        """
-        hashed = sha256(password.encode()).hexdigest()
-        return self.db.query("SELECT * FROM users WHERE username = ? AND password = ?", username, hashed)
-
-    def logout(self, user_id: int) -> bool:
-        """Log out a user."""
-        return self.db.execute("DELETE FROM sessions WHERE user_id = ?", user_id)
+    def logout(self, user_id: int) -> None:
+        """Log out user."""
+        self.db.clear_session(user_id)
 
 
-def validate_email(email: str) -> bool:
-    """Validate email format."""
-    return "@" in email and "." in email
+def check_password(user, password: str) -> bool:
+    """Verify password hash."""
+    import hashlib
+    return user.password_hash == hashlib.sha256(password.encode()).hexdigest()
 '''
 
 
@@ -52,29 +39,16 @@ namespace App\\Service;
 use App\\Model\\User;
 use App\\Repository\\UserRepository;
 
-/**
- * User authentication service.
- */
-class UserService
-{
-    private UserRepository $userRepository;
+class UserService {
+    private UserRepository $repository;
 
-    public function __construct(UserRepository $userRepository)
-    {
-        $this->userRepository = $userRepository;
+    public function __construct(UserRepository $repository) {
+        $this->repository = $repository;
     }
 
-    /**
-     * Authenticate a user.
-     *
-     * @param string $username
-     * @param string $password
-     * @return User|null
-     */
-    public function login(string $username, string $password): ?User
-    {
-        $user = $this->userRepository->findByUsername($username);
-        if ($user && password_verify($password, $user->getPassword())) {
+    public function authenticate(string $username, string $password): ?User {
+        $user = $this->repository->findByUsername($username);
+        if ($user && password_verify($password, $user->getPasswordHash())) {
             return $user;
         }
         return null;

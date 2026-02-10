@@ -1,1 +1,1 @@
-"""Graph layer: LightRAG integration and graph queries."""
+"""Graph module: LightRAG integration and graph operations."""

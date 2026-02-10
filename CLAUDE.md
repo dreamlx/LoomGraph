@@ -4,15 +4,44 @@
 
 LoomGraph 是一款基于 NVIDIA H200 的企业级代码智能理解引擎，结合 LightRAG 图谱技术与 Jina Code V2 向量化，实现千万行代码的语义检索与依赖分析。
 
+**设计目标**: 作为 Claude Code Skill，主要用户是 AI Agent。
+
+## 三仓库架构
+
+```
+codeindex (AST 解析)  →  LoomGraph (调度)  →  LightRAG (存储检索)
+     CLI                    CLI/Skill              API
+```
+
+| 仓库 | 职责 | 路径 |
+|------|------|------|
+| **codeindex** | AST 解析，提取 Symbol/Call/Inheritance | `/Users/dreamlinx/Projects/codeindex` |
+| **LoomGraph** | Pipeline 调度，Embedding，Claude Code Skill | 本项目 |
+| **LightRAG** | 图谱存储，向量检索，查询 | `/Users/dreamlinx/Projects/LightRAG` |
+
+## 存储所有权（重要）
+
+LoomGraph **不直接操作数据库**。全部存储由 LightRAG 管理：
+
+```
+codeindex (解析) → LoomGraph (映射) → LightRAG API → PostgreSQL
+                    ↑ 不碰 DB              ↑ 拥有 DB
+```
+
+- **PostgreSQL 实例**: 1 个，LightRAG 初始化时自动建表
+- **LoomGraph 角色**: 纯调度 + 数据映射，通过 `rag.acreate_entity()` / `rag.acreate_relation()` / `rag.aquery()` 读写
+- **docker-compose.yml**: 为 LightRAG 提供 PG 实例，LoomGraph 不直接连接
+- **LoomGraph 无自有表**: `storage/` 目录预留，当前为空
+
 ## 技术栈
 
 | 组件 | 技术选型 | 说明 |
 |------|----------|------|
 | Compute | NVIDIA H200 (141GB HBM3) | FP8 推理 + 批量 Embedding |
 | Embedding | Jina Code V2 (8k context) | 代码语义向量化 |
-| RAG Framework | LightRAG | 图谱构建与检索 |
-| LLM | DeepSeek-Coder-V2 / Llama-3.1 | 实体关系提取 |
-| Database | PostgreSQL + pgvector | 向量 + 图谱混合存储 |
+| RAG Framework | LightRAG | 图谱构建与检索 (使用内置 API) |
+| AST Parser | codeindex (tree-sitter) | 独立 CLI 工具 |
+| Database | PostgreSQL + pgvector | 向量 + 图谱混合存储 (LightRAG 管理) |
 | Protocol | MCP (Model Context Protocol) | Claude/Cursor 集成 |
 
 ## 项目结构
@@ -21,9 +50,7 @@ LoomGraph 是一款基于 NVIDIA H200 的企业级代码智能理解引擎，结
 loomgraph/
 ├── src/loomgraph/
 │   ├── core/           # 核心引擎（LightRAG 集成、配置管理）
-│   ├── storage/        # 存储层（Postgres + pgvector）
-│   ├── chunking/       # AST 代码切片器（Tree-sitter）
-│   ├── graph/          # 图谱层（实体提取、关系映射）
+│   ├── embedding/      # Embedding 客户端（Jina Code V2）
 │   ├── mcp/            # MCP 服务接口
 │   └── cli/            # 命令行工具
 ├── tests/              # 测试用例（单元 + 集成）
@@ -126,8 +153,31 @@ mypy src/
 
 ### H200 服务器
 
-- Jina Code V2 服务: `http://<H200_IP>:8080/embed`
-- vLLM 服务: `http://<H200_IP>:8000/v1`
+| 服务 | 端口 | URL |
+|------|------|-----|
+| GLM-4.7-fp8 (LLM) | 3000 | http://117.131.45.179:3000 |
+| LightRAG API | 3001 | http://117.131.45.179:3001 |
+| TEI Jina Code V2 | 3002 | http://117.131.45.179:3002 |
+
+### 配置文件
+
+创建 `.loomgraph.yaml` 配置 H200 连接：
+
+```yaml
+# .loomgraph.yaml
+lightrag:
+  api_url: "http://117.131.45.179:3001"
+  api_timeout: 30.0
+
+embedding:
+  base_url: "http://117.131.45.179:3002"
+```
+
+配置优先级：
+1. 环境变量 (`LOOMGRAPH_LIGHTRAG__API_URL`)
+2. `.loomgraph.yaml` 当前目录
+3. `~/.config/loomgraph/config.yaml`
+4. 默认值
 
 ## 关键设计决策
 
@@ -164,21 +214,133 @@ mypy src/
 | 图谱检索延迟 | < 200ms | 2-hop 查询 |
 | 显存占用 | < 80GB | 留空间给 LLM |
 
-## 常用命令
+## CLI 命令 (AI Agent 友好)
+
+所有命令输出 JSON 格式，便于 AI 解析。
+
+### 命令速查表
+
+| 命令 | 说明 |
+|------|------|
+| `loomgraph version` | 显示版本信息 |
+| `loomgraph status` | 检查服务连接状态 |
+| `loomgraph index <path>` | 一键索引代码库 |
+| `loomgraph index --clear <path>` | Cold Rebuild（清空重建） |
+| `loomgraph update [--since REF]` | Warm Update（增量索引 git 变更） |
+| `loomgraph search "<query>"` | 语义搜索代码 |
+| `loomgraph graph "<entity>"` | 查询调用关系 |
+| `loomgraph impact [TARGET]` | 分析代码变更影响 |
+
+### 版本与状态
+
+```bash
+loomgraph version  # 显示版本
+loomgraph status   # 检查 codeindex、LightRAG、embedding 服务
+```
+
+### 索引代码库
+
+```bash
+# 一键索引（默认 Cold Rebuild）
+loomgraph index /path/to/repo
+
+# 明确 Cold Rebuild（清空后重建）
+loomgraph index --clear /path/to/repo
+
+# Warm Update（仅索引 git 变更文件）
+loomgraph update                 # 对比 HEAD~1
+loomgraph update --since HEAD~5  # 对比最近 5 个提交
+```
+
+### 分步索引（高级用法）
+
+```bash
+# Step 1: AST 解析
+codeindex scan /repo --output json > parse_results.json
+
+# Step 2: 生成 Embedding
+loomgraph embed parse_results.json --output embeddings.json
+
+# Step 3: 注入 LightRAG
+loomgraph inject parse_results.json embeddings.json
+```
+
+### 语义搜索
+
+```bash
+loomgraph search "用户认证逻辑"
+loomgraph search "how to validate password" --mode local
+loomgraph search "database connection" --mode hybrid --limit 20
+```
+
+搜索模式：`local`（实体优先）、`global`（全局）、`hybrid`（混合，默认）
+
+### 查询调用图
+
+```bash
+# 谁调用了这个函数
+loomgraph graph "UserService.login" --direction callers
+
+# 这个函数调用了谁
+loomgraph graph "UserService.login" --direction callees
+
+# 指定深度和关系类型
+loomgraph graph "MyClass" --depth 3 --relation-type INHERITS
+```
+
+注意：调用图查询依赖 codeindex 输出 calls 关系。
+
+### 变更影响分析
+
+```bash
+# 分析最近提交的影响
+loomgraph impact HEAD
+
+# 分析暂存区变更
+loomgraph impact --staged
+
+# 分析指定文件
+loomgraph impact --file src/auth/login.py
+```
+
+### 错误处理
+
+命令失败时返回结构化错误，AI Agent 可据此修复：
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "CODEINDEX_NOT_FOUND",
+    "message": "codeindex command not found",
+    "suggestion": "pip install ai-codeindex"
+  }
+}
+```
+
+## 开发命令
 
 ```bash
 # 启动开发数据库
 docker compose up -d postgres
 
 # 运行特定测试
-pytest tests/unit/test_chunking.py -v
+pytest tests/unit/test_mapper.py -v
 
-# 生成测试覆盖报告
-pytest --cov=src/loomgraph --cov-report=html
+# 运行所有测试
+pytest tests/ -v --cov=src/loomgraph
 
-# 构建文档
-mkdocs serve
-
-# 索引代码库（开发模式）
-python -m loomgraph index --path ./sample-repo --debug
+# 代码检查
+ruff check src/ tests/
+mypy src/
 ```
+
+## 关键文档
+
+| 文档 | 路径 | 说明 |
+|------|------|------|
+| 系统设计 | `docs/architecture/SYSTEM_DESIGN.md` | 整体架构和 Pipeline |
+| 数据契约 | `docs/api/DATA_CONTRACT.md` | codeindex ↔ LightRAG 映射 |
+| CLI 设计 | `docs/api/CLI_DESIGN.md` | 命令详细说明 |
+| ADR-005 | `docs/adr/ADR-005-extraction-strategy.md` | AST 优先策略 |
+| ADR-006 | `docs/adr/ADR-006-mvp-simplification.md` | MVP 简化决策 |

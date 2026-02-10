@@ -1,1 +1,1 @@
-"""MCP layer: Model Context Protocol server for Claude/Cursor integration."""
+"""MCP module: Model Context Protocol service for Claude/Cursor integration."""
