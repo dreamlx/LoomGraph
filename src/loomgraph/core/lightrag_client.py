@@ -248,3 +248,61 @@ class LightRAGClient:
 
             except httpx.RequestError as e:
                 raise LightRAGAPIError(f"Connection failed: {e}") from e
+
+    async def insert_custom_kg(
+        self,
+        entities: list[dict[str, Any]],
+        relationships: list[dict[str, Any]],
+        chunks: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        """Batch insert custom knowledge graph data.
+
+        This is more efficient than individual create_entity/create_relation calls.
+
+        Args:
+            entities: List of entity dicts with entity_name, entity_type, description, source_id
+            relationships: List of relation dicts with src_id, tgt_id, description, keywords
+            chunks: Optional list of chunk dicts with content, source_id
+
+        Returns:
+            Response with counts of inserted items
+
+        Raises:
+            LightRAGAPIError: If insertion fails
+
+        Example:
+            >>> entities = [{"entity_name": "MyClass", "entity_type": "class", ...}]
+            >>> relations = [{"src_id": "MyClass", "tgt_id": "Base", "keywords": "INHERITS"}]
+            >>> result = await client.insert_custom_kg(entities, relations)
+        """
+        custom_kg = {
+            "entities": entities,
+            "relationships": relationships,
+        }
+        if chunks:
+            custom_kg["chunks"] = chunks
+
+        async with httpx.AsyncClient(timeout=self.timeout * 3, trust_env=False) as client:
+            try:
+                response = await client.post(
+                    f"{self.base_url}/documents/insert_custom_kg",
+                    json={"custom_kg": custom_kg},
+                )
+                data = response.json()
+
+                if response.status_code >= 400:
+                    detail = data.get("detail", str(data))
+                    raise LightRAGAPIError(
+                        f"Failed to insert custom KG: {detail}",
+                        status_code=response.status_code,
+                        detail=detail,
+                    )
+
+                logger.info(
+                    f"Inserted custom KG: {data.get('details', {}).get('entities_count', 0)} entities, "
+                    f"{data.get('details', {}).get('relationships_count', 0)} relations"
+                )
+                return data
+
+            except httpx.RequestError as e:
+                raise LightRAGAPIError(f"Connection failed: {e}") from e
