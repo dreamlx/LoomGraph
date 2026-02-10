@@ -13,7 +13,7 @@ Usage:
     result = await index_repository(repo_path, rag, embedding_client, parse_file)
 """
 
-__version__ = "0.2.1"
+__version__ = "0.2.3"
 __author__ = "DreamLinx"
 
 from loomgraph.core.config import Settings, get_settings

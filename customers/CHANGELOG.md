@@ -4,6 +4,24 @@
 
 ---
 
+## [0.2.3] - 2025-02-10
+
+### 新增
+- `--workspace/-w` 选项 - 多项目 workspace 隔离支持
+- README 知识图谱更新策略指南（给 AI Agent）
+
+### 改进
+- 模板化打包系统，单一 README 模板维护所有客户
+
+### 更新方式
+```bash
+cd /path/to/loomgraph-package
+source ~/.loomgraph-venv/bin/activate
+pip install .
+```
+
+---
+
 ## [0.2.1] - 2025-02-10
 
 ### 新增
