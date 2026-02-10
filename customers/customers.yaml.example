@@ -1,0 +1,21 @@
+# LoomGraph 客户注册表模板
+# 复制为 customers.yaml 并填写实际配置
+#
+# 用法:
+#   cp customers/customers.yaml.example customers/customers.yaml
+#   # 编辑 customers.yaml 填写客户信息
+#   python scripts/package.py --all
+
+example_customer:
+  name: "示例客户"
+  lightrag_url: "http://your-server:3001"
+  language_hint: "Python"           # Python | Java | PHP
+  language_parser: "ai-codeindex"   # ai-codeindex[java] | ai-codeindex[php]
+  exclude_dirs: "__pycache__/, .git/"
+
+# another_customer:
+#   name: "另一个客户"
+#   lightrag_url: "http://another-server:3001"
+#   language_hint: "Java"
+#   language_parser: "ai-codeindex[java]"
+#   exclude_dirs: "target/, build/"
