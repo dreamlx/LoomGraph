@@ -1,7 +1,7 @@
-# LoomGraph 更新策略：Hot/Warm/Cold 分层
+# LoomGraph 更新策略：Warm/Cold 分层
 
-**版本**: 0.1.0
-**日期**: 2025-02-04
+**版本**: 0.2.0
+**日期**: 2025-02-10
 **状态**: ✅ 确认
 
 ---
@@ -11,55 +11,53 @@
 **读写分离，快慢分层**
 
 不要试图在一个时间点解决所有问题。将更新分为：
-- **Hot Update (热更新)**: 毫秒级，仅向量
-- **Warm Update (温更新)**: 秒级，增量图
+- ~~**Hot Update (热更新)**: 毫秒级，仅向量~~ → 已取消，合并到 Warm
+- **Warm Update (温更新)**: 秒级，增量追加
 - **Cold Rebuild (冷重构)**: 分钟级，全量重建
 
 ---
 
-## 1. ⚡️ 热更新 (Hot Update) - 向量层
+## 设计简化 (v0.2.0)
 
-### 触发时机
-- 开发者按下 `Ctrl+S` (IDE 插件)
-- `git add` 时
+### 取消 Hot Update 的原因
 
-### 处理对象
-- 仅针对 Jina Code V2 Embedding
+1. **实际场景**：开发者 Ctrl+S 后很快就会 commit，间隔通常几分钟到几小时
+2. **收益有限**：Hot 的"毫秒级"优势在 commit 粒度下不明显
+3. **复杂度降低**：不需要 IDE 插件，不需要绕过 LightRAG 直接写向量库
+4. **架构简化**：LightRAG 自动生成 embedding，无需单独管理向量层
 
-### 操作
-1. 利用 H200 极致速度，毫秒级计算当前修改文件的 Vector
-2. 直接 Upsert 到向量库（Postgres/pgvector）
+### 统一触发时机：Git Commit
 
-### 目的
-保证 Semantic Search（语义搜索）立刻能搜到刚刚写的代码
-
-### GraphRAG 动作
-**不做任何操作**
-
-此时不要动图，因为：
-- 图的构建太重
-- 局部小修改（如改个变量名）几乎不影响全局图拓扑
-
-### CLI 命令 (v0.2.0+)
-```bash
-# 仅更新向量，不动图
-loomgraph embed-only <file_path>
+```
+git commit
+    ↓
+post-commit hook (可选)
+    ↓
+loomgraph update
+    ↓
+增量追加变动文件
 ```
 
 ---
 
-## 2. 🐢 温更新 (Warm Update) - 增量图层
+## 1. 🐢 温更新 (Warm Update) - 增量追加
 
 ### 触发时机
-- `git merge` / `git push` 到主分支
-- CI/CD 流水线触发
+- **git commit** (推荐，通过 post-commit hook)
+- 手动执行 `loomgraph update`
 
 ### 处理对象
-- LightRAG 的 Entity & Relation Extraction
+- 变动文件的 Entity & Relation
 
 ### 操作
-1. 识别出变动文件列表
-2. 调用 `lightrag.insert(new_code_chunks)`
+```bash
+# 自动检测 git 变动并追加
+loomgraph update
+```
+
+1. 获取变动文件列表：`git diff --name-only HEAD~1`
+2. 调用 codeindex 解析变动文件
+3. 追加到 LightRAG（不删除旧数据）
 
 ### LightRAG 行为特征
 LightRAG 是**追加式**的。如果 `utils.py` 变了，它会生成新的节点和边。
@@ -69,37 +67,43 @@ LightRAG 是**追加式**的。如果 `utils.py` 变了，它会生成新的节�
 
 **这没关系**，因为：
 - 检索时通常会根据相关性得分过滤掉旧的
-- 或者根据 `file_path` 强制过滤
+- 或者根据 `file_path` + `source_id` 过滤
+- Cold Rebuild 会定期清理
 
 ### 目的
 确保新的函数调用关系被记录
 
-### CLI 命令 (v0.2.0+)
+### CLI 命令
 ```bash
 # 增量更新，仅处理变动文件
-loomgraph index --mode=incremental <repo_path>
+loomgraph update
+
+# 指定比较基准
+loomgraph update --since HEAD~3
 ```
 
 ---
 
-## 3. ❄️ 冷重构 (Cold Rebuild) - 全局重置
+## 2. ❄️ 冷重构 (Cold Rebuild) - 全局重置
 
 ### 触发时机
-- 每晚凌晨 (Nightly Build)
+- 每晚凌晨 (Nightly Build / Cron)
 - 累计变动文件超过 30%
 - 手动触发
 
 ### 处理对象
-- 整个 LightRAG 索引目录
+- 整个 LightRAG 知识图谱
 
 ### 操作
 ```bash
-# 删除旧数据
-rm -rf index_dir
-
-# 全量重新跑索引
+# 清空后全量重建
 loomgraph index --clear <repo_path>
 ```
+
+内部流程：
+1. 调用 `DELETE /documents` 清空全部数据
+2. 调用 `codeindex scan` 解析全部文件
+3. 逐个调用 `POST /graph/entity/create` 和 `POST /graph/relation/create`
 
 ### 为什么必须重构？
 
@@ -109,136 +113,157 @@ loomgraph index --clear <repo_path>
    - 只有全量重跑，算法（如 Leiden）才能根据新的代码结构重新划分社区
    - 生成准确的"代码库架构说明书"
 
-### CLI 命令 (MVP)
+### CLI 命令
 ```bash
-# 全量重建 (MVP 默认行为)
-loomgraph index <repo_path>
+# 全量重建（清空后重建）
+loomgraph index --clear <repo_path>
+
+# 全量重建（不清空，追加模式）
+loomgraph index --no-clear <repo_path>
 ```
 
 ---
 
 ## 决策矩阵
 
-| 场景 | 代码变动量 | 操作指令 | H200 耗时预估 |
-|------|-----------|---------|--------------|
-| 日常 Coding | < 10 个文件 | 不做图更新，仅更 Vector | < 1秒 |
-| 提交 Feature | 10 - 50 个文件 | 增量 Insert，不更新摘要 | ~30秒 - 2分钟 |
-| 重构/Merge | > 50 个文件 | 触发全量重建 (后台运行) | ~10 - 20分钟 |
-| 凌晨 3 点 | 定时任务 | 强制全量重建 | - |
+| 场景 | 代码变动量 | 操作 | 命令 | H200 耗时预估 |
+|------|-----------|------|------|--------------|
+| 日常 Commit | < 10 文件 | Warm Update | `loomgraph update` | < 30秒 |
+| 提交 Feature | 10 - 50 文件 | Warm Update | `loomgraph update` | ~1-2 分钟 |
+| 重构/Merge | > 50 文件 | Cold Rebuild | `loomgraph index --clear` | ~10-20 分钟 |
+| 凌晨定时 | 全量 | Cold Rebuild | Cron job | - |
 
 ---
 
-## MVP 范围 vs 未来版本
+## 版本支持情况
 
-| 功能 | MVP (v0.1.0) | v0.2.0+ |
-|------|-------------|---------|
-| Cold Rebuild | ✅ 支持 | ✅ 支持 |
-| Warm Update | ❌ 不支持 | ✅ 计划 |
-| Hot Update | ❌ 不支持 | ✅ 计划 |
-| 自动检测变动量 | ❌ 不支持 | ✅ 计划 |
-| IDE 插件集成 | ❌ 不支持 | ✅ 计划 |
+| 功能 | v0.1.0 | v0.2.0 | v0.3.0+ |
+|------|--------|--------|---------|
+| Cold Rebuild | ⚠️ 假实现 | ✅ 真实现 | ✅ |
+| Warm Update | ❌ | ✅ | ✅ |
+| ~~Hot Update~~ | ❌ | ❌ 已取消 | ❌ |
+| Git Hook 集成 | ❌ | ✅ | ✅ |
+| 批量注入优化 | ❌ | ❌ | ✅ (待 LightRAG 支持) |
 
 ---
 
 ## CLI 命令总览
 
-### MVP 已实现命令
+### 当前命令 (v0.2.0)
 
-| 命令 | 说明 | 示例 |
-|------|------|------|
-| `loomgraph status` | 检查服务状态（codeindex、LightRAG、embedding） | `loomgraph status` |
-| `loomgraph index <repo>` | 全量索引（Cold Rebuild） | `loomgraph index ./my-project` |
-| `loomgraph search <query>` | 语义搜索代码 | `loomgraph search "用户认证逻辑"` |
-| `loomgraph graph <entity>` | 查询调用关系 | `loomgraph graph "UserService.login"` |
-| `loomgraph embed <json>` | 生成 embeddings（分步调试） | `loomgraph embed parse.json` |
-| `loomgraph inject <parse> <embed>` | 注入到 LightRAG（分步调试） | `loomgraph inject parse.json embed.json` |
+| 命令 | 说明 | 更新类型 |
+|------|------|---------|
+| `loomgraph status` | 检查服务状态 | - |
+| `loomgraph index <repo>` | 全量索引（追加模式） | Cold |
+| `loomgraph index --clear <repo>` | 清空后全量重建 | Cold |
+| `loomgraph update` | 增量追加 git 变动文件 | Warm |
+| `loomgraph search <query>` | 语义搜索代码 | - |
+| `loomgraph graph <entity>` | 查询调用关系 | - |
 
-### v0.2.0+ 计划命令
+### 调试命令
 
-| 命令 | 说明 | 用途 |
-|------|------|------|
-| `loomgraph embed-only <file>` | 仅更新向量，不动图 | Hot Update |
-| `loomgraph index --mode=incremental <repo>` | 增量更新图 | Warm Update |
+| 命令 | 说明 |
+|------|------|
+| `loomgraph embed <json>` | 生成 embeddings（分步调试） |
+| `loomgraph inject <parse> <embed>` | 注入到 LightRAG（分步调试） |
 
 ---
 
 ## 实现参考
 
-### MVP (Cold Rebuild Only)
+### Cold Rebuild
 
 ```python
 # loomgraph/core/indexer.py
-import shutil
 
-async def index_repository(repo_path: str, rag: LightRAG, clear: bool = True) -> IndexResult:
-    """MVP: 全量重建策略."""
+async def cold_rebuild(repo_path: str, client: LightRAGClient) -> IndexResult:
+    """Cold Rebuild: 清空后全量重建."""
 
-    # 1. 删除旧数据 (清空整个 working_dir)
-    if clear:
-        await rag.finalize_storages()
-        shutil.rmtree(rag.working_dir, ignore_errors=True)
-        await rag.initialize_storages()
+    # 1. 清空全部数据
+    await client.delete_all()  # DELETE /documents
 
     # 2. 扫描所有文件
     files = scan_code_files(repo_path)
 
     # 3. 解析 + 注入
     for file_path in files:
-        result = codeindex.parse_file(file_path)
-        await inject_parse_result(rag, result)
+        result = parse_file(file_path)
+        await inject_parse_result(client, result)
 
     return IndexResult(...)
 ```
 
-### v0.2.0+ (Hot Update)
+### Warm Update
 
 ```python
-# loomgraph/core/hot_update.py (未来实现)
+# loomgraph/core/updater.py
 
-async def hot_update_file(file_path: str, embedding_client: EmbeddingClient):
-    """热更新: 仅更新向量."""
+async def warm_update(repo_path: str, client: LightRAGClient) -> UpdateResult:
+    """Warm Update: 追加变动文件（不删除旧数据）."""
 
-    # 1. 解析文件
-    result = codeindex.parse_file(file_path)
+    # 1. 获取 git 变动文件
+    changed_files = get_git_changed_files()  # git diff --name-only HEAD~1
 
-    # 2. 生成向量
-    texts = [s.signature for s in result.symbols]
-    embeddings = await embedding_client.embed(texts)
-
-    # 3. Upsert 到向量库 (不动图)
-    await vector_store.upsert(file_path, embeddings)
-```
-
-### v0.2.0+ (Warm Update)
-
-```python
-# loomgraph/core/warm_update.py (未来实现)
-
-async def warm_update_files(changed_files: list[str], rag: LightRAG):
-    """温更新: 增量更新图.
-
-    注意: acreate_entity() 不支持 upsert，如果 entity 已存在会抛错。
-    因此需要先删除旧的，再创建新的。
-    """
-
+    # 2. 解析并追加（不删旧数据）
     for file_path in changed_files:
-        # 1. 删除该文件相关的旧 entities (需要维护 file -> entities 的映射)
-        old_entities = await get_entities_by_file(file_path)
-        for entity_name in old_entities:
-            await rag.adelete_by_entity(entity_name)  # 自动删除关联 relations
+        result = parse_file(file_path)
+        await inject_parse_result(client, result)
 
-        # 2. 解析并注入新数据
-        result = codeindex.parse_file(file_path)
-        await inject_parse_result(rag, result)
+    return UpdateResult(
+        mode="warm",
+        files_updated=len(changed_files),
+        ...
+    )
 ```
 
-> **注意**: Warm Update 需要维护 `file_path -> entity_names` 的映射关系，
-> 以便知道哪些 entities 需要删除。可以利用 LightRAG 的 `source_id` 字段查询。
+### Git 变动检测
+
+```python
+# loomgraph/core/git.py
+
+import subprocess
+
+def get_git_changed_files(since: str = "HEAD~1") -> list[str]:
+    """获取 git 变动文件列表."""
+
+    result = subprocess.run(
+        ["git", "diff", "--name-only", since],
+        capture_output=True,
+        text=True,
+    )
+
+    if result.returncode != 0:
+        raise GitError(result.stderr)
+
+    files = result.stdout.strip().split("\n")
+    return [f for f in files if f]  # 过滤空行
+```
+
+---
+
+## LightRAG API 依赖
+
+| API | 用途 | 状态 |
+|-----|------|------|
+| `DELETE /documents` | Cold Rebuild 清空 | ✅ 已确认可用 |
+| `POST /graph/entity/create` | 创建实体 | ✅ 已使用 |
+| `POST /graph/relation/create` | 创建关系 | ✅ 已使用 |
+| `POST /insert_custom_kg` | 批量注入（优化） | ❌ HTTP 端点待添加 |
 
 ---
 
 ## 相关文档
 
+- [EPIC-003: 更新策略实现](../epics/EPIC-003-update-strategy.md) - 实现计划
+- [LIGHTRAG_API_REQUEST.md](../integration/LIGHTRAG_API_REQUEST.md) - LightRAG API 需求
 - [ADR-006: MVP 简化策略](../adr/ADR-006-mvp-simplification.md) - 全量重建决策
-- [LIGHTRAG_REQUIREMENTS.md](../integration/LIGHTRAG_REQUIREMENTS.md) - LightRAG API 需求
 - [CLI_DESIGN.md](../api/CLI_DESIGN.md) - CLI 命令设计
+
+---
+
+## 变更记录
+
+| 日期 | 版本 | 变更 |
+|------|------|------|
+| 2025-02-04 | 0.1.0 | 初始设计（Hot/Warm/Cold 三层） |
+| 2025-02-10 | 0.2.0 | 简化设计：取消 Hot，统一到 git commit 触发 |
