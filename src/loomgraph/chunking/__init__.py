@@ -1,1 +1,1 @@
-"""Chunking layer: AST-aware code chunking using codeindex."""
+"""Chunking module: AST-aware code chunking using codeindex."""

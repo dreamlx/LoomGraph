@@ -1,50 +1,147 @@
-# 🧶 LoomGraph: Enterprise Code Intelligence Engine (H200 Optimized)
+# LoomGraph: Enterprise Code Intelligence Engine
 
-**让 TB 级代码资产在 H200 算力巅峰上复活。**
+LoomGraph 是企业级代码智能理解引擎，结合 LightRAG 图谱技术与 Jina Code V2 向量化，实现大规模代码的语义检索与依赖分析。
 
-LoomGraph 是一款专为企业私有化部署设计的超大规模代码智能理解与搜索引擎。它通过结合 NVIDIA H200 的极致算力与 GraphRAG 拓扑技术，解决大型上市公司在面对“超大项目、复杂依赖、技术债务”时的代码理解成本问题。
+**设计目标**: 作为 Claude Code 工具，主要用户是 AI Agent。
 
-## 🚀 核心愿景
-将软件工程从“片段式检索”提升至“全局逻辑理解”。利用 H200 的 141GB 显存，我们让原本只能在云端运行的百亿级代码大模型，物理隔绝地运行在企业机房。
+---
 
-## 🛠 技术栈
-- **Compute:** NVIDIA H200 (Optimized for FP8 Inference & Batch Embedding)
-- **Model:** Jina Code Embeddings V2 (8k Long Context)
-- **RAG Architecture:** LightRAG + Graph Extraction
-- **Intelligence:** DeepSeek-Coder-V2 / Llama-3.1 (State-of-the-art Code LLMs)
-- **Database:** Postgres (pgvector) + Schema-based Graph Storage
-- **Protocol:** MCP (Model Context Protocol) 
+## Quick Start (Claude 执行)
 
-## 🌟 核心特性
-- **Hybrid Search:** 结合 Keyword (精准变量名)、Semantic (意图理解) 与 Graph (依赖关系) 的三路索引。
-- **Incremental Indexing:** 针对 H200 优化的增量图谱构建，保存代码即更新，无需全量重跑。
-- **AST-Aware Chunking:** 基于 Tree-sitter 的代码解析，尊重函数与类的逻辑边界。
-- **Privacy First:** 100% 私有化部署，代码不出柜，模型不出机房。
+> **Note**: 以下步骤由 Claude Code 读取后自动执行。
 
-## 📂 模块规划 (Claude Code 开发路线)
+### Step 1: 安装 LoomGraph
 
-### Phase 1: 基建层 (Core Engine)
-- [ ] 基于 TensorRT-LLM 封装 H200 推理加速模块。
-- [ ] 集成 Jina Code V2 实现 8k 长度的代码向量化。
-- [ ] 基于 Postgres 建立 Vector + Edge 混合存储。
-
-### Phase 2: 图谱层 (Graph Brain)
-- [ ] 开发 AST 代码切片器 (Tree-sitter Python/JS/C++)。
-- [ ] 实现 LightRAG 核心逻辑：Entity 提取与关系映射。
-- [ ] 针对 H200 显存优化并行图谱构建任务。
-
-### Phase 3: 应用层 (Interface)
-- [ ] 开发 MCP Server 接口，对接 Claude Desktop / Cursor。
-- [ ] 实现增量更新 File Watcher 逻辑。
-- [ ] (可选) 企业级权限管理 (RBAC) 模块。
-
-## 💻 快速启动 (开发者预览)
 ```bash
-# 1. 配置 H200 环境
-pip install vllm mcp lightrag-h200
+# 在 LoomGraph 项目目录下执行
+pip install .
+```
 
-# 2. 注入代码库
-loomgraph index --path /path/to/massive-repo
+这会自动安装 `ai-codeindex` 依赖。默认配置已指向企业服务，无需额外配置。
 
-# 3. 开启 MCP 服务
-loomgraph serve --port 8080 --model-path /models/deepseek-coder-v2
+### Step 2: 验证安装
+
+```bash
+loomgraph status
+```
+
+**预期输出**: 所有服务显示 `connected: true`。
+
+**如果失败**:
+- `codeindex installed: false` → 执行 `pip install ai-codeindex`
+- `lightrag connected: false` → 检查网络白名单权限
+
+### Step 3: 索引用户代码库
+
+```bash
+# 切换到用户的项目目录
+cd /path/to/user/project
+
+# 索引整个代码库
+loomgraph index .
+```
+
+### Step 4: 配置用户项目
+
+在用户项目的 `CLAUDE.md` 中添加以下内容：
+
+```markdown
+## 代码搜索 (LoomGraph)
+
+本项目已用 LoomGraph 索引，可使用以下命令：
+
+- `loomgraph search "<查询>"` - 语义搜索代码
+- `loomgraph graph "<类名.方法名>"` - 查询调用关系
+- `loomgraph status` - 检查服务状态
+```
+
+详细集成指南: [docs/CLAUDE_INTEGRATION.md](docs/CLAUDE_INTEGRATION.md)
+
+---
+
+## CLI 命令
+
+所有命令输出 JSON 格式，便于 AI 解析。
+
+| 命令 | 说明 | 示例 |
+|------|------|------|
+| `loomgraph status` | 检查服务状态 | `loomgraph status` |
+| `loomgraph index <path>` | 索引代码库 | `loomgraph index .` |
+| `loomgraph search <query>` | 语义搜索 | `loomgraph search "用户认证"` |
+| `loomgraph graph <entity>` | 查询调用关系 | `loomgraph graph "UserService.login"` |
+
+### 错误处理
+
+命令失败时返回结构化错误，Claude 可据此自动修复：
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "CODEINDEX_NOT_FOUND",
+    "message": "codeindex command not found",
+    "suggestion": "pip install ai-codeindex"
+  }
+}
+```
+
+---
+
+## 架构
+
+```
+codeindex (AST 解析)  →  LoomGraph (调度)  →  LightRAG API (存储)
+     CLI                    CLI                   HTTP
+```
+
+| 组件 | 职责 |
+|------|------|
+| **codeindex** | AST 解析，提取 Symbol/Import 等结构 |
+| **LoomGraph** | 数据映射，调用 LightRAG API |
+| **LightRAG** | 图谱存储、向量检索、语义查询 (云端服务) |
+
+---
+
+## 配置 (可选)
+
+默认配置已内置，无需修改。如需覆盖，创建 `.loomgraph.yaml`：
+
+```yaml
+lightrag:
+  api_url: "http://custom-server:3001"
+
+embedding:
+  base_url: "http://custom-server:3002"
+```
+
+---
+
+## 开发
+
+```bash
+# 安装开发依赖
+pip install -e ".[dev]"
+
+# 运行测试
+pytest tests/ -v
+
+# 代码检查
+ruff check src/ tests/
+mypy src/
+```
+
+---
+
+## 文档
+
+| 文档 | 说明 |
+|------|------|
+| [CLAUDE_INTEGRATION.md](docs/CLAUDE_INTEGRATION.md) | Claude Code 集成指南 |
+| [SYSTEM_DESIGN.md](docs/architecture/SYSTEM_DESIGN.md) | 系统架构设计 |
+| [CLI_DESIGN.md](docs/api/CLI_DESIGN.md) | CLI 详细设计 |
+
+---
+
+## License
+
+Proprietary - Enterprise Use Only
