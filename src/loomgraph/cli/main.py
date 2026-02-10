@@ -21,6 +21,28 @@ from loomgraph.core.config import get_settings
 
 
 # ============================================
+# Workspace Auto-Detection
+# ============================================
+
+def get_auto_workspace(workspace: str | None) -> str | None:
+    """Get workspace, auto-detecting from current directory if not specified.
+
+    Priority:
+    1. Explicit --workspace argument
+    2. Current directory name (auto-detect)
+
+    Returns:
+        Workspace name or None for default
+    """
+    if workspace:
+        return workspace
+
+    # Auto-detect from current directory name
+    cwd = Path.cwd()
+    return cwd.name
+
+
+# ============================================
 # Error Codes (from CLI_DESIGN.md)
 # ============================================
 
@@ -236,7 +258,7 @@ def status() -> None:
 @main.command()
 @click.argument("repo_path", type=click.Path(exists=True))
 @click.option("--clear/--no-clear", default=True, help="Clear old data before indexing")
-@click.option("--workspace", "-w", default=None, help="LightRAG workspace for project isolation")
+@click.option("--workspace", "-w", default=None, help="Workspace name (default: current directory name)")
 @click.option("--verbose", is_flag=True, help="Show detailed progress")
 def index(repo_path: str, clear: bool, workspace: str | None, verbose: bool) -> None:
     """Index a code repository (one-step pipeline).
@@ -337,7 +359,7 @@ async def _async_index_pipeline(
     client = LightRAGClient(
         base_url=settings.lightrag.api_url,
         timeout=settings.lightrag.api_timeout,
-        workspace=workspace,
+        workspace=get_auto_workspace(workspace),
     )
 
     # Step 0: Clear existing data if requested (Cold Rebuild)
@@ -642,7 +664,7 @@ async def _async_inject(
     default="hybrid",
     help="LightRAG query mode",
 )
-@click.option("--workspace", "-w", default=None, help="LightRAG workspace for project isolation")
+@click.option("--workspace", "-w", default=None, help="Workspace name (default: current directory name)")
 @click.option("--limit", "-n", default=10, help="Number of results (not yet implemented)")
 def search(query: str, mode: str, workspace: str | None, limit: int) -> None:
     """Search the code index using LightRAG.
@@ -668,7 +690,7 @@ async def _async_search(query: str, mode: str, workspace: str | None = None) -> 
     client = LightRAGClient(
         base_url=settings.lightrag.api_url,
         timeout=settings.lightrag.api_timeout,
-        workspace=workspace,
+        workspace=get_auto_workspace(workspace),
     )
 
     result = await client.query(query, mode=mode)
@@ -696,7 +718,7 @@ async def _async_search(query: str, mode: str, workspace: str | None = None) -> 
     default="all",
     help="Relation type filter",
 )
-@click.option("--workspace", "-w", default=None, help="LightRAG workspace for project isolation")
+@click.option("--workspace", "-w", default=None, help="Workspace name (default: current directory name)")
 def graph(entity_name: str, direction: str, depth: int, relation_type: str, workspace: str | None) -> None:
     """Query entity relationships in the graph.
 
@@ -729,7 +751,7 @@ async def _async_graph_query(
     client = LightRAGClient(
         base_url=settings.lightrag.api_url,
         timeout=settings.lightrag.api_timeout,
-        workspace=workspace,
+        workspace=get_auto_workspace(workspace),
     )
 
     result: dict[str, Any] = {"entity": entity_name}
@@ -766,7 +788,7 @@ async def _async_graph_query(
 )
 @click.option("--depth", default=2, help="Caller traversal depth")
 @click.option("--file", "file_path", type=click.Path(), help="Analyze specific file")
-@click.option("--workspace", "-w", default=None, help="LightRAG workspace for project isolation")
+@click.option("--workspace", "-w", default=None, help="Workspace name (default: current directory name)")
 def impact(target: str, staged: bool, base: str | None, depth: int, file_path: str | None, workspace: str | None) -> None:
     """Analyze impact of code changes.
 
@@ -862,7 +884,7 @@ async def _async_impact(
     client = LightRAGClient(
         base_url=settings.lightrag.api_url,
         timeout=settings.lightrag.api_timeout,
-        workspace=workspace,
+        workspace=get_auto_workspace(workspace),
     )
 
     analyzer = ImpactAnalyzer(
@@ -888,7 +910,7 @@ async def _async_impact(
 
 @main.command()
 @click.option("--since", default="HEAD~1", help="Git ref to compare from (default: HEAD~1)")
-@click.option("--workspace", "-w", default=None, help="LightRAG workspace for project isolation")
+@click.option("--workspace", "-w", default=None, help="Workspace name (default: current directory name)")
 @click.option("--verbose", is_flag=True, help="Show detailed progress")
 def update(since: str, workspace: str | None, verbose: bool) -> None:
     """Warm update: index only changed files since last commit.
@@ -1005,7 +1027,7 @@ async def _async_warm_update(
     client = LightRAGClient(
         base_url=settings.lightrag.api_url,
         timeout=settings.lightrag.api_timeout,
-        workspace=workspace,
+        workspace=get_auto_workspace(workspace),
     )
 
     files_indexed = 0
