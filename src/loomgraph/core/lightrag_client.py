@@ -33,14 +33,26 @@ class LightRAGClient:
         >>> client = LightRAGClient("http://internal.example.invalid:3001")
         >>> await client.health_check()
         >>> await client.create_entity("MyClass", {"entity_type": "CLASS", ...})
+
+        # With workspace isolation
+        >>> client = LightRAGClient("http://internal.example.invalid:3001", workspace="erp")
+        >>> await client.insert_custom_kg(entities, relations)  # Stored in erp workspace
     """
 
     base_url: str
     timeout: float = 30.0
+    workspace: str | None = None  # Optional workspace for multi-project isolation
 
     def __post_init__(self) -> None:
         # Remove trailing slash
         self.base_url = self.base_url.rstrip("/")
+
+    def _get_headers(self) -> dict[str, str]:
+        """Get HTTP headers including workspace if set."""
+        headers: dict[str, str] = {}
+        if self.workspace:
+            headers["LIGHTRAG-WORKSPACE"] = self.workspace
+        return headers
 
     async def health_check(self) -> dict[str, Any]:
         """Check if LightRAG service is healthy.
@@ -88,6 +100,7 @@ class LightRAGClient:
             try:
                 response = await client.post(
                     f"{self.base_url}/graph/entity/create",
+                    headers=self._get_headers(),
                     json={
                         "entity_name": entity_name,
                         "entity_data": entity_data,
@@ -134,6 +147,7 @@ class LightRAGClient:
             try:
                 response = await client.post(
                     f"{self.base_url}/graph/relation/create",
+                    headers=self._get_headers(),
                     json={
                         "source_entity": source_entity,
                         "target_entity": target_entity,
@@ -176,6 +190,7 @@ class LightRAGClient:
             try:
                 response = await client.post(
                     f"{self.base_url}/query",
+                    headers=self._get_headers(),
                     json={
                         "query": query,
                         "mode": mode,
@@ -209,6 +224,7 @@ class LightRAGClient:
             try:
                 response = await client.get(
                     f"{self.base_url}/graph/entity/exists",
+                    headers=self._get_headers(),
                     params={"entity_name": entity_name},
                 )
                 if response.status_code == 200:
@@ -232,7 +248,10 @@ class LightRAGClient:
         """
         async with httpx.AsyncClient(timeout=self.timeout, trust_env=False) as client:
             try:
-                response = await client.delete(f"{self.base_url}/documents")
+                response = await client.delete(
+                    f"{self.base_url}/documents",
+                    headers=self._get_headers(),
+                )
                 data = response.json() if response.content else {}
 
                 if response.status_code >= 400:
@@ -286,6 +305,7 @@ class LightRAGClient:
             try:
                 response = await client.post(
                     f"{self.base_url}/documents/insert_custom_kg",
+                    headers=self._get_headers(),
                     json={"custom_kg": custom_kg},
                 )
                 data = response.json()

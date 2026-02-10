@@ -236,8 +236,9 @@ def status() -> None:
 @main.command()
 @click.argument("repo_path", type=click.Path(exists=True))
 @click.option("--clear/--no-clear", default=True, help="Clear old data before indexing")
+@click.option("--workspace", "-w", default=None, help="LightRAG workspace for project isolation")
 @click.option("--verbose", is_flag=True, help="Show detailed progress")
-def index(repo_path: str, clear: bool, verbose: bool) -> None:
+def index(repo_path: str, clear: bool, workspace: str | None, verbose: bool) -> None:
     """Index a code repository (one-step pipeline).
 
     Calls: codeindex scan → embed → inject
@@ -301,7 +302,7 @@ def index(repo_path: str, clear: bool, verbose: bool) -> None:
 
     # Step 3: Run embed + inject asynchronously
     try:
-        result = asyncio.run(_async_index_pipeline(parse_results, clear))
+        result = asyncio.run(_async_index_pipeline(parse_results, clear, workspace))
     except Exception as e:
         output_error(
             code=ErrorCode.LIGHTRAG_ERROR,
@@ -316,7 +317,11 @@ def index(repo_path: str, clear: bool, verbose: bool) -> None:
     output_success(result)
 
 
-async def _async_index_pipeline(parse_results: dict[str, Any], clear: bool) -> dict[str, Any]:
+async def _async_index_pipeline(
+    parse_results: dict[str, Any],
+    clear: bool,
+    workspace: str | None = None,
+) -> dict[str, Any]:
     """Run the async indexing pipeline."""
     from loomgraph.core.injector import inject_parse_result
     from loomgraph.core.lightrag_client import LightRAGAPIError, LightRAGClient
@@ -332,6 +337,7 @@ async def _async_index_pipeline(parse_results: dict[str, Any], clear: bool) -> d
     client = LightRAGClient(
         base_url=settings.lightrag.api_url,
         timeout=settings.lightrag.api_timeout,
+        workspace=workspace,
     )
 
     # Step 0: Clear existing data if requested (Cold Rebuild)
@@ -636,14 +642,15 @@ async def _async_inject(
     default="hybrid",
     help="LightRAG query mode",
 )
+@click.option("--workspace", "-w", default=None, help="LightRAG workspace for project isolation")
 @click.option("--limit", "-n", default=10, help="Number of results (not yet implemented)")
-def search(query: str, mode: str, limit: int) -> None:
+def search(query: str, mode: str, workspace: str | None, limit: int) -> None:
     """Search the code index using LightRAG.
 
     QUERY: Natural language query about the code
     """
     try:
-        result = asyncio.run(_async_search(query, mode))
+        result = asyncio.run(_async_search(query, mode, workspace))
         output_success(result)
     except Exception as e:
         output_error(
@@ -653,7 +660,7 @@ def search(query: str, mode: str, limit: int) -> None:
         )
 
 
-async def _async_search(query: str, mode: str) -> dict[str, Any]:
+async def _async_search(query: str, mode: str, workspace: str | None = None) -> dict[str, Any]:
     """Run async search via LightRAG API."""
     from loomgraph.core.lightrag_client import LightRAGClient
 
@@ -661,6 +668,7 @@ async def _async_search(query: str, mode: str) -> dict[str, Any]:
     client = LightRAGClient(
         base_url=settings.lightrag.api_url,
         timeout=settings.lightrag.api_timeout,
+        workspace=workspace,
     )
 
     result = await client.query(query, mode=mode)
@@ -688,7 +696,8 @@ async def _async_search(query: str, mode: str) -> dict[str, Any]:
     default="all",
     help="Relation type filter",
 )
-def graph(entity_name: str, direction: str, depth: int, relation_type: str) -> None:
+@click.option("--workspace", "-w", default=None, help="LightRAG workspace for project isolation")
+def graph(entity_name: str, direction: str, depth: int, relation_type: str, workspace: str | None) -> None:
     """Query entity relationships in the graph.
 
     ENTITY_NAME: Name of the entity to query
@@ -697,7 +706,7 @@ def graph(entity_name: str, direction: str, depth: int, relation_type: str) -> N
     requires codeindex to output call relationships.
     """
     try:
-        result = asyncio.run(_async_graph_query(entity_name, direction, relation_type))
+        result = asyncio.run(_async_graph_query(entity_name, direction, relation_type, workspace))
         output_success(result)
     except Exception as e:
         output_error(
@@ -711,6 +720,7 @@ async def _async_graph_query(
     entity_name: str,
     direction: str,
     relation_type: str,
+    workspace: str | None = None,
 ) -> dict[str, Any]:
     """Run async graph query via LightRAG API."""
     from loomgraph.core.lightrag_client import LightRAGClient
@@ -719,6 +729,7 @@ async def _async_graph_query(
     client = LightRAGClient(
         base_url=settings.lightrag.api_url,
         timeout=settings.lightrag.api_timeout,
+        workspace=workspace,
     )
 
     result: dict[str, Any] = {"entity": entity_name}
@@ -755,7 +766,8 @@ async def _async_graph_query(
 )
 @click.option("--depth", default=2, help="Caller traversal depth")
 @click.option("--file", "file_path", type=click.Path(), help="Analyze specific file")
-def impact(target: str, staged: bool, base: str | None, depth: int, file_path: str | None) -> None:
+@click.option("--workspace", "-w", default=None, help="LightRAG workspace for project isolation")
+def impact(target: str, staged: bool, base: str | None, depth: int, file_path: str | None, workspace: str | None) -> None:
     """Analyze impact of code changes.
 
     TARGET: Commit reference (default: HEAD)
@@ -767,7 +779,7 @@ def impact(target: str, staged: bool, base: str | None, depth: int, file_path: s
         loomgraph impact abc123         # Analyze specific commit
     """
     try:
-        result = asyncio.run(_async_impact(target, staged, base, depth, file_path))
+        result = asyncio.run(_async_impact(target, staged, base, depth, file_path, workspace))
 
         # Add risk assessment
         from loomgraph.core.impact import RiskAssessor
@@ -840,6 +852,7 @@ async def _async_impact(
     base: str | None,
     depth: int,
     file_path: str | None,
+    workspace: str | None = None,
 ) -> dict[str, Any]:
     """Run async impact analysis."""
     from loomgraph.core.lightrag_client import LightRAGClient
@@ -849,6 +862,7 @@ async def _async_impact(
     client = LightRAGClient(
         base_url=settings.lightrag.api_url,
         timeout=settings.lightrag.api_timeout,
+        workspace=workspace,
     )
 
     analyzer = ImpactAnalyzer(
@@ -874,8 +888,9 @@ async def _async_impact(
 
 @main.command()
 @click.option("--since", default="HEAD~1", help="Git ref to compare from (default: HEAD~1)")
+@click.option("--workspace", "-w", default=None, help="LightRAG workspace for project isolation")
 @click.option("--verbose", is_flag=True, help="Show detailed progress")
-def update(since: str, verbose: bool) -> None:
+def update(since: str, workspace: str | None, verbose: bool) -> None:
     """Warm update: index only changed files since last commit.
 
     Detects git changes and incrementally adds new entities/relations
@@ -885,6 +900,7 @@ def update(since: str, verbose: bool) -> None:
         loomgraph update                 # Changes since last commit
         loomgraph update --since HEAD~3  # Changes in last 3 commits
         loomgraph update --since main    # Changes since branching from main
+        loomgraph update --workspace erp # Update in specific workspace
     """
     import time
 
@@ -950,7 +966,7 @@ def update(since: str, verbose: bool) -> None:
 
     # Run warm update pipeline
     try:
-        result = asyncio.run(_async_warm_update(changed_files, repo_path, verbose))
+        result = asyncio.run(_async_warm_update(changed_files, repo_path, workspace, verbose))
     except Exception as e:
         output_error(
             code=ErrorCode.LIGHTRAG_ERROR,
@@ -969,6 +985,7 @@ def update(since: str, verbose: bool) -> None:
 async def _async_warm_update(
     changed_files: list[Path],
     repo_path: Path,
+    workspace: str | None,
     verbose: bool,
 ) -> dict[str, Any]:
     """Run async warm update pipeline."""
@@ -988,6 +1005,7 @@ async def _async_warm_update(
     client = LightRAGClient(
         base_url=settings.lightrag.api_url,
         timeout=settings.lightrag.api_timeout,
+        workspace=workspace,
     )
 
     files_indexed = 0
