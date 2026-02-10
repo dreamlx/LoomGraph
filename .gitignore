@@ -113,6 +113,11 @@ loomgraph_index/
 .loomgraph.yaml
 .loomgraph.yml
 
+# Customer configs (contain internal URLs)
+customers/customers.yaml
+customers/*/config.yaml
+customers/*/
+
 # Secrets
 *.pem
 *.key

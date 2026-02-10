@@ -1,9 +1,0 @@
-# LoomGraph 配置 - 拼便宜专用
-# 复制到 ~/.config/loomgraph/config.yaml
-
-lightrag:
-  api_url: "http://117.131.45.179:3010"
-  api_timeout: 30.0
-
-embedding:
-  base_url: "http://117.131.45.179:3002"

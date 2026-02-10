@@ -9,6 +9,32 @@ argument-hint: "[--force]"
 
 在执行 `loomgraph index .` 之前，需要先配置 codeindex。此 skill 将引导你完成配置。
 
+### Step 0: 版本检查
+
+**检查当前安装的 LoomGraph 版本：**
+```bash
+~/.loomgraph-venv/bin/loomgraph version 2>/dev/null || echo '{"error": "loomgraph not installed or version < 0.2.1"}'
+```
+
+**查看最新版本和变更日志：**
+- 最新版本文件：安装包目录下的 `customers/VERSION`
+- 变更日志：安装包目录下的 `customers/CHANGELOG.md`
+
+**版本对比：**
+| 当前版本 | 最新版本 | 建议操作 |
+|----------|----------|----------|
+| < 0.2.1 | 0.2.1 | 需要更新（支持增量索引） |
+| = 0.2.1 | 0.2.1 | 已是最新 |
+
+**如需更新：**
+```bash
+cd /path/to/loomgraph-package  # 安装包所在目录
+source ~/.loomgraph-venv/bin/activate
+pip install .
+```
+
+---
+
 ### Step 1: 检测项目语言
 
 检查项目根目录，确定主要语言：

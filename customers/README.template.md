@@ -1,4 +1,4 @@
-# LoomGraph - 拼便宜专用版
+# LoomGraph - {{customer_name}}专用版
 
 > **给 Claude Code**: 请按顺序执行下面的 Checklist，每完成一项就打勾 `[x]`。
 > **所有步骤都必须完成**，跳过任何一步都会导致功能异常。
@@ -33,7 +33,7 @@ cp config.yaml ~/.config/loomgraph/config.yaml
 > ⚠️ **警告**：跳过此步骤会导致：
 > - 索引速度慢 10 倍（无并行配置）
 > - 无法使用 `/loomgraph-setup` 和 `/loomgraph-init` 命令
-> - PHP 项目可能索引失败（语言解析器未安装）
+> - {{language_hint}} 项目可能索引失败（语言解析器未安装）
 
 - [ ] 安装 loomgraph-setup skill
 ```bash
@@ -64,7 +64,7 @@ loomgraph status
 
 **预期输出**：
 - `lightrag_api.connected: true`
-- `lightrag_api.url: http://117.131.45.179:3010`
+- `lightrag_api.url: {{lightrag_url}}`
 
 **如果失败**：
 - `codeindex installed: false` → 重新执行步骤 1
@@ -79,9 +79,9 @@ loomgraph status
 ```markdown
 ## LoomGraph 安装状态
 
-- [x] LoomGraph v0.2.0 已安装
+- [x] LoomGraph v{{version}} 已安装
 - [x] Skills 已配置: /loomgraph-setup, /loomgraph-init
-- [x] 服务连接正常: http://117.131.45.179:3010
+- [x] 服务连接正常: {{lightrag_url}}
 ```
 
 ---
@@ -106,7 +106,7 @@ loomgraph status
 **为什么需要这一步？**
 - 大型项目不配置会非常慢（单线程 vs 8 并发 = 10 倍差距）
 - 需要安装对应语言的 tree-sitter 解析器
-- 排除 `vendor/`、`cache/` 等无用目录
+- 排除 `{{exclude_dirs}}` 等无用目录
 
 #### Step 2: 配置项目 CLAUDE.md
 
@@ -130,6 +130,9 @@ loomgraph index .
 # 语义搜索代码
 loomgraph search "用户认证逻辑"
 
+# 增量更新（git 变更后）
+loomgraph update
+
 # 查询调用关系
 loomgraph graph "UserService.login" --direction callers
 
@@ -144,9 +147,13 @@ loomgraph status
 | 命令 | 说明 |
 |------|------|
 | `loomgraph status` | 检查服务状态 |
+| `loomgraph version` | 显示当前版本 |
 | `loomgraph index <path>` | 索引代码库 |
+| `loomgraph index --clear <path>` | Cold Rebuild（清空重建） |
+| `loomgraph update` | Warm Update（仅索引 git 变更） |
 | `loomgraph search "<query>"` | 语义搜索 |
 | `loomgraph graph "<entity>"` | 查询调用关系 |
+| `loomgraph impact [TARGET]` | 分析代码变更影响 |
 
 ---
 
@@ -191,6 +198,43 @@ loomgraph status
 # 方式 3: 重新设置别名
 echo 'alias loomgraph="~/.loomgraph-venv/bin/loomgraph"' >> ~/.zshrc
 source ~/.zshrc
+```
+
+---
+
+## 如何更新
+
+> **给 Claude Code**: 当收到更新通知时，执行以下步骤。
+
+### 1. 检查当前版本
+
+```bash
+loomgraph version
+```
+
+### 2. 查看变更日志
+
+阅读安装包目录下的 `CHANGELOG.md` 了解新版本功能。
+
+### 3. 执行更新
+
+```bash
+cd /path/to/loomgraph-package  # 安装包所在目录
+source ~/.loomgraph-venv/bin/activate
+pip install .
+```
+
+### 4. 更新 Skills（如有新 skill）
+
+```bash
+cp -r skills/* ~/.claude/skills/
+```
+
+### 5. 验证更新
+
+```bash
+loomgraph version
+# 应显示新版本号
 ```
 
 ---

@@ -218,19 +218,62 @@ embedding:
 
 所有命令输出 JSON 格式，便于 AI 解析。
 
-### 检查状态
+### 命令速查表
+
+| 命令 | 说明 |
+|------|------|
+| `loomgraph version` | 显示版本信息 |
+| `loomgraph status` | 检查服务连接状态 |
+| `loomgraph index <path>` | 一键索引代码库 |
+| `loomgraph index --clear <path>` | Cold Rebuild（清空重建） |
+| `loomgraph update [--since REF]` | Warm Update（增量索引 git 变更） |
+| `loomgraph search "<query>"` | 语义搜索代码 |
+| `loomgraph graph "<entity>"` | 查询调用关系 |
+| `loomgraph impact [TARGET]` | 分析代码变更影响 |
+
+### 版本与状态
 
 ```bash
-loomgraph status  # 检查 codeindex、LightRAG、embedding 服务
+loomgraph version  # 显示版本
+loomgraph status   # 检查 codeindex、LightRAG、embedding 服务
+```
+
+### 索引代码库
+
+```bash
+# 一键索引（默认 Cold Rebuild）
+loomgraph index /path/to/repo
+
+# 明确 Cold Rebuild（清空后重建）
+loomgraph index --clear /path/to/repo
+
+# Warm Update（仅索引 git 变更文件）
+loomgraph update                 # 对比 HEAD~1
+loomgraph update --since HEAD~5  # 对比最近 5 个提交
+```
+
+### 分步索引（高级用法）
+
+```bash
+# Step 1: AST 解析
+codeindex scan /repo --output json > parse_results.json
+
+# Step 2: 生成 Embedding
+loomgraph embed parse_results.json --output embeddings.json
+
+# Step 3: 注入 LightRAG
+loomgraph inject parse_results.json embeddings.json
 ```
 
 ### 语义搜索
 
 ```bash
-# 搜索代码（使用 LightRAG 语义查询）
 loomgraph search "用户认证逻辑"
 loomgraph search "how to validate password" --mode local
+loomgraph search "database connection" --mode hybrid --limit 20
 ```
+
+搜索模式：`local`（实体优先）、`global`（全局）、`hybrid`（混合，默认）
 
 ### 查询调用图
 
@@ -240,20 +283,24 @@ loomgraph graph "UserService.login" --direction callers
 
 # 这个函数调用了谁
 loomgraph graph "UserService.login" --direction callees
+
+# 指定深度和关系类型
+loomgraph graph "MyClass" --depth 3 --relation-type INHERITS
 ```
 
-注意：调用图查询依赖 codeindex 输出 calls 关系（v0.9.0 尚不支持）。
+注意：调用图查询依赖 codeindex 输出 calls 关系。
 
-### 索引代码库（开发中）
+### 变更影响分析
 
 ```bash
-# 一键索引
-loomgraph index /path/to/repo
+# 分析最近提交的影响
+loomgraph impact HEAD
 
-# 或分步执行
-codeindex scan /repo --output json > parse_results.json
-loomgraph embed parse_results.json --output embeddings.json
-loomgraph inject parse_results.json embeddings.json
+# 分析暂存区变更
+loomgraph impact --staged
+
+# 分析指定文件
+loomgraph impact --file src/auth/login.py
 ```
 
 ### 错误处理
