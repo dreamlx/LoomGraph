@@ -4,6 +4,42 @@
 
 ---
 
+## [0.2.4] - 2025-02-10
+
+### 新增
+- Workspace 自动检测 - 从当前目录名自动识别 workspace，无需硬编码
+
+### 改进
+- `--workspace/-w` 参数现在可选，默认使用当前目录名
+- 简化客户 CLAUDE.md 配置，无需指定 workspace 名称
+
+### 更新方式
+```bash
+cd /path/to/loomgraph-package
+source ~/.loomgraph-venv/bin/activate
+pip install .
+```
+
+---
+
+## [0.2.3] - 2025-02-10
+
+### 新增
+- `--workspace/-w` 选项 - 多项目 workspace 隔离支持
+- README 知识图谱更新策略指南（给 AI Agent）
+
+### 改进
+- 模板化打包系统，单一 README 模板维护所有客户
+
+### 更新方式
+```bash
+cd /path/to/loomgraph-package
+source ~/.loomgraph-venv/bin/activate
+pip install .
+```
+
+---
+
 ## [0.2.1] - 2025-02-10
 
 ### 新增
@@ -49,6 +85,8 @@ pip install .
 
 | 版本 | 主要功能 | 必须更新？ |
 |------|----------|-----------|
+| 0.2.4 | Workspace 自动检测 | 推荐 - 简化配置 |
+| 0.2.3 | Workspace 隔离 + 更新策略 | 多项目用户必须 |
 | 0.2.1 | Warm/Cold Update | 推荐 - 增量索引更快 |
 | 0.2.0 | 基础索引和搜索 | 基线版本 |
 
