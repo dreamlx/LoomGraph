@@ -319,7 +319,7 @@ def index(repo_path: str, clear: bool, verbose: bool) -> None:
 async def _async_index_pipeline(parse_results: dict[str, Any], clear: bool) -> dict[str, Any]:
     """Run the async indexing pipeline."""
     from loomgraph.core.injector import inject_parse_result
-    from loomgraph.core.lightrag_client import LightRAGClient
+    from loomgraph.core.lightrag_client import LightRAGAPIError, LightRAGClient
     from loomgraph.core.models import (
         Call,
         Import,
@@ -333,6 +333,16 @@ async def _async_index_pipeline(parse_results: dict[str, Any], clear: bool) -> d
         base_url=settings.lightrag.api_url,
         timeout=settings.lightrag.api_timeout,
     )
+
+    # Step 0: Clear existing data if requested (Cold Rebuild)
+    cleared = False
+    if clear:
+        try:
+            await client.delete_all()
+            cleared = True
+        except LightRAGAPIError as e:
+            # If delete fails, continue with indexing but warn
+            pass  # Will be reported in result
 
     # Convert JSON to ParseResult objects and inject
     files_scanned = 0
@@ -425,6 +435,8 @@ async def _async_index_pipeline(parse_results: dict[str, Any], clear: bool) -> d
             })
 
     result = {
+        "mode": "cold_rebuild" if clear else "append",
+        "cleared": cleared if clear else None,
         "files_scanned": files_scanned,
         "files_indexed": files_indexed,
         "files_skipped": files_skipped,
@@ -432,6 +444,9 @@ async def _async_index_pipeline(parse_results: dict[str, Any], clear: bool) -> d
         "relations_created": relations_created,
         "skipped_files": skipped_files,
     }
+
+    # Remove None values
+    result = {k: v for k, v in result.items() if v is not None}
 
     if errors:
         result["injection_errors"] = errors[:10]  # Limit to first 10 errors
@@ -855,6 +870,237 @@ async def _async_impact(
         result = await analyzer.analyze_commit(target)
 
     return result.to_dict()
+
+
+@main.command()
+@click.option("--since", default="HEAD~1", help="Git ref to compare from (default: HEAD~1)")
+@click.option("--verbose", is_flag=True, help="Show detailed progress")
+def update(since: str, verbose: bool) -> None:
+    """Warm update: index only changed files since last commit.
+
+    Detects git changes and incrementally adds new entities/relations
+    without clearing existing data.
+
+    Examples:
+        loomgraph update                 # Changes since last commit
+        loomgraph update --since HEAD~3  # Changes in last 3 commits
+        loomgraph update --since main    # Changes since branching from main
+    """
+    import time
+
+    from loomgraph.core.git import GitError, get_changed_files, get_current_commit, is_git_repository
+    from loomgraph.core.indexer import CODE_EXTENSIONS
+
+    start_time = time.time()
+    repo_path = Path(".")
+
+    # Check if in git repo
+    if not is_git_repository(repo_path):
+        output_error(
+            code=ErrorCode.GIT_ERROR,
+            message="Not a git repository",
+            suggestion="Run this command from within a git repository",
+        )
+        return
+
+    # Get current commit for reference
+    try:
+        current_commit = get_current_commit(repo_path)
+    except GitError as e:
+        output_error(
+            code=ErrorCode.GIT_ERROR,
+            message=str(e),
+        )
+        return
+
+    # Get changed files
+    try:
+        changed_files = get_changed_files(
+            since=since,
+            repo_path=repo_path,
+            extensions=CODE_EXTENSIONS,
+        )
+    except GitError as e:
+        output_error(
+            code=ErrorCode.GIT_ERROR,
+            message=str(e),
+            suggestion="Check if the git reference exists: git log --oneline",
+        )
+        return
+
+    if not changed_files:
+        output_success({
+            "mode": "warm",
+            "message": "No code files changed",
+            "since": since,
+            "current_commit": current_commit,
+            "files_changed": 0,
+        })
+        return
+
+    # Check codeindex
+    codeindex_status = check_codeindex()
+    if not codeindex_status.get("installed"):
+        output_error(
+            code=ErrorCode.CODEINDEX_NOT_FOUND,
+            message="codeindex command not found",
+            suggestion="Install codeindex: pip install matrix-codeindex",
+        )
+        return
+
+    # Run warm update pipeline
+    try:
+        result = asyncio.run(_async_warm_update(changed_files, repo_path, verbose))
+    except Exception as e:
+        output_error(
+            code=ErrorCode.LIGHTRAG_ERROR,
+            message=f"Warm update failed: {e}",
+        )
+        return
+
+    duration = time.time() - start_time
+    result["duration_seconds"] = round(duration, 2)
+    result["since"] = since
+    result["current_commit"] = current_commit
+
+    output_success(result)
+
+
+async def _async_warm_update(
+    changed_files: list[Path],
+    repo_path: Path,
+    verbose: bool,
+) -> dict[str, Any]:
+    """Run async warm update pipeline."""
+    import json
+
+    from loomgraph.core.injector import inject_parse_result
+    from loomgraph.core.lightrag_client import LightRAGClient
+    from loomgraph.core.models import (
+        Call,
+        Import,
+        Inheritance,
+        ParseResult,
+        Symbol,
+    )
+
+    settings = get_settings()
+    client = LightRAGClient(
+        base_url=settings.lightrag.api_url,
+        timeout=settings.lightrag.api_timeout,
+    )
+
+    files_indexed = 0
+    files_skipped = 0
+    entities_created = 0
+    relations_created = 0
+    errors: list[str] = []
+
+    for file_path in changed_files:
+        full_path = repo_path / file_path
+
+        # Parse single file with codeindex
+        try:
+            result = subprocess.run(
+                ["codeindex", "scan", str(full_path), "--output", "json"],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+
+            if result.returncode != 0:
+                files_skipped += 1
+                errors.append(f"Parse failed: {file_path}")
+                continue
+
+            parse_output = json.loads(result.stdout)
+
+        except (subprocess.TimeoutExpired, json.JSONDecodeError) as e:
+            files_skipped += 1
+            errors.append(f"Parse error {file_path}: {e}")
+            continue
+
+        # Process results
+        for file_result in parse_output.get("results", []):
+            if file_result.get("error"):
+                continue
+
+            path = Path(file_result.get("path", ""))
+
+            symbols = [
+                Symbol(
+                    name=s.get("name", ""),
+                    kind=s.get("kind", ""),
+                    signature=s.get("signature", ""),
+                    docstring=s.get("docstring", ""),
+                    line_start=s.get("line_start", 0),
+                    line_end=s.get("line_end", 0),
+                )
+                for s in file_result.get("symbols", [])
+            ]
+
+            calls = [
+                Call(
+                    caller=c.get("caller", ""),
+                    callee=c.get("callee", ""),
+                    line=c.get("line", 0),
+                    is_method=c.get("is_method", False),
+                )
+                for c in file_result.get("calls", [])
+            ]
+
+            inheritances = [
+                Inheritance(
+                    child=i.get("child", ""),
+                    parent=i.get("parent", ""),
+                )
+                for i in file_result.get("inheritances", [])
+            ]
+
+            imports = [
+                Import(
+                    module=i.get("module", ""),
+                    alias=i.get("alias"),
+                    names=i.get("names", []),
+                )
+                for i in file_result.get("imports", [])
+            ]
+
+            parse_result = ParseResult(
+                path=path,
+                symbols=symbols,
+                calls=calls,
+                inheritances=inheritances,
+                imports=imports,
+                module_docstring=file_result.get("module_docstring", ""),
+                file_lines=file_result.get("file_lines", 0),
+            )
+
+            # Inject (append mode - no deletion)
+            try:
+                inject_result = await inject_parse_result(client, parse_result)
+                entities_created += inject_result.entities
+                relations_created += inject_result.relations
+                files_indexed += 1
+            except Exception as e:
+                files_skipped += 1
+                errors.append(f"Inject failed {path}: {e}")
+
+    result = {
+        "mode": "warm",
+        "files_changed": len(changed_files),
+        "files_indexed": files_indexed,
+        "files_skipped": files_skipped,
+        "entities_created": entities_created,
+        "relations_created": relations_created,
+    }
+
+    if errors:
+        result["errors"] = errors[:5]
+        if len(errors) > 5:
+            result["errors_total"] = len(errors)
+
+    return result
 
 
 @main.command()

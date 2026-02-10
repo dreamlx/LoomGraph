@@ -217,3 +217,34 @@ class LightRAGClient:
                 return False
             except httpx.RequestError:
                 return False
+
+    async def delete_all(self) -> dict[str, Any]:
+        """Delete all data from LightRAG (Cold Rebuild).
+
+        This clears all entities, relations, chunks, and caches.
+        Use with caution - this operation is irreversible.
+
+        Returns:
+            Response from LightRAG confirming deletion
+
+        Raises:
+            LightRAGAPIError: If deletion fails
+        """
+        async with httpx.AsyncClient(timeout=self.timeout, trust_env=False) as client:
+            try:
+                response = await client.delete(f"{self.base_url}/documents")
+                data = response.json() if response.content else {}
+
+                if response.status_code >= 400:
+                    detail = data.get("detail", str(data)) if data else f"HTTP {response.status_code}"
+                    raise LightRAGAPIError(
+                        f"Failed to delete all documents: {detail}",
+                        status_code=response.status_code,
+                        detail=detail,
+                    )
+
+                logger.info("Successfully deleted all documents from LightRAG")
+                return data
+
+            except httpx.RequestError as e:
+                raise LightRAGAPIError(f"Connection failed: {e}") from e
