@@ -140,6 +140,33 @@ loomgraph graph "UserService.login" --direction callers
 loomgraph status
 ```
 
+### 知识图谱更新策略
+
+> **给 Claude Code**: 请根据以下规则维护知识图谱的时效性。
+
+#### 何时执行 Warm Update（增量）
+
+| 场景 | 命令 |
+|------|------|
+| 完成代码修改并 commit 后 | `loomgraph update` |
+| 多次 commit 后批量同步 | `loomgraph update --since HEAD~5` |
+| 搜索前发现索引可能过期 | `loomgraph update` |
+
+#### 何时执行 Cold Rebuild（完全重建）
+
+| 场景 | 命令 |
+|------|------|
+| 首次索引项目 | `loomgraph index .` |
+| 大规模重构后（文件移动/重命名） | `loomgraph index --clear .` |
+| 搜索结果明显不准确 | `loomgraph index --clear .` |
+| 项目结构变化（新增/删除大量文件） | `loomgraph index --clear .` |
+
+#### 自动判断提示
+
+1. **每次 `git commit` 后**：建议执行 `loomgraph update`
+2. **搜索结果与代码不符**：执行 `loomgraph index --clear .`
+3. **不确定时**：执行 `loomgraph update`（安全，不会丢数据）
+
 ---
 
 ## CLI 命令参考
