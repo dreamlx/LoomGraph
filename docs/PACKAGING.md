@@ -90,6 +90,49 @@ python scripts/package.py --all
 python scripts/package.py --sync-version
 ```
 
+## CHANGELOG 维护策略
+
+项目维护**两份 CHANGELOG**，面向不同读者：
+
+| | `CHANGELOG.md`（根目录） | `customers/CHANGELOG.md` |
+|---|---|---|
+| **读者** | 开发者、AI Agent | 客户侧 Claude Code |
+| **内容** | 全部变更（含 refactor、fix、docs） | 仅用户可感知的功能变更 |
+| **格式** | [Keep a Changelog](https://keepachangelog.com) 英文 | 中文，含「更新方式」和「版本对比表」 |
+| **更新时机** | 开发中随手更新 `[Unreleased]` | 打包发布时从根 CHANGELOG 挑选 |
+
+### 日常开发
+
+开发中向根 `CHANGELOG.md` 的 `[Unreleased]` 区追加条目：
+
+```markdown
+## [Unreleased]
+
+### Added
+- New feature description
+
+### Fixed
+- Bug fix description
+```
+
+### 发布时
+
+1. `[Unreleased]` → `[0.x.x] - YYYY-MM-DD`
+2. 从中挑选**客户可见项**写入 `customers/CHANGELOG.md`
+3. 添加新的空 `[Unreleased]` 区
+
+### 哪些写入客户 CHANGELOG？
+
+| 变更类型 | 根 CHANGELOG | 客户 CHANGELOG |
+|----------|:---:|:---:|
+| 新 CLI 命令 / 选项 | ✅ | ✅ |
+| 行为变更 / Breaking Change | ✅ | ✅ |
+| 性能提升（用户可感知） | ✅ | ✅ |
+| 内部重构 | ✅ | ❌ |
+| 测试改进 | ✅ | ❌ |
+| 文档 / ADR | ✅ | ❌ |
+| Bug 修复（内部） | ✅ | ❌ |
+
 ## 发布新版本流程
 
 ```bash
@@ -100,7 +143,8 @@ vim src/loomgraph/__init__.py  # 修改 __version__
 python scripts/package.py --sync-version
 
 # 3. 更新 CHANGELOG
-vim customers/CHANGELOG.md
+#    - 根 CHANGELOG.md: [Unreleased] → [0.x.x]
+#    - customers/CHANGELOG.md: 挑选客户可见项
 
 # 4. 提交
 git add -A
