@@ -43,17 +43,12 @@ INCLUDE_DIRS = [
 
 
 def get_version() -> str:
-    """Get version from customers/VERSION or pyproject.toml."""
-    # Prefer VERSION file
-    if VERSION_FILE.exists():
-        return VERSION_FILE.read_text().strip()
-
-    # Fallback to pyproject.toml
+    """Get version from pyproject.toml (single source of truth)."""
     pyproject = PROJECT_ROOT / "pyproject.toml"
     content = pyproject.read_text()
-    for line in content.splitlines():
-        if line.strip().startswith("version"):
-            return line.split("=")[1].strip().strip('"')
+    match = re.search(r'^version\s*=\s*"([^"]+)"', content, re.MULTILINE)
+    if match:
+        return match.group(1)
     return "0.0.0"
 
 
@@ -120,6 +115,35 @@ def generate_readme(customer: str, config: dict, version: str) -> str:
     return render_template(template, variables)
 
 
+def build_wheel() -> Path | None:
+    """Build wheel and return the path to the .whl file."""
+    print("Building wheel...")
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "build", "--wheel", str(PROJECT_ROOT)],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        if result.returncode != 0:
+            print(f"  Warning: wheel build failed: {result.stderr}")
+            return None
+
+        # Find the built wheel
+        wheels = list(DIST_DIR.glob("loomgraph-*.whl"))
+        if wheels:
+            newest = max(wheels, key=lambda p: p.stat().st_mtime)
+            print(f"  Built: {newest.name}")
+            return newest
+        return None
+    except FileNotFoundError:
+        print("  Warning: 'build' module not found. Install with: pip install build")
+        return None
+    except subprocess.TimeoutExpired:
+        print("  Warning: wheel build timed out")
+        return None
+
+
 def package_customer(customer: str, customers_config: dict) -> Path:
     """Package LoomGraph for a specific customer.
 
@@ -161,16 +185,16 @@ def package_customer(customer: str, customers_config: dict) -> Path:
             shutil.copy(customer_readme, temp_dir / "README.md")
             print(f"  - README.md (customer-specific, legacy)")
 
-    # Copy customer-specific config
-    customer_config_file = customer_dir / "config.yaml"
-    if customer_config_file.exists():
-        shutil.copy(customer_config_file, temp_dir / "config.yaml")
-        print(f"  - config.yaml")
-
     # Copy shared CHANGELOG
     if CHANGELOG_FILE.exists():
         shutil.copy(CHANGELOG_FILE, temp_dir / "CHANGELOG.md")
         print(f"  - CHANGELOG.md")
+
+    # Build and include wheel
+    wheel_path = build_wheel()
+    if wheel_path:
+        shutil.copy(wheel_path, temp_dir / wheel_path.name)
+        print(f"  - {wheel_path.name}")
 
     # Patterns to exclude
     def ignore_patterns(directory, files):
@@ -185,7 +209,7 @@ def package_customer(customer: str, customers_config: dict) -> Path:
             or f == ".mypy_cache"
         ]
 
-    # Copy source directories
+    # Copy source directories (as backup for source install)
     for dir_name in INCLUDE_DIRS:
         src_dir = PROJECT_ROOT / dir_name
         if src_dir.exists():
@@ -198,11 +222,6 @@ def package_customer(customer: str, customers_config: dict) -> Path:
         if src_file.exists():
             shutil.copy(src_file, temp_dir / file_name)
             print(f"  - {file_name}")
-
-    # Copy skills directory
-    if SKILLS_DIR.exists():
-        shutil.copytree(SKILLS_DIR, temp_dir / "skills", ignore=ignore_patterns)
-        print(f"  - skills/")
 
     # Create tarball
     tarball = DIST_DIR / f"{package_name}.tar.gz"
@@ -240,17 +259,10 @@ def list_customers(customers_config: dict) -> list[str]:
 
 
 def sync_version():
-    """Sync VERSION file with __init__.py version."""
-    init_file = PROJECT_ROOT / "src" / "loomgraph" / "__init__.py"
-    if not init_file.exists():
-        return
-
-    content = init_file.read_text()
-    match = re.search(r'__version__\s*=\s*"([^"]+)"', content)
-    if match:
-        version = match.group(1)
-        VERSION_FILE.write_text(version + "\n")
-        print(f"Synced VERSION to {version}")
+    """Sync customers/VERSION with pyproject.toml version."""
+    version = get_version()
+    VERSION_FILE.write_text(version + "\n")
+    print(f"Synced VERSION to {version}")
 
 
 def main():
@@ -272,7 +284,7 @@ def main():
     parser.add_argument(
         "--sync-version",
         action="store_true",
-        help="Sync VERSION file with __init__.py"
+        help="Sync customers/VERSION with pyproject.toml"
     )
 
     args = parser.parse_args()

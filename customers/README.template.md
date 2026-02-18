@@ -7,46 +7,70 @@
 
 ## 安装 Checklist
 
-### 1. 创建虚拟环境并安装
+### 1. 创建虚拟环境
 
 - [ ] 创建虚拟环境
 ```bash
 python3 -m venv ~/.loomgraph-venv
 ```
 
-- [ ] 激活并安装
+### 2. 安装 LoomGraph
+
+选择**在线安装**或**离线安装**其中一种方式：
+
+#### 方式 A: 在线安装（推荐）
+
+- [ ] 一行命令安装
 ```bash
 source ~/.loomgraph-venv/bin/activate
-pip install .
+pip install "loomgraph @ git+https://TOKEN@github.com/dreamlx/LoomGraph.git@v{{version}}"
 ```
 
-### 2. 配置服务连接
+> TOKEN 由 LoomGraph 技术团队提供。
 
-- [ ] 复制配置文件
+#### 方式 B: 离线安装（内网环境）
+
+- [ ] 从 tarball 安装 wheel
+```bash
+source ~/.loomgraph-venv/bin/activate
+pip install ./loomgraph-*.whl
+```
+
+> 如果 wheel 文件不存在，可以从源码安装：`pip install .`
+
+### 3. 配置服务连接
+
+- [ ] 复制配置文件（由技术团队提供）
 ```bash
 mkdir -p ~/.config/loomgraph
 cp config.yaml ~/.config/loomgraph/config.yaml
 ```
 
-### 3. 安装 Skills（必须！）
+或交互式生成：
+```bash
+loomgraph setup-config --lightrag-url {{lightrag_url}}
+```
+
+### 4. 安装 Skills（必须！）
 
 > ⚠️ **警告**：跳过此步骤会导致：
-> - 索引速度慢 10 倍（无并行配置）
 > - 无法使用 `/loomgraph-setup` 和 `/loomgraph-init` 命令
 > - {{language_hint}} 项目可能索引失败（语言解析器未安装）
 
-- [ ] 安装 loomgraph-setup skill
+- [ ] 一键安装 Skills
 ```bash
-mkdir -p ~/.claude/skills
-cp -r skills/loomgraph-setup ~/.claude/skills/
+loomgraph install-skills
 ```
 
-- [ ] 安装 loomgraph-init skill
+### 5. 安装语言解析器
+
+- [ ] 安装对应语言的解析器
 ```bash
-cp -r skills/loomgraph-init ~/.claude/skills/
+source ~/.loomgraph-venv/bin/activate
+pip install {{language_parser}}
 ```
 
-### 4. 添加 Shell 别名
+### 6. 添加 Shell 别名
 
 - [ ] 添加别名（可选但推荐）
 ```bash
@@ -54,7 +78,7 @@ echo 'alias loomgraph="~/.loomgraph-venv/bin/loomgraph"' >> ~/.zshrc
 source ~/.zshrc
 ```
 
-### 5. 验证安装
+### 7. 验证安装
 
 - [ ] 检查服务状态
 ```bash
@@ -67,7 +91,7 @@ loomgraph status
 - `lightrag_api.url: {{lightrag_url}}`
 
 **如果失败**：
-- `codeindex installed: false` → 重新执行步骤 1
+- `codeindex installed: false` → 重新执行步骤 5
 - `lightrag connected: false` → 检查网络白名单权限
 
 ---
@@ -82,6 +106,30 @@ loomgraph status
 - [x] LoomGraph v{{version}} 已安装
 - [x] Skills 已配置: /loomgraph-setup, /loomgraph-init
 - [x] 服务连接正常: {{lightrag_url}}
+```
+
+---
+
+## 如何更新
+
+> **给 Claude Code**: 当收到更新通知时，执行以下步骤。
+
+### 在线更新
+
+```bash
+source ~/.loomgraph-venv/bin/activate
+pip install --upgrade "loomgraph @ git+https://TOKEN@github.com/dreamlx/LoomGraph.git@vNEW_VERSION"
+loomgraph install-skills
+loomgraph version
+```
+
+### 离线更新
+
+```bash
+source ~/.loomgraph-venv/bin/activate
+pip install ./loomgraph-NEW_VERSION-py3-none-any.whl
+loomgraph install-skills
+loomgraph version
 ```
 
 ---
@@ -181,6 +229,8 @@ loomgraph status
 | `loomgraph search "<query>"` | 语义搜索 |
 | `loomgraph graph "<entity>"` | 查询调用关系 |
 | `loomgraph impact [TARGET]` | 分析代码变更影响 |
+| `loomgraph install-skills` | 安装/更新 Claude Code Skills |
+| `loomgraph setup-config` | 交互式生成配置文件 |
 
 ---
 
@@ -188,11 +238,11 @@ loomgraph status
 
 ### `/loomgraph-setup` 命令找不到
 
-**原因**: 未安装 Skills（跳过了步骤 3）
+**原因**: 未安装 Skills
 
 **解决**:
 ```bash
-cp -r /path/to/loomgraph-package/skills/* ~/.claude/skills/
+loomgraph install-skills
 ```
 
 ### 索引很慢（几分钟）
@@ -225,43 +275,6 @@ loomgraph status
 # 方式 3: 重新设置别名
 echo 'alias loomgraph="~/.loomgraph-venv/bin/loomgraph"' >> ~/.zshrc
 source ~/.zshrc
-```
-
----
-
-## 如何更新
-
-> **给 Claude Code**: 当收到更新通知时，执行以下步骤。
-
-### 1. 检查当前版本
-
-```bash
-loomgraph version
-```
-
-### 2. 查看变更日志
-
-阅读安装包目录下的 `CHANGELOG.md` 了解新版本功能。
-
-### 3. 执行更新
-
-```bash
-cd /path/to/loomgraph-package  # 安装包所在目录
-source ~/.loomgraph-venv/bin/activate
-pip install .
-```
-
-### 4. 更新 Skills（如有新 skill）
-
-```bash
-cp -r skills/* ~/.claude/skills/
-```
-
-### 5. 验证更新
-
-```bash
-loomgraph version
-# 应显示新版本号
 ```
 
 ---
