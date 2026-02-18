@@ -66,62 +66,75 @@
 
 ## Phase 3: 项目级智能 🔄 进行中
 
-> **目标**: 从"写入调度器"演进为"双向调度器"，提供跨模块分析能力
+> **目标**: 从"写入调度器"演进为"双向调度器"，提供跨模块分析和研发熵减能力
+> **三层交付**: 能力层 (CLI) → Skill 层 (Claude Code) → 集成层 (MCP)
+
+### 第一阶段: 单 Workspace 能力 — v0.3.0
+
 > **ADR**: [ADR-008 双向调度器](adr/ADR-008-bidirectional-orchestrator.md)
+> **价值**: 任何客户立即可用，单项目架构理解
 
-### Epic 3.1: 双向调度器 — 项目级智能查询 (EPIC-004) 📋
-
-| Feature | 描述 | 优先级 | 预估 |
-|---------|------|--------|------|
-| `loomgraph deps` | 模块级依赖图（纯图查询） | P1 | 2.5d |
-| `loomgraph overview` | 项目模块概览（图查询 + LLM 摘要） | P1 | 3.5d |
+| EPIC | Feature | 描述 | 预估 |
+|------|---------|------|------|
+| EPIC-004 | `loomgraph deps` | 模块级依赖图（纯图查询） | 2.5d |
+| EPIC-004 | `loomgraph overview` | 项目模块概览（图查询 + LLM 摘要） | 3.5d |
 
 详见 [EPIC-004](epics/EPIC-004-bidirectional-orchestrator.md)
 
-### Epic 3.2: Workspace 管理 (EPIC-005) 📋
+### 第二阶段: 多 Workspace 能力 — v0.4.0 ~ v0.5.0
 
 > **ADR**: [ADR-009 Workspace 即知识快照](adr/ADR-009-workspace-as-knowledge-snapshot.md)
+> **价值**: 多分支/多项目客户，解锁跨分支分析
 
-| Feature | 描述 | 优先级 | 预估 |
-|---------|------|--------|------|
-| `loomgraph workspace list` | 列出所有 workspace + 统计 | P1 | 1.5d |
-| `loomgraph workspace info` | 指定 workspace 详情 | P1 | 1d |
-| `loomgraph workspace delete` | 清理指定 workspace | P1 | 0.5d |
+**v0.4.0 — Workspace 管理 (EPIC-005)**
+
+| Feature | 描述 | 预估 | 阻塞关系 |
+|---------|------|------|----------|
+| `loomgraph workspace list` | 列出所有 workspace + 统计 | 1.5d | 不阻塞 EPIC-004 |
+| `loomgraph workspace info` | 指定 workspace 详情 | 1d | — |
+| `loomgraph workspace delete` | 清理指定 workspace | 0.5d | — |
 
 详见 [EPIC-005](epics/EPIC-005-workspace-management.md)
 
-### Epic 3.3: 跨 Workspace 对比 (EPIC-006) 📋
+> 注: EPIC-005 与 EPIC-004 **互相独立**，可并行开发。但 EPIC-004 客户价值更直接，建议先做。
+> EPIC-005 有技术验证风险（LightRAG 是否暴露 workspace 列表 API），可在 EPIC-004 开发期间验证。
 
-| Feature | 描述 | 优先级 | 预估 |
-|---------|------|--------|------|
-| `loomgraph compare` | 两个 workspace 的实体/关系 diff | P2 | 5d |
-| `loomgraph similar` | 跨 workspace 相似实体检测 | P2 | 3d |
+**v0.5.0 — 跨 Workspace 对比 (EPIC-006)**
+
+| Feature | 描述 | 预估 | 阻塞关系 |
+|---------|------|------|----------|
+| `loomgraph compare` | 两个 workspace 的实体/关系 diff | 5d | 依赖 EPIC-005 (workspace 可见性) |
+| `loomgraph similar` | 跨 workspace 相似实体检测 | 3d | 依赖 EPIC-005 |
 
 详见 [EPIC-006](epics/EPIC-006-cross-workspace-comparison.md)
 
-### Epic 3.4: MCP Server 📋
+### 第三阶段: Skill 交付 — v0.6.0
 
-| Story | 描述 | 优先级 |
-|-------|------|--------|
-| MCP 框架搭建 | FastMCP | P2 |
-| search_code 工具 | 语义搜索 | P2 |
-| get_deps 工具 | 模块依赖 | P2 |
-| get_overview 工具 | 项目概览 | P2 |
+> **前置**: 能力层 (EPIC-004 + 005 + 006) 全部完成后开发
+> **交付**: 3 个 Claude Code Skills，随 wheel 分发，`install-skills` 安装
+> **原则**: Skill 是编排者，LoomGraph CLI 提供数据，Skill 负责 LLM 推理 + 报告
 
-> MCP Server 依赖 EPIC-004 完成后，封装为 MCP 工具。
-
-### Epic 3.5: 研发熵减 Skills (EPIC-007) 📋
-
-> **前置**: EPIC-004 + EPIC-005 + EPIC-006 能力层完成后开发
-> **交付**: 3 个 Claude Code Skills，随 wheel 分发
-
-| Skill | 名称 | 功能 | 依赖 |
-|-------|------|------|------|
+| Skill | 名称 | 功能 | 最低依赖 |
+|-------|------|------|----------|
 | Skill A | `loomgraph-debt-radar` | 技术债务审计报告 | EPIC-004 (deps/overview) |
 | Skill B | `loomgraph-sync-advisor` | 跨分支同步建议 | EPIC-006 (compare) |
 | Skill C | `loomgraph-evolution` | 代码演化趋势分析 | EPIC-006 (compare/similar) |
 
 详见 [EPIC-007](epics/EPIC-007-entropy-reduction-skills.md)
+
+### 第四阶段: IDE 集成 — v0.7.0
+
+> **定位**: 封装所有 CLI 能力为 MCP 工具，服务 Cursor/IDE 用户
+> **放最后的原因**: 能封装最多命令；当前客户群体用 Claude Code Skills，MCP 不紧急
+
+| Story | 描述 | 封装的命令 |
+|-------|------|-----------|
+| MCP 框架搭建 | FastMCP | — |
+| search_code 工具 | 语义搜索 | search |
+| get_deps 工具 | 模块依赖 | deps |
+| get_overview 工具 | 项目概览 | overview |
+| workspace 工具 | workspace 管理 | workspace list/info |
+| compare 工具 | 跨 workspace 对比 | compare, similar |
 
 ---
 
@@ -148,16 +161,16 @@
 
 ## 版本计划
 
-| 版本 | 阶段 | 主要功能 | 状态 |
-|------|------|----------|------|
-| v0.1.0 | Phase 1 | MVP: AST + Embedding + CLI | ✅ 已发布 |
-| v0.2.0~v0.2.4 | Phase 2 | LightRAG 集成 + Git + 客户交付 | ✅ 已发布 |
-| **v0.3.0** | **Phase 3** | **deps + overview (双向调度器)** | **📋 下一个** |
-| v0.4.0 | Phase 3 | workspace 管理 (list/info/delete) | 📋 规划中 |
-| v0.5.0 | Phase 3 | 跨 workspace 对比 (compare/similar) | 📋 规划中 |
-| v0.6.0 | Phase 3 | MCP Server | 📋 规划中 |
-| v0.7.0 | Phase 3 | 研发熵减 Skills (debt-radar/sync-advisor/evolution) | 📋 规划中 |
-| v1.0.0 | Phase 4 | 生产就绪 | 📋 远期 |
+| 版本 | 阶段 | 层级 | 主要功能 | 状态 |
+|------|------|------|----------|------|
+| v0.1.0 | Phase 1 | — | MVP: AST + Embedding + CLI | ✅ 已发布 |
+| v0.2.x | Phase 2 | — | LightRAG 集成 + Git + 客户交付 | ✅ 已发布 |
+| **v0.3.0** | **Phase 3** | **能力层** | **deps + overview (单 ws 智能查询)** | **📋 下一个** |
+| v0.4.0 | Phase 3 | 能力层 | workspace 管理 (list/info/delete) | 📋 规划中 |
+| v0.5.0 | Phase 3 | 能力层 | 跨 workspace 对比 (compare/similar) | 📋 规划中 |
+| v0.6.0 | Phase 3 | Skill 层 | 研发熵减 Skills (debt-radar/sync-advisor/evolution) | 📋 规划中 |
+| v0.7.0 | Phase 3 | 集成层 | MCP Server (封装全部命令) | 📋 规划中 |
+| v1.0.0 | Phase 4 | — | 生产就绪 | 📋 远期 |
 
 ---
 
@@ -198,6 +211,7 @@
           ─────────                    ─────────                     ────────
 v0.18+    目录树展开
           AI 模式描述增强
+          tech-debt 命令
 
 v0.3.0                                deps (模块依赖图)              graph API
                                       overview (模块概览)            query API
@@ -208,25 +222,41 @@ v0.4.0                                workspace list/info/delete     workspace h
 v0.5.0                                compare (跨 ws diff)           graph API x2
                                       similar (相似实体检测)
 
-v0.6.0                                MCP Server
-                                      (封装 deps/overview/search)
-
-v0.7.0                                Skill A: debt-radar
+v0.6.0                                Skill A: debt-radar
                                       Skill B: sync-advisor
                                       Skill C: evolution
+
+v0.7.0                                MCP Server
+                                      (封装全部命令)
 ```
 
-### 研发熵减解决方案支撑 (EPIC-007)
+### 功能依赖关系图
 
 ```
-能力层 (先开发)                              Skill 层 (后开发)
-─────────────                              ────────────────
-EPIC-004 (deps/overview)  ──────────────→  Skill A (债务雷达)
-                                    ↗
-EPIC-005 (workspace 管理) ────────┘
-                                    ↘
-EPIC-006 (跨 ws 对比)    ──────────────→  Skill B (智能同步)
-                          ──────────────→  Skill C (演化观察)
+                          能力层                    Skill 层           集成层
+                     (v0.3.0 ~ v0.5.0)             (v0.6.0)          (v0.7.0)
+                    ┌─────────────────┐        ┌──────────────┐   ┌──────────┐
+                    │                 │        │              │   │          │
+EPIC-004 ──────────┤ deps            ├───────→│ Skill A      │   │          │
+(v0.3.0)           │ overview        │   ┌───→│ 债务雷达     │   │          │
+  独立 ↕           │                 │   │    │              │   │          │
+EPIC-005 ──────────┤ workspace       ├───┘    ├──────────────┤   │ MCP      │
+(v0.4.0)           │ list/info/delete│        │              │   │ Server   │
+                    │                 │        │ Skill B      │   │          │
+  阻塞 ↓           └────────┬────────┘   ┌───→│ 智能同步     │   │ 封装全部 │
+                             │            │    │              │   │ CLI 命令 │
+EPIC-006 ──────────┐         │            │    ├──────────────┤   │          │
+(v0.5.0)           │ compare ├────────────┘    │              │   │          │
+ 需要 005          │ similar ├────────────────→│ Skill C      │   │          │
+                    │         │                 │ 演化观察     │   │          │
+                    └─────────┘                 └──────────────┘   └──────────┘
+
+阻塞关系:
+  EPIC-004 ←→ EPIC-005   互相独立，可并行（但建议 004 先行）
+  EPIC-005  →  EPIC-006   006 需要 workspace 可见性
+  EPIC-004  →  Skill A    deps/overview 是数据源
+  EPIC-006  →  Skill B/C  compare/similar 是数据源
+  全部能力层 →  MCP       MCP 封装所有命令，放最后覆盖面最广
 ```
 
 详见 [EPIC-007](epics/EPIC-007-entropy-reduction-skills.md)
@@ -236,14 +266,15 @@ EPIC-006 (跨 ws 对比)    ──────────────→  Skill
 ## 更新日志
 
 - **2026-02-18 (v0.2.4)**:
+  - Phase 3 重构为四阶段: 能力层 → Skill 层 → 集成层
+  - 新增 EPIC-007: 研发熵减 Skills (debt-radar/sync-advisor/evolution)
   - 新增 ADR-009: Workspace 即知识快照
-  - 新增 EPIC-005: Workspace 管理 (list/info/delete)
-  - 新增 EPIC-006: 跨 Workspace 对比 (compare/similar)
-  - 新增研发熵减解决方案 Epic 依赖图
-  - 更新版本计划 (v0.4.0~v0.6.0)
-  - 更新实际进度到 Phase 2 完成
+  - 新增 EPIC-005/006: Workspace 管理 + 跨 Workspace 对比
+  - 新增功能依赖关系图（阻塞关系 + 并行关系）
+  - 版本计划加入"层级"列，明确能力层/Skill 层/集成层
+  - MCP Server 调整到 v0.7.0（封装全部命令，放最后覆盖面最广）
+  - Skills 调整到 v0.6.0（当前客户用 Claude Code，优先级 > MCP）
   - 新增 Phase 3: 双向调度器 (EPIC-004, ADR-008)
-  - 新增三仓库协作路线图
   - 测试覆盖更新到 125 tests
 - **2025-02-03 (v0.2.0)**:
   - 更新实际进度 (Phase 1 核心模块完成)
