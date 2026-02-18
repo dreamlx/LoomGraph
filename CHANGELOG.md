@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **BUG-4**: External dependencies (Spring, Dubbo, etc.) no longer cause relation injection failures. Auto-creates stub entities for missing targets (Pass 1.5 in `batch_create_graph`). Relations increased from 68 to 451 on typical project.
+- **BUG-5**: Version display inconsistency between `pipx list` and `loomgraph --version`. Switched to `importlib.metadata.version()` and synced `pyproject.toml`.
+- Injection now uses `/graph/*` endpoints instead of `/documents/insert_custom_kg` — data appears in graph query layer (`/graphs`, `/graph/label/list`).
+
+### Added
+- `batch_create_graph()` method: three-pass injection (entities → external stubs → relations) with concurrent HTTP and connection pooling.
+- `--verbose/-v` and `--quiet/-q` global CLI flags for controlling log output.
+- `external_stubs` count in index/update JSON output.
+- ADR-009: Workspace redefined from isolation mechanism to knowledge snapshot.
+- EPIC-005: Workspace management commands (list/info/delete) planned.
+- EPIC-006: Cross-workspace comparison (compare/similar) planned.
+
+### Changed
+- All logging explicitly routed to stderr; JSON output is stdout-only (pipe-safe).
+- Removed dead `--verbose` parameter from `index` and `update` subcommands (replaced by global flag).
+
 ## [0.2.4] - 2025-02-10
 
 ### Added
