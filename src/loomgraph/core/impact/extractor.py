@@ -52,10 +52,6 @@ class ChangedSymbolExtractor:
         Returns:
             List of ChangedSymbol objects
         """
-        # Skip non-Python files for now (can extend later)
-        if not file.path.endswith(".py"):
-            return []
-
         file_path = self.repo_path / file.path
 
         # For deleted files, we can't parse them

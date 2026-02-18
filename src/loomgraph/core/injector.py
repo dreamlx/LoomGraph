@@ -28,6 +28,78 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def collect_kg_data(
+    result: ParseResult,
+) -> tuple[list[dict], list[dict]]:
+    """Collect entities and relations from a ParseResult without injecting.
+
+    Returns data in insert_custom_kg format for batch injection.
+    This avoids the ordering problem where cross-file relations fail
+    because target entities haven't been created yet.
+
+    Args:
+        result: ParseResult from codeindex
+
+    Returns:
+        Tuple of (entities, relations) in insert_custom_kg dict format
+    """
+    from typing import Any
+
+    file_path = str(result.path)
+    language = detect_language(file_path)
+    module_name = _path_to_module_name(result.path)
+
+    entities: list[dict[str, Any]] = []
+    relations: list[dict[str, Any]] = []
+
+    # Module entity
+    entities.append({
+        "entity_name": module_name,
+        "entity_type": "module",
+        "description": f"{language.capitalize()} module | {file_path}",
+        "source_id": file_path,
+        "file_path": file_path,
+    })
+
+    # Symbol entities
+    for symbol in result.symbols:
+        entity = map_symbol_to_entity(symbol, file_path, language)
+        entities.append({
+            "entity_name": entity.entity_name,
+            **entity.entity_data,
+        })
+
+    # Call relations
+    for call in result.calls:
+        rel = map_call_to_relation(call, file_path)
+        relations.append({
+            "src_id": rel.src_id,
+            "tgt_id": rel.tgt_id,
+            **rel.edge_data,
+        })
+
+    # Inheritance relations
+    for inh in result.inheritances:
+        rel = map_inheritance_to_relation(inh, file_path)
+        relations.append({
+            "src_id": rel.src_id,
+            "tgt_id": rel.tgt_id,
+            **rel.edge_data,
+        })
+
+    # Import relations
+    for imp in result.imports:
+        rels = map_import_to_relation(imp, module_name, file_path)
+        for rel in rels:
+            relations.append({
+                "src_id": rel.src_id,
+                "tgt_id": rel.tgt_id,
+                **rel.edge_data,
+            })
+
+    return entities, relations
+
+
 async def inject_parse_result(
     client: LightRAGClient,
     result: ParseResult,

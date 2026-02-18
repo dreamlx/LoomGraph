@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import shutil
 import subprocess
 import sys
@@ -18,6 +19,22 @@ import click
 
 from loomgraph import __version__
 from loomgraph.core.config import get_settings
+
+
+def _setup_logging(verbose: bool, quiet: bool) -> None:
+    """Configure logging to stderr only.
+
+    Ensures JSON output on stdout is never polluted by log messages.
+    """
+    if quiet:
+        logging.disable(logging.CRITICAL)
+        return
+
+    level = logging.DEBUG if verbose else logging.WARNING
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
+    logging.root.handlers = [handler]
+    logging.root.setLevel(level)
 
 
 # ============================================
@@ -191,13 +208,15 @@ def check_embedding(settings: Any) -> dict[str, Any]:
 
 @click.group()
 @click.version_option(version=__version__, prog_name="loomgraph")
-def main() -> None:
+@click.option("--verbose", "-v", is_flag=True, help="Show debug logs on stderr")
+@click.option("--quiet", "-q", is_flag=True, help="Suppress all non-JSON output")
+def main(verbose: bool, quiet: bool) -> None:
     """LoomGraph: Enterprise Code Intelligence Engine.
 
     AI Agent friendly CLI for code indexing, search, and graph queries.
     All commands output JSON for machine parsing.
     """
-    pass
+    _setup_logging(verbose, quiet)
 
 
 @main.command()
@@ -259,8 +278,7 @@ def status() -> None:
 @click.argument("repo_path", type=click.Path(exists=True))
 @click.option("--clear/--no-clear", default=True, help="Clear old data before indexing")
 @click.option("--workspace", "-w", default=None, help="Workspace name (default: current directory name)")
-@click.option("--verbose", is_flag=True, help="Show detailed progress")
-def index(repo_path: str, clear: bool, workspace: str | None, verbose: bool) -> None:
+def index(repo_path: str, clear: bool, workspace: str | None) -> None:
     """Index a code repository (one-step pipeline).
 
     Calls: codeindex scan → embed → inject
@@ -344,8 +362,13 @@ async def _async_index_pipeline(
     clear: bool,
     workspace: str | None = None,
 ) -> dict[str, Any]:
-    """Run the async indexing pipeline."""
-    from loomgraph.core.injector import inject_parse_result
+    """Run the async indexing pipeline.
+
+    Two-pass batch approach via graph endpoints:
+    1. Collect all entities and relations from all files
+    2. Create all entities first, then all relations (solves cross-file ordering)
+    """
+    from loomgraph.core.injector import collect_kg_data
     from loomgraph.core.lightrag_client import LightRAGAPIError, LightRAGClient
     from loomgraph.core.models import (
         Call,
@@ -368,18 +391,16 @@ async def _async_index_pipeline(
         try:
             await client.delete_all()
             cleared = True
-        except LightRAGAPIError as e:
-            # If delete fails, continue with indexing but warn
+        except LightRAGAPIError:
             pass  # Will be reported in result
 
-    # Convert JSON to ParseResult objects and inject
+    # Pass 1: Collect all entities and relations from all files
     files_scanned = 0
     files_indexed = 0
     files_skipped = 0
-    entities_created = 0
-    relations_created = 0
     skipped_files: list[dict[str, str]] = []
-    errors: list[str] = []
+    all_entities: list[dict[str, Any]] = []
+    all_relations: list[dict[str, Any]] = []
 
     results = parse_results.get("results", [])
     files_scanned = len(results)
@@ -387,7 +408,6 @@ async def _async_index_pipeline(
     for file_result in results:
         path = Path(file_result.get("path", ""))
 
-        # Check for errors
         if file_result.get("error"):
             files_skipped += 1
             skipped_files.append({
@@ -397,7 +417,6 @@ async def _async_index_pipeline(
             })
             continue
 
-        # Convert to ParseResult
         symbols = [
             Symbol(
                 name=s.get("name", ""),
@@ -447,24 +466,41 @@ async def _async_index_pipeline(
             file_lines=file_result.get("file_lines", 0),
         )
 
-        # Inject into LightRAG
         try:
-            inject_result = await inject_parse_result(client, parse_result)
-            entities_created += inject_result.entities
-            relations_created += inject_result.relations
-            errors.extend(inject_result.errors)
+            entities, relations = collect_kg_data(parse_result)
+            all_entities.extend(entities)
+            all_relations.extend(relations)
             files_indexed += 1
         except Exception as e:
             files_skipped += 1
             skipped_files.append({
                 "path": str(path),
-                "reason": "inject_error",
+                "reason": "mapping_error",
                 "detail": str(e),
             })
 
-    result = {
+    # Pass 2: Create entities → stubs → relations via graph endpoints
+    entities_created = 0
+    relations_created = 0
+    external_stubs = 0
+    injection_errors: list[str] = []
+
+    if all_entities or all_relations:
+        try:
+            kg_result = await client.batch_create_graph(all_entities, all_relations)
+            details = kg_result.get("details", {})
+            entities_created = details.get("entities_count", 0)
+            relations_created = details.get("relationships_count", 0)
+            external_stubs = details.get("external_stubs", 0)
+            if kg_result.get("errors"):
+                injection_errors.extend(kg_result["errors"])
+        except LightRAGAPIError as e:
+            injection_errors.append(f"Batch injection failed: {e.message}")
+        except Exception as e:
+            injection_errors.append(f"Batch injection failed: {e}")
+
+    result: dict[str, Any] = {
         "mode": "cold_rebuild" if clear else "append",
-        "cleared": cleared if clear else None,
         "files_scanned": files_scanned,
         "files_indexed": files_indexed,
         "files_skipped": files_skipped,
@@ -473,13 +509,16 @@ async def _async_index_pipeline(
         "skipped_files": skipped_files,
     }
 
-    # Remove None values
-    result = {k: v for k, v in result.items() if v is not None}
+    if external_stubs:
+        result["external_stubs"] = external_stubs
 
-    if errors:
-        result["injection_errors"] = errors[:10]  # Limit to first 10 errors
-        if len(errors) > 10:
-            result["injection_errors_total"] = len(errors)
+    if clear:
+        result["cleared"] = cleared
+
+    if injection_errors:
+        result["injection_errors"] = injection_errors[:10]
+        if len(injection_errors) > 10:
+            result["injection_errors_total"] = len(injection_errors)
 
     return result
 
@@ -911,8 +950,7 @@ async def _async_impact(
 @main.command()
 @click.option("--since", default="HEAD~1", help="Git ref to compare from (default: HEAD~1)")
 @click.option("--workspace", "-w", default=None, help="Workspace name (default: current directory name)")
-@click.option("--verbose", is_flag=True, help="Show detailed progress")
-def update(since: str, workspace: str | None, verbose: bool) -> None:
+def update(since: str, workspace: str | None) -> None:
     """Warm update: index only changed files since last commit.
 
     Detects git changes and incrementally adds new entities/relations
@@ -988,7 +1026,7 @@ def update(since: str, workspace: str | None, verbose: bool) -> None:
 
     # Run warm update pipeline
     try:
-        result = asyncio.run(_async_warm_update(changed_files, repo_path, workspace, verbose))
+        result = asyncio.run(_async_warm_update(changed_files, repo_path, workspace))
     except Exception as e:
         output_error(
             code=ErrorCode.LIGHTRAG_ERROR,
@@ -1008,13 +1046,13 @@ async def _async_warm_update(
     changed_files: list[Path],
     repo_path: Path,
     workspace: str | None,
-    verbose: bool,
 ) -> dict[str, Any]:
-    """Run async warm update pipeline."""
-    import json
+    """Run async warm update pipeline.
 
-    from loomgraph.core.injector import inject_parse_result
-    from loomgraph.core.lightrag_client import LightRAGClient
+    Two-pass batch approach via graph endpoints.
+    """
+    from loomgraph.core.injector import collect_kg_data
+    from loomgraph.core.lightrag_client import LightRAGAPIError, LightRAGClient
     from loomgraph.core.models import (
         Call,
         Import,
@@ -1032,20 +1070,19 @@ async def _async_warm_update(
 
     files_indexed = 0
     files_skipped = 0
-    entities_created = 0
-    relations_created = 0
     errors: list[str] = []
+    all_entities: list[dict[str, Any]] = []
+    all_relations: list[dict[str, Any]] = []
 
+    # Pass 1: Parse all changed files and collect KG data
     for file_path in changed_files:
         full_path = repo_path / file_path
 
-        # Check if file exists
         if not full_path.exists():
             files_skipped += 1
             errors.append(f"File not found: {file_path}")
             continue
 
-        # Parse single file with codeindex parse (not scan)
         try:
             result = subprocess.run(
                 ["codeindex", "parse", str(full_path)],
@@ -1066,7 +1103,6 @@ async def _async_warm_update(
             errors.append(f"Parse error {file_path}: {e}")
             continue
 
-        # Process single file result (codeindex parse outputs single file, not array)
         if file_result.get("error"):
             files_skipped += 1
             errors.append(f"Parse error: {file_result.get('error')}")
@@ -1123,17 +1159,35 @@ async def _async_warm_update(
             file_lines=file_result.get("file_lines", 0),
         )
 
-        # Inject (append mode - no deletion)
         try:
-            inject_result = await inject_parse_result(client, parse_result)
-            entities_created += inject_result.entities
-            relations_created += inject_result.relations
+            entities, relations = collect_kg_data(parse_result)
+            all_entities.extend(entities)
+            all_relations.extend(relations)
             files_indexed += 1
         except Exception as e:
             files_skipped += 1
-            errors.append(f"Inject failed {path}: {e}")
+            errors.append(f"Mapping failed {path}: {e}")
 
-    result = {
+    # Pass 2: Create entities → stubs → relations via graph endpoints
+    entities_created = 0
+    relations_created = 0
+    external_stubs = 0
+
+    if all_entities or all_relations:
+        try:
+            kg_result = await client.batch_create_graph(all_entities, all_relations)
+            details = kg_result.get("details", {})
+            entities_created = details.get("entities_count", 0)
+            relations_created = details.get("relationships_count", 0)
+            external_stubs = details.get("external_stubs", 0)
+            if kg_result.get("errors"):
+                errors.extend(kg_result["errors"])
+        except LightRAGAPIError as e:
+            errors.append(f"Batch injection failed: {e.message}")
+        except Exception as e:
+            errors.append(f"Batch injection failed: {e}")
+
+    result: dict[str, Any] = {
         "mode": "warm",
         "files_changed": len(changed_files),
         "files_indexed": files_indexed,
@@ -1142,12 +1196,173 @@ async def _async_warm_update(
         "relations_created": relations_created,
     }
 
+    if external_stubs:
+        result["external_stubs"] = external_stubs
+
     if errors:
         result["errors"] = errors[:5]
         if len(errors) > 5:
             result["errors_total"] = len(errors)
 
     return result
+
+
+
+@main.command()
+@click.option("--depth", "-d", default=2, help="Directory depth for module grouping")
+@click.option("--workspace", "-w", default=None, help="Workspace name (default: current directory name)")
+def deps(depth: int, workspace: str | None) -> None:
+    """Analyze module-level dependencies.
+
+    Queries the knowledge graph to build a module dependency map.
+    """
+    try:
+        result = asyncio.run(_async_deps(depth, workspace))
+        output_success(result)
+    except Exception as e:
+        output_error(
+            code=ErrorCode.LIGHTRAG_ERROR,
+            message=f"Dependency analysis failed: {e}",
+            suggestion="Check LightRAG status with: loomgraph status",
+        )
+
+
+async def _async_deps(depth: int, workspace: str | None = None) -> dict[str, Any]:
+    """Run async dependency analysis."""
+    from loomgraph.core.deps import DepsAnalyzer
+    from loomgraph.core.lightrag_client import LightRAGClient
+
+    settings = get_settings()
+    client = LightRAGClient(
+        base_url=settings.lightrag.api_url,
+        timeout=settings.lightrag.api_timeout,
+        workspace=get_auto_workspace(workspace),
+    )
+
+    analyzer = DepsAnalyzer(client=client, depth=depth)
+    result = await analyzer.analyze()
+    return result.to_dict()
+
+
+@main.command()
+@click.option("--depth", "-d", default=2, help="Directory depth for module grouping")
+@click.option("--workspace", "-w", default=None, help="Workspace name (default: current directory name)")
+@click.option("--no-summary", is_flag=True, help="Skip LLM module summaries")
+def overview(depth: int, workspace: str | None, no_summary: bool) -> None:
+    """Generate project module overview.
+
+    Queries the knowledge graph for a high-level view of all modules,
+    optionally including LLM-generated summaries.
+    """
+    try:
+        result = asyncio.run(_async_overview(depth, workspace, no_summary))
+        output_success(result)
+    except Exception as e:
+        output_error(
+            code=ErrorCode.LIGHTRAG_ERROR,
+            message=f"Overview generation failed: {e}",
+            suggestion="Check LightRAG status with: loomgraph status",
+        )
+
+
+async def _async_overview(
+    depth: int, workspace: str | None = None, no_summary: bool = False
+) -> dict[str, Any]:
+    """Run async overview analysis."""
+    from loomgraph.core.lightrag_client import LightRAGClient
+    from loomgraph.core.overview import OverviewAnalyzer
+
+    settings = get_settings()
+    client = LightRAGClient(
+        base_url=settings.lightrag.api_url,
+        timeout=settings.lightrag.api_timeout,
+        workspace=get_auto_workspace(workspace),
+    )
+
+    analyzer = OverviewAnalyzer(client=client, depth=depth)
+    result = await analyzer.analyze(no_summary=no_summary)
+    return result.to_dict()
+
+
+@main.command("install-skills")
+def install_skills() -> None:
+    """Install LoomGraph skills to ~/.claude/skills/.
+
+    Copies bundled skills from the wheel package to the Claude Code
+    skills directory. Safe to run multiple times (overwrites existing).
+    """
+    # Locate bundled _skills directory
+    skills_src = Path(__file__).parent.parent / "_skills"
+    if not skills_src.exists():
+        output_error(
+            code=ErrorCode.FILE_NOT_FOUND,
+            message="Bundled skills not found in package",
+            suggestion="Reinstall loomgraph: pip install --force-reinstall loomgraph",
+        )
+        return
+
+    skills_dest = Path.home() / ".claude" / "skills"
+    skills_dest.mkdir(parents=True, exist_ok=True)
+
+    installed: list[str] = []
+    for skill_dir in skills_src.iterdir():
+        if skill_dir.is_dir() and not skill_dir.name.startswith("."):
+            dest = skills_dest / skill_dir.name
+            if dest.exists():
+                shutil.rmtree(dest)
+            shutil.copytree(skill_dir, dest)
+            installed.append(skill_dir.name)
+
+    output_success({
+        "skills_installed": installed,
+        "skills_dir": str(skills_dest),
+        "count": len(installed),
+    })
+
+
+@main.command("setup-config")
+@click.option(
+    "--lightrag-url",
+    prompt="LightRAG API URL",
+    help="LightRAG API endpoint URL",
+)
+@click.option(
+    "--embedding-url",
+    prompt="Embedding API URL (leave empty if managed by LightRAG)",
+    default="",
+    help="Embedding service URL (optional)",
+)
+def setup_config(lightrag_url: str, embedding_url: str) -> None:
+    """Generate LoomGraph configuration file interactively.
+
+    Creates ~/.config/loomgraph/config.yaml with service connection settings.
+    """
+    import yaml as _yaml
+
+    config: dict[str, Any] = {
+        "lightrag": {
+            "api_url": lightrag_url,
+            "api_timeout": 30.0,
+        },
+    }
+
+    if embedding_url:
+        config["embedding"] = {
+            "base_url": embedding_url,
+        }
+
+    config_dir = Path.home() / ".config" / "loomgraph"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    config_path = config_dir / "config.yaml"
+
+    with open(config_path, "w") as f:
+        _yaml.dump(config, f, default_flow_style=False, allow_unicode=True)
+
+    output_success({
+        "config_path": str(config_path),
+        "lightrag_url": lightrag_url,
+        "embedding_url": embedding_url or "(managed by LightRAG)",
+    })
 
 
 @main.command()

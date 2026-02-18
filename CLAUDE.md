@@ -1,3 +1,19 @@
+<!-- codeindex:start -->
+## codeindex
+
+This project uses codeindex for AI-friendly code documentation.
+
+**First-time setup** (if no README_AI.md files exist):
+1. Review `.codeindex.yaml` — verify `include`/`exclude` patterns match this project's structure
+2. Run `codeindex scan-all` to generate indexes
+3. Optional: `codeindex hooks install post-commit` for auto-updates on commit
+
+**Daily usage**:
+- **Always read README_AI.md** before exploring source code in any directory
+- If README_AI.md is missing or outdated, run: `codeindex scan <dir>`
+- Check documentation coverage: `codeindex status`
+<!-- codeindex:end -->
+
 # LoomGraph 项目开发规范
 
 ## 项目概述
@@ -335,10 +351,23 @@ ruff check src/ tests/
 mypy src/
 ```
 
+## 变更日志维护
+
+项目维护两份 CHANGELOG（详见 `docs/PACKAGING.md` "CHANGELOG 维护策略"）：
+
+- **`CHANGELOG.md`**（根目录）：开发者完整记录，[Keep a Changelog](https://keepachangelog.com) 格式
+- **`customers/CHANGELOG.md`**：客户可见变更，中文，含更新指引
+
+**触发规则**：
+- 合并 feature 分支到 develop 时 → 更新根 `CHANGELOG.md` 的 `[Unreleased]`
+- 执行 `python scripts/package.py` 打包发布时 → 先阅读 `docs/PACKAGING.md` 中的发布流程
+
 ## 关键文档
 
 | 文档 | 路径 | 说明 |
 |------|------|------|
+| 变更日志 | `CHANGELOG.md` | 完整版本变更记录 |
+| 打包指南 | `docs/PACKAGING.md` | 打包流程 + CHANGELOG 维护策略 |
 | 系统设计 | `docs/architecture/SYSTEM_DESIGN.md` | 整体架构和 Pipeline |
 | 数据契约 | `docs/api/DATA_CONTRACT.md` | codeindex ↔ LightRAG 映射 |
 | CLI 设计 | `docs/api/CLI_DESIGN.md` | 命令详细说明 |

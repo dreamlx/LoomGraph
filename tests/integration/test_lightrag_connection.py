@@ -86,12 +86,12 @@ class TestLightRAGClient:
         mock_client = MockLightRAGClient()
         inject_result = await inject_parse_result(mock_client, result)
 
-        # Verify entities were created
-        assert inject_result.entities == 2
-        assert len(mock_client.entities) == 2
+        # Verify entities were created (2 symbols + 1 module entity)
+        assert inject_result.entities == 2  # Only counts symbol entities
+        assert len(mock_client.entities) == 3  # Includes module entity
 
-        # Check entity data structure
-        user_service = mock_client.entities[0]
+        # Check entity data structure (first is module, then symbols)
+        user_service = mock_client.entities[1]
         assert user_service["name"] == "UserService"
         assert "entity_type" in user_service["data"]
         assert "description" in user_service["data"]

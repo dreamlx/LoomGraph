@@ -2,7 +2,14 @@
 
 ## 概述
 
-LoomGraph 使用模板化打包系统，为每个客户生成定制的安装包。
+LoomGraph 提供两条发布通道：
+
+| 通道 | 适用场景 | 客户体验 |
+|------|----------|----------|
+| **在线** | 可访问 GitHub 的客户 | `pip install git+https://...` 一行安装 |
+| **离线** | 内网客户 | tarball 内含 wheel，`pip install ./xxx.whl` |
+
+客户配置 (`config.yaml`) 始终手动交付，不打入包内。
 
 ## 目录结构
 
@@ -71,7 +78,42 @@ EOF
 .venv/bin/python scripts/package.py --list
 ```
 
-## 打包命令
+## 在线发布流程
+
+### 标准发布步骤
+
+```bash
+# 1. Bump version（自动更新 pyproject.toml, customers/VERSION, CHANGELOG.md）
+python scripts/bump_version.py 0.2.5
+
+# 2. Commit + tag
+git add pyproject.toml customers/VERSION CHANGELOG.md
+git commit -m "chore: bump version to 0.2.5"
+git tag v0.2.5
+
+# 3. Push（触发 CI: test → build → GitHub Release）
+git push origin develop --tags
+
+# 4. 通知客户升级
+#    pip install --upgrade "loomgraph @ git+https://TOKEN@github.com/dreamlx/LoomGraph.git@v0.2.5"
+```
+
+### 客户 Token 管理
+
+- 创建 GitHub Personal Access Token (PAT)，仅限 `contents:read` 权限
+- 每个客户使用独立 token，方便单独撤销
+- Token 通过安全渠道（加密邮件/即时通讯）交付
+
+### CI 工作流
+
+| Workflow | 触发条件 | 步骤 |
+|----------|----------|------|
+| `test.yml` | PR to develop/main | lint → unit tests |
+| `release.yml` | tag push `v*` | lint → test → build wheel → GitHub Release |
+
+## 离线发布流程
+
+### 打包命令
 
 ```bash
 # 激活虚拟环境
@@ -80,39 +122,97 @@ source .venv/bin/activate
 # 列出所有客户
 python scripts/package.py --list
 
-# 打包单个客户
+# 打包单个客户（自动构建 wheel）
 python scripts/package.py --customer zcyl
 
 # 打包所有客户
 python scripts/package.py --all
 
-# 同步版本号（从 __init__.py 到 VERSION）
+# 同步版本号
 python scripts/package.py --sync-version
 ```
 
-## 发布新版本流程
+### 离线包内容
+
+```
+loomgraph-zcyl-v0.2.5/
+├── README.md                              # 从模板生成的安装指南
+├── CHANGELOG.md                           # 客户可见变更日志
+├── loomgraph-0.2.5-py3-none-any.whl       # 预构建 wheel（首选安装方式）
+├── pyproject.toml                         # 备用（可从源码安装）
+├── LICENSE
+└── src/                                   # 源码备用
+```
+
+> **注意**: config.yaml 不再打入包内，由技术团队手动交付。
+
+### 离线安装流程
 
 ```bash
-# 1. 更新版本号
-vim src/loomgraph/__init__.py  # 修改 __version__
+# 解压
+tar xzf loomgraph-zcyl-v0.2.5.tar.gz
+cd loomgraph-zcyl-v0.2.5
 
-# 2. 同步 VERSION 文件
-python scripts/package.py --sync-version
+# 创建虚拟环境
+python3 -m venv ~/.loomgraph-venv
+source ~/.loomgraph-venv/bin/activate
 
-# 3. 更新 CHANGELOG
-vim customers/CHANGELOG.md
+# 安装 wheel（比 pip install . 更快）
+pip install ./loomgraph-*.whl
 
-# 4. 提交
-git add -A
-git commit -m "release: v0.x.x"
-git tag v0.x.x
+# 安装 Skills
+loomgraph install-skills
 
-# 5. 打包所有客户
-python scripts/package.py --all
+# 配置（config.yaml 由技术团队提供）
+mkdir -p ~/.config/loomgraph
+cp /path/to/config.yaml ~/.config/loomgraph/config.yaml
 
-# 6. 分发
-# 将 dist/loomgraph-{customer}-v{version}.tar.gz 发送给客户
+# 验证
+loomgraph status
 ```
+
+## CHANGELOG 维护策略
+
+项目维护**两份 CHANGELOG**，面向不同读者：
+
+| | `CHANGELOG.md`（根目录） | `customers/CHANGELOG.md` |
+|---|---|---|
+| **读者** | 开发者、AI Agent | 客户侧 Claude Code |
+| **内容** | 全部变更（含 refactor、fix、docs） | 仅用户可感知的功能变更 |
+| **格式** | [Keep a Changelog](https://keepachangelog.com) 英文 | 中文，含「更新方式」和「版本对比表」 |
+| **更新时机** | 开发中随手更新 `[Unreleased]` | 打包发布时从根 CHANGELOG 挑选 |
+
+### 日常开发
+
+开发中向根 `CHANGELOG.md` 的 `[Unreleased]` 区追加条目：
+
+```markdown
+## [Unreleased]
+
+### Added
+- New feature description
+
+### Fixed
+- Bug fix description
+```
+
+### 发布时
+
+1. `[Unreleased]` → `[0.x.x] - YYYY-MM-DD`
+2. 从中挑选**客户可见项**写入 `customers/CHANGELOG.md`
+3. 添加新的空 `[Unreleased]` 区
+
+### 哪些写入客户 CHANGELOG？
+
+| 变更类型 | 根 CHANGELOG | 客户 CHANGELOG |
+|----------|:---:|:---:|
+| 新 CLI 命令 / 选项 | ✅ | ✅ |
+| 行为变更 / Breaking Change | ✅ | ✅ |
+| 性能提升（用户可感知） | ✅ | ✅ |
+| 内部重构 | ✅ | ❌ |
+| 测试改进 | ✅ | ❌ |
+| 文档 / ADR | ✅ | ❌ |
+| Bug 修复（内部） | ✅ | ❌ |
 
 ## 模板变量
 
@@ -125,23 +225,7 @@ README.template.md 中使用 `{{变量名}}` 占位符：
 | `{{language_hint}}` | customers.yaml | 主要语言 (Java/PHP/Python) |
 | `{{language_parser}}` | customers.yaml | codeindex 解析器 |
 | `{{exclude_dirs}}` | customers.yaml | 排除目录 |
-| `{{version}}` | VERSION 文件 | 当前版本号 |
-
-## 打包输出
-
-```
-dist/
-├── loomgraph-zcyl-v0.2.1.tar.gz
-└── loomgraph-pinbianyi-v0.2.1.tar.gz
-```
-
-每个包包含：
-- `README.md` - 从模板生成的客户专用说明
-- `CHANGELOG.md` - 变更日志
-- `config.yaml` - 客户服务配置
-- `src/` - 源代码
-- `skills/` - Claude Code Skills
-- `pyproject.toml` - 安装配置
+| `{{version}}` | pyproject.toml | 当前版本号 |
 
 ## 安全注意事项
 
