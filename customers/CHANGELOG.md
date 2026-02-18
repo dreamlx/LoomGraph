@@ -4,6 +4,32 @@
 
 ---
 
+## [0.2.5] - 2026-02-19
+
+### 新增
+- `loomgraph deps` - 模块级依赖分析，输出模块间的调用/导入关系图
+- `loomgraph overview` - 项目模块概览，含实体统计、核心实体排名、可选 LLM 摘要
+- `--depth/-d` 选项控制模块分组粒度（默认 2 层目录）
+- `--no-summary` 跳过 LLM 摘要（仅统计数据，更快）
+
+### 修复
+- 外部依赖（Spring、Dubbo 等）不再导致关系注入失败，自动创建 stub 实体
+- 注入改用 `/graph/*` 端点，数据正确出现在图查询层
+
+### 改进
+- 三阶段批量注入（实体 → 外部 stub → 关系），并发 HTTP + 连接复用
+- 日志输出到 stderr，JSON 输出到 stdout（管道安全）
+
+### 更新方式
+```bash
+cd /path/to/loomgraph-package
+source ~/.loomgraph-venv/bin/activate
+pip install ./loomgraph-*.whl
+loomgraph version  # 应显示 0.2.5
+```
+
+---
+
 ## [0.2.4] - 2025-02-10
 
 ### 新增
@@ -85,6 +111,7 @@ pip install .
 
 | 版本 | 主要功能 | 必须更新？ |
 |------|----------|-----------|
+| 0.2.5 | deps/overview 依赖分析 + 注入修复 | 推荐 - 新分析能力 |
 | 0.2.4 | Workspace 自动检测 | 推荐 - 简化配置 |
 | 0.2.3 | Workspace 隔离 + 更新策略 | 多项目用户必须 |
 | 0.2.1 | Warm/Cold Update | 推荐 - 增量索引更快 |
