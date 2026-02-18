@@ -7,12 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.5] - 2026-02-19
+
 ### Fixed
 - **BUG-4**: External dependencies (Spring, Dubbo, etc.) no longer cause relation injection failures. Auto-creates stub entities for missing targets (Pass 1.5 in `batch_create_graph`). Relations increased from 68 to 451 on typical project.
 - **BUG-5**: Version display inconsistency between `pipx list` and `loomgraph --version`. Switched to `importlib.metadata.version()` and synced `pyproject.toml`.
 - Injection now uses `/graph/*` endpoints instead of `/documents/insert_custom_kg` — data appears in graph query layer (`/graphs`, `/graph/label/list`).
 
 ### Added
+- `loomgraph deps` command: module-level dependency analysis with `--depth` grouping (EPIC-004).
+- `loomgraph overview` command: project module overview with entity stats, top entities, and optional LLM summaries (EPIC-004).
+- `DepsAnalyzer` and `OverviewAnalyzer` core modules with full unit test coverage.
+- `LightRAGClient.get_all_entities()` and `get_all_relations()` methods for bulk graph retrieval.
 - `batch_create_graph()` method: three-pass injection (entities → external stubs → relations) with concurrent HTTP and connection pooling.
 - `--verbose/-v` and `--quiet/-q` global CLI flags for controlling log output.
 - `external_stubs` count in index/update JSON output.
@@ -97,7 +103,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - System design document
 - Project roadmap, epics, and feature definitions
 
-[Unreleased]: https://github.com/user/loomgraph/compare/v0.2.4...HEAD
+[Unreleased]: https://github.com/user/loomgraph/compare/v0.2.5...HEAD
+[0.2.5]: https://github.com/user/loomgraph/compare/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/user/loomgraph/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/user/loomgraph/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/user/loomgraph/compare/v0.2.1...v0.2.2
