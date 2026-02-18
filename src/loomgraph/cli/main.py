@@ -1207,6 +1207,83 @@ async def _async_warm_update(
     return result
 
 
+
+@main.command()
+@click.option("--depth", "-d", default=2, help="Directory depth for module grouping")
+@click.option("--workspace", "-w", default=None, help="Workspace name (default: current directory name)")
+def deps(depth: int, workspace: str | None) -> None:
+    """Analyze module-level dependencies.
+
+    Queries the knowledge graph to build a module dependency map.
+    """
+    try:
+        result = asyncio.run(_async_deps(depth, workspace))
+        output_success(result)
+    except Exception as e:
+        output_error(
+            code=ErrorCode.LIGHTRAG_ERROR,
+            message=f"Dependency analysis failed: {e}",
+            suggestion="Check LightRAG status with: loomgraph status",
+        )
+
+
+async def _async_deps(depth: int, workspace: str | None = None) -> dict[str, Any]:
+    """Run async dependency analysis."""
+    from loomgraph.core.deps import DepsAnalyzer
+    from loomgraph.core.lightrag_client import LightRAGClient
+
+    settings = get_settings()
+    client = LightRAGClient(
+        base_url=settings.lightrag.api_url,
+        timeout=settings.lightrag.api_timeout,
+        workspace=get_auto_workspace(workspace),
+    )
+
+    analyzer = DepsAnalyzer(client=client, depth=depth)
+    result = await analyzer.analyze()
+    return result.to_dict()
+
+
+@main.command()
+@click.option("--depth", "-d", default=2, help="Directory depth for module grouping")
+@click.option("--workspace", "-w", default=None, help="Workspace name (default: current directory name)")
+@click.option("--no-summary", is_flag=True, help="Skip LLM module summaries")
+def overview(depth: int, workspace: str | None, no_summary: bool) -> None:
+    """Generate project module overview.
+
+    Queries the knowledge graph for a high-level view of all modules,
+    optionally including LLM-generated summaries.
+    """
+    try:
+        result = asyncio.run(_async_overview(depth, workspace, no_summary))
+        output_success(result)
+    except Exception as e:
+        output_error(
+            code=ErrorCode.LIGHTRAG_ERROR,
+            message=f"Overview generation failed: {e}",
+            suggestion="Check LightRAG status with: loomgraph status",
+        )
+
+
+async def _async_overview(
+    depth: int, workspace: str | None = None, no_summary: bool = False
+) -> dict[str, Any]:
+    """Run async overview analysis."""
+    from loomgraph.core.lightrag_client import LightRAGClient
+    from loomgraph.core.overview import OverviewAnalyzer
+
+    settings = get_settings()
+    client = LightRAGClient(
+        base_url=settings.lightrag.api_url,
+        timeout=settings.lightrag.api_timeout,
+        workspace=get_auto_workspace(workspace),
+    )
+
+    analyzer = OverviewAnalyzer(client=client, depth=depth)
+    result = await analyzer.analyze(no_summary=no_summary)
+    return result.to_dict()
+
+
 @main.command("install-skills")
 def install_skills() -> None:
     """Install LoomGraph skills to ~/.claude/skills/.
