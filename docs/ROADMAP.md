@@ -78,7 +78,28 @@
 
 详见 [EPIC-004](epics/EPIC-004-bidirectional-orchestrator.md)
 
-### Epic 3.2: MCP Server 📋
+### Epic 3.2: Workspace 管理 (EPIC-005) 📋
+
+> **ADR**: [ADR-009 Workspace 即知识快照](adr/ADR-009-workspace-as-knowledge-snapshot.md)
+
+| Feature | 描述 | 优先级 | 预估 |
+|---------|------|--------|------|
+| `loomgraph workspace list` | 列出所有 workspace + 统计 | P1 | 1.5d |
+| `loomgraph workspace info` | 指定 workspace 详情 | P1 | 1d |
+| `loomgraph workspace delete` | 清理指定 workspace | P1 | 0.5d |
+
+详见 [EPIC-005](epics/EPIC-005-workspace-management.md)
+
+### Epic 3.3: 跨 Workspace 对比 (EPIC-006) 📋
+
+| Feature | 描述 | 优先级 | 预估 |
+|---------|------|--------|------|
+| `loomgraph compare` | 两个 workspace 的实体/关系 diff | P2 | 5d |
+| `loomgraph similar` | 跨 workspace 相似实体检测 | P2 | 3d |
+
+详见 [EPIC-006](epics/EPIC-006-cross-workspace-comparison.md)
+
+### Epic 3.4: MCP Server 📋
 
 | Story | 描述 | 优先级 |
 |-------|------|--------|
@@ -119,7 +140,9 @@
 | v0.1.0 | Phase 1 | MVP: AST + Embedding + CLI | ✅ 已发布 |
 | v0.2.0~v0.2.4 | Phase 2 | LightRAG 集成 + Git + 客户交付 | ✅ 已发布 |
 | **v0.3.0** | **Phase 3** | **deps + overview (双向调度器)** | **📋 下一个** |
-| v0.4.0 | Phase 3 | MCP Server | 📋 规划中 |
+| v0.4.0 | Phase 3 | workspace 管理 (list/info/delete) | 📋 规划中 |
+| v0.5.0 | Phase 3 | 跨 workspace 对比 (compare/similar) | 📋 规划中 |
+| v0.6.0 | Phase 3 | MCP Server | 📋 规划中 |
 | v1.0.0 | Phase 4 | 生产就绪 | 📋 远期 |
 
 ---
@@ -150,6 +173,7 @@
 | ADR-006 | MVP 简化 | 全量重建，无增量 GC |
 | ADR-007 | Code Content 提取 | 函数体内容注入策略 |
 | **ADR-008** | **双向调度器** | **codeindex/LoomGraph 能力边界** |
+| **ADR-009** | **Workspace 即知识快照** | **从隔离机制到可对比的知识切片** |
 
 ---
 
@@ -164,8 +188,25 @@ v0.18+    目录树展开
 v0.3.0                                deps (模块依赖图)              graph API
                                       overview (模块概览)            query API
 
-v0.4.0                                MCP Server
+v0.4.0                                workspace list/info/delete     workspace header
+                                      (知识快照管理)
+
+v0.5.0                                compare (跨 ws diff)           graph API x2
+                                      similar (相似实体检测)
+
+v0.6.0                                MCP Server
                                       (封装 deps/overview/search)
+```
+
+### 研发熵减解决方案支撑
+
+```
+EPIC-004 (deps/overview)  ──→  Skill A (债务雷达)
+     │
+EPIC-005 (workspace 管理) ──→  Skill A 增强 (知道哪些项目已索引)
+     │
+EPIC-006 (跨 ws 对比)    ──→  Skill B (智能同步)
+                          ──→  Skill C (演化观察)
 ```
 
 ---
@@ -173,6 +214,11 @@ v0.4.0                                MCP Server
 ## 更新日志
 
 - **2026-02-18 (v0.2.4)**:
+  - 新增 ADR-009: Workspace 即知识快照
+  - 新增 EPIC-005: Workspace 管理 (list/info/delete)
+  - 新增 EPIC-006: 跨 Workspace 对比 (compare/similar)
+  - 新增研发熵减解决方案 Epic 依赖图
+  - 更新版本计划 (v0.4.0~v0.6.0)
   - 更新实际进度到 Phase 2 完成
   - 新增 Phase 3: 双向调度器 (EPIC-004, ADR-008)
   - 新增三仓库协作路线图
