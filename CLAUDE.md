@@ -1,3 +1,19 @@
+<!-- codeindex:start -->
+## codeindex
+
+This project uses codeindex for AI-friendly code documentation.
+
+**First-time setup** (if no README_AI.md files exist):
+1. Review `.codeindex.yaml` — verify `include`/`exclude` patterns match this project's structure
+2. Run `codeindex scan-all` to generate indexes
+3. Optional: `codeindex hooks install post-commit` for auto-updates on commit
+
+**Daily usage**:
+- **Always read README_AI.md** before exploring source code in any directory
+- If README_AI.md is missing or outdated, run: `codeindex scan <dir>`
+- Check documentation coverage: `codeindex status`
+<!-- codeindex:end -->
+
 # LoomGraph 项目开发规范
 
 ## 项目概述

@@ -523,3 +523,117 @@ class TestCLIHelp:
         assert result.exit_code == 0
         assert "ENTITY_NAME" in result.output
         assert "--direction" in result.output
+
+
+class TestDepsCommand:
+    """Tests for the deps command."""
+
+    @patch("loomgraph.cli.main.asyncio.run")
+    def test_deps_basic(self, mock_run: MagicMock, runner: CliRunner) -> None:
+        """Test basic deps command."""
+        mock_run.return_value = {
+            "modules": ["src/cli", "src/core"],
+            "dependencies": [
+                {"from": "src/cli", "to": "src/core", "count": 15, "types": {"CALLS": 8, "IMPORTS": 7}},
+            ],
+            "stats": {"total_modules": 2, "total_dependencies": 1, "total_entities": 150, "total_relations": 574},
+        }
+
+        result = runner.invoke(main, ["deps"])
+        assert result.exit_code == 0
+
+        data = json.loads(result.output)
+        assert data["success"] is True
+        assert "src/cli" in data["data"]["modules"]
+        assert len(data["data"]["dependencies"]) == 1
+
+    @patch("loomgraph.cli.main.asyncio.run")
+    def test_deps_with_depth(self, mock_run: MagicMock, runner: CliRunner) -> None:
+        """Test deps command with --depth option."""
+        mock_run.return_value = {
+            "modules": ["src"],
+            "dependencies": [],
+            "stats": {"total_modules": 1, "total_dependencies": 0, "total_entities": 10, "total_relations": 5},
+        }
+
+        result = runner.invoke(main, ["deps", "--depth", "1"])
+        assert result.exit_code == 0
+
+        data = json.loads(result.output)
+        assert data["success"] is True
+
+    @patch("loomgraph.cli.main.asyncio.run")
+    def test_deps_error(self, mock_run: MagicMock, runner: CliRunner) -> None:
+        """Test deps command error handling."""
+        mock_run.side_effect = Exception("Connection refused")
+
+        result = runner.invoke(main, ["deps"])
+        assert result.exit_code == 1
+
+        data = json.loads(result.output)
+        assert data["success"] is False
+        assert "Connection refused" in data["error"]["message"]
+
+    def test_deps_help(self, runner: CliRunner) -> None:
+        """Test deps command help."""
+        result = runner.invoke(main, ["deps", "--help"])
+        assert result.exit_code == 0
+        assert "--depth" in result.output
+
+
+class TestOverviewCommand:
+    """Tests for the overview command."""
+
+    @patch("loomgraph.cli.main.asyncio.run")
+    def test_overview_basic(self, mock_run: MagicMock, runner: CliRunner) -> None:
+        """Test basic overview command."""
+        mock_run.return_value = {
+            "modules": [
+                {
+                    "name": "src/core",
+                    "entity_count": 50,
+                    "entities_by_type": {"class": 5, "function": 20},
+                    "top_entities": ["LightRAGClient"],
+                    "files": ["lightrag_client.py"],
+                    "summary": "Core engine module",
+                },
+            ],
+            "dependency_graph": {
+                "modules": ["src/core"],
+                "dependencies": [],
+                "stats": {"total_modules": 1, "total_dependencies": 0, "total_entities": 50, "total_relations": 100},
+            },
+        }
+
+        result = runner.invoke(main, ["overview"])
+        assert result.exit_code == 0
+
+        data = json.loads(result.output)
+        assert data["success"] is True
+        assert len(data["data"]["modules"]) == 1
+        assert data["data"]["modules"][0]["name"] == "src/core"
+
+    @patch("loomgraph.cli.main.asyncio.run")
+    def test_overview_no_summary(self, mock_run: MagicMock, runner: CliRunner) -> None:
+        """Test overview with --no-summary flag."""
+        mock_run.return_value = {
+            "modules": [],
+            "dependency_graph": {
+                "modules": [],
+                "dependencies": [],
+                "stats": {"total_modules": 0, "total_dependencies": 0, "total_entities": 0, "total_relations": 0},
+            },
+        }
+
+        result = runner.invoke(main, ["overview", "--no-summary"])
+        assert result.exit_code == 0
+
+        data = json.loads(result.output)
+        assert data["success"] is True
+
+    def test_overview_help(self, runner: CliRunner) -> None:
+        """Test overview command help."""
+        result = runner.invoke(main, ["overview", "--help"])
+        assert result.exit_code == 0
+        assert "--no-summary" in result.output
+        assert "--depth" in result.output
