@@ -1,6 +1,6 @@
 [project]
 name = "loomgraph"
-version = "0.2.1"
+version = "0.2.5"
 description = "Enterprise Code Intelligence Engine - H200 Optimized GraphRAG for Code"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -60,6 +60,9 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/loomgraph"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"skills" = "loomgraph/_skills"
 
 # ============== Tool Configurations ==============
 
