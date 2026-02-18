@@ -110,6 +110,19 @@
 
 > MCP Server 依赖 EPIC-004 完成后，封装为 MCP 工具。
 
+### Epic 3.5: 研发熵减 Skills (EPIC-007) 📋
+
+> **前置**: EPIC-004 + EPIC-005 + EPIC-006 能力层完成后开发
+> **交付**: 3 个 Claude Code Skills，随 wheel 分发
+
+| Skill | 名称 | 功能 | 依赖 |
+|-------|------|------|------|
+| Skill A | `loomgraph-debt-radar` | 技术债务审计报告 | EPIC-004 (deps/overview) |
+| Skill B | `loomgraph-sync-advisor` | 跨分支同步建议 | EPIC-006 (compare) |
+| Skill C | `loomgraph-evolution` | 代码演化趋势分析 | EPIC-006 (compare/similar) |
+
+详见 [EPIC-007](epics/EPIC-007-entropy-reduction-skills.md)
+
 ---
 
 ## Phase 4: 生产就绪 — 未开始
@@ -143,6 +156,7 @@
 | v0.4.0 | Phase 3 | workspace 管理 (list/info/delete) | 📋 规划中 |
 | v0.5.0 | Phase 3 | 跨 workspace 对比 (compare/similar) | 📋 规划中 |
 | v0.6.0 | Phase 3 | MCP Server | 📋 规划中 |
+| v0.7.0 | Phase 3 | 研发熵减 Skills (debt-radar/sync-advisor/evolution) | 📋 规划中 |
 | v1.0.0 | Phase 4 | 生产就绪 | 📋 远期 |
 
 ---
@@ -196,18 +210,26 @@ v0.5.0                                compare (跨 ws diff)           graph API 
 
 v0.6.0                                MCP Server
                                       (封装 deps/overview/search)
+
+v0.7.0                                Skill A: debt-radar
+                                      Skill B: sync-advisor
+                                      Skill C: evolution
 ```
 
-### 研发熵减解决方案支撑
+### 研发熵减解决方案支撑 (EPIC-007)
 
 ```
-EPIC-004 (deps/overview)  ──→  Skill A (债务雷达)
-     │
-EPIC-005 (workspace 管理) ──→  Skill A 增强 (知道哪些项目已索引)
-     │
-EPIC-006 (跨 ws 对比)    ──→  Skill B (智能同步)
-                          ──→  Skill C (演化观察)
+能力层 (先开发)                              Skill 层 (后开发)
+─────────────                              ────────────────
+EPIC-004 (deps/overview)  ──────────────→  Skill A (债务雷达)
+                                    ↗
+EPIC-005 (workspace 管理) ────────┘
+                                    ↘
+EPIC-006 (跨 ws 对比)    ──────────────→  Skill B (智能同步)
+                          ──────────────→  Skill C (演化观察)
 ```
+
+详见 [EPIC-007](epics/EPIC-007-entropy-reduction-skills.md)
 
 ---
 
