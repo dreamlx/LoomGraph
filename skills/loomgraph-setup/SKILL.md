@@ -13,25 +13,47 @@ argument-hint: "[--force]"
 
 **检查当前安装的 LoomGraph 版本：**
 ```bash
-~/.loomgraph-venv/bin/loomgraph version 2>/dev/null || echo '{"error": "loomgraph not installed or version < 0.2.1"}'
+~/.loomgraph-venv/bin/loomgraph version 2>/dev/null || echo '{"error": "loomgraph not installed"}'
 ```
 
-**查看最新版本和变更日志：**
-- 最新版本文件：安装包目录下的 `customers/VERSION`
-- 变更日志：安装包目录下的 `customers/CHANGELOG.md`
+**如果未安装或需要更新：**
 
-**版本对比：**
-| 当前版本 | 最新版本 | 建议操作 |
-|----------|----------|----------|
-| < 0.2.1 | 0.2.1 | 需要更新（支持增量索引） |
-| = 0.2.1 | 0.2.1 | 已是最新 |
-
-**如需更新：**
+在线安装/更新：
 ```bash
-cd /path/to/loomgraph-package  # 安装包所在目录
 source ~/.loomgraph-venv/bin/activate
-pip install .
+pip install --upgrade "loomgraph @ git+https://TOKEN@github.com/dreamlx/LoomGraph.git@vLATEST"
+loomgraph install-skills
 ```
+
+离线安装/更新：
+```bash
+source ~/.loomgraph-venv/bin/activate
+pip install ./loomgraph-*.whl
+loomgraph install-skills
+```
+
+---
+
+### Step 0.5: 检查服务连接配置
+
+**检查是否已配置服务连接：**
+```bash
+~/.loomgraph-venv/bin/loomgraph status 2>/dev/null
+```
+
+**如果输出 `lightrag_api.connected: false` 或配置文件不存在：**
+
+检查是否已有配置文件：
+```bash
+cat ~/.config/loomgraph/config.yaml 2>/dev/null || echo "配置文件不存在"
+```
+
+如果不存在，提示用户提供 LightRAG 服务地址，然后执行：
+```bash
+loomgraph setup-config --lightrag-url <用户提供的URL>
+```
+
+> 服务地址由 LoomGraph 技术团队提供。如果用户不知道地址，请联系技术团队获取。
 
 ---
 
