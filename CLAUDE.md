@@ -246,6 +246,9 @@ embedding:
 | `loomgraph search "<query>"` | 语义搜索代码 |
 | `loomgraph graph "<entity>"` | 查询调用关系 |
 | `loomgraph impact [TARGET]` | 分析代码变更影响 |
+| `loomgraph workspace list` | 列出所有 workspace |
+| `loomgraph workspace info [NAME]` | 查看 workspace 详情（默认自动检测） |
+| `loomgraph workspace delete NAME --yes` | 删除指定 workspace |
 
 ### 版本与状态
 

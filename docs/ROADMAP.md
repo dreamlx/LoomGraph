@@ -7,8 +7,8 @@
 
 ## 📍 当前状态: Phase 3 第一阶段已完成
 
-**已完成**: MVP 核心 + LightRAG 集成 + CLI + 双通道发布 + deps/overview (EPIC-004)
-**下一个**: Workspace 管理 (EPIC-005)
+**已完成**: MVP 核心 + LightRAG 集成 + CLI + 双通道发布 + deps/overview (EPIC-004) + Workspace 管理 (EPIC-005)
+**下一个**: 跨 Workspace 对比 (EPIC-006)
 
 ---
 
@@ -86,18 +86,15 @@
 > **ADR**: [ADR-009 Workspace 即知识快照](adr/ADR-009-workspace-as-knowledge-snapshot.md)
 > **价值**: 多分支/多项目客户，解锁跨分支分析
 
-**v0.4.0 — Workspace 管理 (EPIC-005)**
+**v0.4.0 — Workspace 管理 (EPIC-005) ✅**
 
-| Feature | 描述 | 预估 | 阻塞关系 |
-|---------|------|------|----------|
-| `loomgraph workspace list` | 列出所有 workspace + 统计 | 1.5d | 不阻塞 EPIC-004 |
-| `loomgraph workspace info` | 指定 workspace 详情 | 1d | — |
-| `loomgraph workspace delete` | 清理指定 workspace | 0.5d | — |
+| Feature | 描述 | 状态 |
+|---------|------|------|
+| `loomgraph workspace list` | 列出所有 workspace | ✅ |
+| `loomgraph workspace info` | 指定 workspace 详情 | ✅ |
+| `loomgraph workspace delete` | 清理指定 workspace | ✅ |
 
 详见 [EPIC-005](epics/EPIC-005-workspace-management.md)
-
-> 注: EPIC-005 与 EPIC-004 **互相独立**，可并行开发。但 EPIC-004 客户价值更直接，建议先做。
-> EPIC-005 有技术验证风险（LightRAG 是否暴露 workspace 列表 API），可在 EPIC-004 开发期间验证。
 
 **v0.5.0 — 跨 Workspace 对比 (EPIC-006)**
 
@@ -166,7 +163,7 @@
 | v0.1.0 | Phase 1 | — | MVP: AST + Embedding + CLI | ✅ 已发布 |
 | v0.2.x | Phase 2 | — | LightRAG 集成 + Git + 客户交付 | ✅ 已发布 |
 | v0.2.5 | Phase 3 | 能力层 | deps + overview (EPIC-004) | ✅ 已发布 |
-| **v0.4.0** | **Phase 3** | **能力层** | **workspace 管理 (list/info/delete)** | **📋 下一个** |
+| **v0.4.0** | **Phase 3** | **能力层** | **workspace 管理 (list/info/delete)** | **✅ 已完成** |
 | v0.5.0 | Phase 3 | 能力层 | 跨 workspace 对比 (compare/similar) | 📋 规划中 |
 | v0.6.0 | Phase 3 | Skill 层 | 研发熵减 Skills (debt-radar/sync-advisor/evolution) | 📋 规划中 |
 | v0.7.0 | Phase 3 | 集成层 | MCP Server (封装全部命令) | 📋 规划中 |
@@ -183,13 +180,13 @@
 | Injector | 8 | ✅ |
 | Embedding | 11 | ✅ |
 | Indexer | 11 | ✅ |
-| CLI | 35 | ✅ |
-| LightRAGClient | 14 | ✅ |
+| CLI | 49 | ✅ |
+| LightRAGClient | 18 | ✅ |
 | Impact | 19 | ✅ |
 | Git | 8 | ✅ |
 | DepsAnalyzer | 14 | ✅ |
 | OverviewAnalyzer | 10 | ✅ |
-| **Total** | **163** | ✅ |
+| **Total** | **181** | ✅ |
 
 ---
 
