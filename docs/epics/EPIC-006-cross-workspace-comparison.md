@@ -1,8 +1,8 @@
 # EPIC-006: 跨 Workspace 对比
 
-**状态**: 📋 规划中（需技术验证）
+**状态**: ✅ 已完成 (Phase 1)
 **优先级**: P2
-**预估**: 5-8 天
+**预估**: 5-8 天（实际 ~4.5 天）
 **ADR**: [ADR-009](../adr/ADR-009-workspace-as-knowledge-snapshot.md)
 **依赖**: EPIC-005 (workspace 管理)
 **支撑**: Skill B (智能同步), Skill C (演化观察)
@@ -198,10 +198,10 @@ loomgraph similar --entity "PaymentService" --workspaces "customer-backend:v1.0,
 
 ## 验收标准
 
-- [ ] `loomgraph compare` 能输出两个 workspace 的实体/关系 diff
-- [ ] `loomgraph similar` 能跨 workspace 查找相似实体
+- [x] `loomgraph compare` 能输出两个 workspace 的实体/关系 diff
+- [x] `loomgraph similar` 能跨 workspace 查找相似实体
 - [ ] 用 customer-backend 的 main 和 feature 分支验证对比准确性
-- [ ] 单元测试覆盖 diff 和匹配逻辑
+- [x] 单元测试覆盖 diff 和匹配逻辑 (11 compare + 10 similar = 21 tests)
 - [ ] Skill B 能基于 compare 输出生成合并建议（集成验证）
 
 ## 风险

@@ -503,6 +503,7 @@ class TestCLIHelp:
         assert "LoomGraph" in result.output
         assert "index" in result.output
         assert "search" in result.output
+        assert "workspace" in result.output
 
     def test_index_help(self, runner: CliRunner) -> None:
         """Test index command help."""
@@ -523,6 +524,195 @@ class TestCLIHelp:
         assert result.exit_code == 0
         assert "ENTITY_NAME" in result.output
         assert "--direction" in result.output
+
+
+class TestWorkspaceListCommand:
+    """Tests for the workspace list command."""
+
+    @patch("loomgraph.cli.main.asyncio.run")
+    def test_workspace_list_basic(self, mock_run: MagicMock, runner: CliRunner) -> None:
+        """Test basic workspace list command."""
+        mock_run.return_value = {
+            "workspaces": ["customer-backend", "customer-gateway"],
+            "count": 2,
+        }
+
+        result = runner.invoke(main, ["workspace", "list"])
+        assert result.exit_code == 0
+
+        data = json.loads(result.output)
+        assert data["success"] is True
+        assert data["data"]["workspaces"] == ["customer-backend", "customer-gateway"]
+        assert data["data"]["count"] == 2
+
+    @patch("loomgraph.cli.main.asyncio.run")
+    def test_workspace_list_empty(self, mock_run: MagicMock, runner: CliRunner) -> None:
+        """Test workspace list when no workspaces exist."""
+        mock_run.return_value = {
+            "workspaces": [],
+            "count": 0,
+        }
+
+        result = runner.invoke(main, ["workspace", "list"])
+        assert result.exit_code == 0
+
+        data = json.loads(result.output)
+        assert data["success"] is True
+        assert data["data"]["workspaces"] == []
+        assert data["data"]["count"] == 0
+
+    @patch("loomgraph.cli.main.asyncio.run")
+    def test_workspace_list_error(self, mock_run: MagicMock, runner: CliRunner) -> None:
+        """Test workspace list error handling."""
+        mock_run.side_effect = Exception("Connection refused")
+
+        result = runner.invoke(main, ["workspace", "list"])
+        assert result.exit_code == 1
+
+        data = json.loads(result.output)
+        assert data["success"] is False
+
+
+class TestWorkspaceInfoCommand:
+    """Tests for the workspace info command."""
+
+    @patch("loomgraph.cli.main.asyncio.run")
+    def test_workspace_info_basic(self, mock_run: MagicMock, runner: CliRunner) -> None:
+        """Test workspace info with explicit name."""
+        mock_run.return_value = {
+            "name": "customer-backend",
+            "entities": 245,
+            "relations": 1024,
+            "entity_types": {"class": 45, "function": 120, "method": 80},
+            "relation_types": {"CALLS": 600, "IMPORTS": 300, "INHERITS": 124},
+        }
+
+        result = runner.invoke(main, ["workspace", "info", "customer-backend"])
+        assert result.exit_code == 0
+
+        data = json.loads(result.output)
+        assert data["success"] is True
+        assert data["data"]["name"] == "customer-backend"
+        assert data["data"]["entities"] == 245
+        assert data["data"]["relations"] == 1024
+        assert "entity_types" in data["data"]
+        assert "relation_types" in data["data"]
+
+    @patch("loomgraph.cli.main.asyncio.run")
+    def test_workspace_info_auto_detect(self, mock_run: MagicMock, runner: CliRunner) -> None:
+        """Test workspace info with auto-detect (no name argument)."""
+        mock_run.return_value = {
+            "name": "LoomGraph",
+            "entities": 50,
+            "relations": 100,
+            "entity_types": {"function": 30, "class": 20},
+            "relation_types": {"CALLS": 80, "IMPORTS": 20},
+        }
+
+        result = runner.invoke(main, ["workspace", "info"])
+        assert result.exit_code == 0
+
+        data = json.loads(result.output)
+        assert data["success"] is True
+        assert data["data"]["entities"] == 50
+
+    @patch("loomgraph.cli.main.asyncio.run")
+    def test_workspace_info_with_workspace_option(self, mock_run: MagicMock, runner: CliRunner) -> None:
+        """Test workspace info with -w option."""
+        mock_run.return_value = {
+            "name": "custom-ws",
+            "entities": 10,
+            "relations": 20,
+            "entity_types": {},
+            "relation_types": {},
+        }
+
+        result = runner.invoke(main, ["workspace", "info", "--workspace", "custom-ws"])
+        assert result.exit_code == 0
+
+        data = json.loads(result.output)
+        assert data["success"] is True
+        assert data["data"]["name"] == "custom-ws"
+
+    @patch("loomgraph.cli.main.asyncio.run")
+    def test_workspace_info_error(self, mock_run: MagicMock, runner: CliRunner) -> None:
+        """Test workspace info error handling."""
+        mock_run.side_effect = Exception("Connection refused")
+
+        result = runner.invoke(main, ["workspace", "info", "bad-ws"])
+        assert result.exit_code == 1
+
+        data = json.loads(result.output)
+        assert data["success"] is False
+
+
+class TestWorkspaceDeleteCommand:
+    """Tests for the workspace delete command."""
+
+    @patch("loomgraph.cli.main.asyncio.run")
+    def test_workspace_delete_success(self, mock_run: MagicMock, runner: CliRunner) -> None:
+        """Test workspace delete with --yes flag."""
+        mock_run.return_value = {
+            "deleted_workspace": "old-ws",
+            "message": "Workspace deleted",
+        }
+
+        result = runner.invoke(main, ["workspace", "delete", "old-ws", "--yes"])
+        assert result.exit_code == 0
+
+        data = json.loads(result.output)
+        assert data["success"] is True
+        assert data["data"]["deleted_workspace"] == "old-ws"
+
+    def test_workspace_delete_no_yes(self, runner: CliRunner) -> None:
+        """Test workspace delete without --yes flag should error."""
+        result = runner.invoke(main, ["workspace", "delete", "old-ws"])
+        assert result.exit_code == 1
+
+        data = json.loads(result.output)
+        assert data["success"] is False
+        assert data["error"]["code"] == ErrorCode.INVALID_INPUT
+        assert "--yes" in data["error"]["suggestion"]
+
+    @patch("loomgraph.cli.main.asyncio.run")
+    def test_workspace_delete_error(self, mock_run: MagicMock, runner: CliRunner) -> None:
+        """Test workspace delete error handling."""
+        mock_run.side_effect = Exception("Connection refused")
+
+        result = runner.invoke(main, ["workspace", "delete", "bad-ws", "--yes"])
+        assert result.exit_code == 1
+
+        data = json.loads(result.output)
+        assert data["success"] is False
+
+
+class TestWorkspaceHelp:
+    """Tests for workspace help messages."""
+
+    def test_workspace_help(self, runner: CliRunner) -> None:
+        """Test workspace group help."""
+        result = runner.invoke(main, ["workspace", "--help"])
+        assert result.exit_code == 0
+        assert "list" in result.output
+        assert "info" in result.output
+        assert "delete" in result.output
+
+    def test_workspace_list_help(self, runner: CliRunner) -> None:
+        """Test workspace list help."""
+        result = runner.invoke(main, ["workspace", "list", "--help"])
+        assert result.exit_code == 0
+
+    def test_workspace_info_help(self, runner: CliRunner) -> None:
+        """Test workspace info help."""
+        result = runner.invoke(main, ["workspace", "info", "--help"])
+        assert result.exit_code == 0
+        assert "--workspace" in result.output
+
+    def test_workspace_delete_help(self, runner: CliRunner) -> None:
+        """Test workspace delete help."""
+        result = runner.invoke(main, ["workspace", "delete", "--help"])
+        assert result.exit_code == 0
+        assert "--yes" in result.output
 
 
 class TestDepsCommand:
