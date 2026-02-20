@@ -113,7 +113,7 @@ def bump(new_version: str) -> None:
 
         # Add new version comparison link
         old_link_pattern = rf'\[{re.escape(old_version)}\]:'
-        new_link = f"[{new_version}]: https://github.com/user/loomgraph/compare/v{old_version}...v{new_version}"
+        new_link = f"[{new_version}]: https://github.com/dreamlx/LoomGraph/compare/v{old_version}...v{new_version}"
         content = re.sub(
             old_link_pattern,
             f"{new_link}\n[{old_version}]:",
