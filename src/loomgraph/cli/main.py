@@ -347,7 +347,7 @@ def index(repo_path: str, clear: bool, workspace: str | None) -> None:
     # Step 3: Run embed + inject asynchronously
     click.echo(f"[3/3] Injecting into LightRAG (entities → relations)...", err=True)
     try:
-        result = asyncio.run(_async_index_pipeline(parse_results, clear, workspace))
+        result = asyncio.run(_async_index_pipeline(parse_results, clear, workspace, repo_path=repo))
     except Exception as e:
         output_error(
             code=ErrorCode.LIGHTRAG_ERROR,
@@ -367,12 +367,19 @@ async def _async_index_pipeline(
     parse_results: dict[str, Any],
     clear: bool,
     workspace: str | None = None,
+    repo_path: Path | None = None,
 ) -> dict[str, Any]:
     """Run the async indexing pipeline.
 
     Two-pass batch approach via graph endpoints:
     1. Collect all entities and relations from all files
     2. Create all entities first, then all relations (solves cross-file ordering)
+
+    Args:
+        parse_results: Output from codeindex scan --output json
+        clear: Whether to clear existing data before indexing
+        workspace: Optional workspace name
+        repo_path: Repo root path; if set, file paths are stored as relative paths
     """
     from loomgraph.core.injector import collect_kg_data
     from loomgraph.core.lightrag_client import LightRAGAPIError, LightRAGClient
@@ -413,6 +420,13 @@ async def _async_index_pipeline(
 
     for file_result in results:
         path = Path(file_result.get("path", ""))
+
+        # Convert absolute path to relative (for clean source_id in graph)
+        if repo_path and path.is_absolute():
+            try:
+                path = path.relative_to(repo_path)
+            except ValueError:
+                pass  # path not under repo_path, keep as-is
 
         if file_result.get("error"):
             files_skipped += 1
