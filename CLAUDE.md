@@ -64,33 +64,59 @@ codeindex (解析) → LoomGraph (映射) → LightRAG API → PostgreSQL
 ```
 loomgraph/
 ├── src/loomgraph/
-│   ├── core/           # 核心引擎（LightRAG 集成、配置管理）
+│   ├── core/           # 核心引擎
+│   │   ├── config.py           # Pydantic Settings 配置
+│   │   ├── models.py           # 数据模型 (ParseResult, EntityData, RelationData)
+│   │   ├── mapper.py           # Symbol → Entity/Relation 映射
+│   │   ├── injector.py         # LightRAG 注入（batch_create_graph）
+│   │   ├── indexer.py          # 索引 Pipeline (scan + index)
+│   │   ├── lightrag_client.py  # LightRAG HTTP 客户端
+│   │   ├── deps.py             # DepsAnalyzer（模块依赖分析）
+│   │   ├── overview.py         # OverviewAnalyzer（项目概览）
+│   │   ├── compare.py          # CompareAnalyzer（跨 workspace diff）
+│   │   ├── similar.py          # SimilarAnalyzer（相似实体检测）
+│   │   ├── git.py              # Git 变更检测
+│   │   └── impact/             # 变更影响分析
 │   ├── embedding/      # Embedding 客户端（Jina Code V2）
-│   ├── mcp/            # MCP 服务接口
-│   └── cli/            # 命令行工具
-├── tests/              # 测试用例（单元 + 集成）
-├── docs/               # 项目文档
-│   ├── architecture/   # 架构设计文档
-│   ├── api/            # API 文档
-│   └── adr/            # 架构决策记录
+│   ├── cli/            # CLI 命令（Click）
+│   └── mcp/            # MCP 服务接口（v0.7.0 规划）
+├── skills/             # Claude Code Skills
+│   ├── loomgraph-debt-radar/      # Skill A: 技术债务审计
+│   ├── loomgraph-sync-advisor/    # Skill B: 跨分支同步建议
+│   ├── loomgraph-evolution/       # Skill C: 代码演化趋势
+│   ├── loomgraph-setup/           # 环境配置 Skill
+│   └── loomgraph-init/            # 项目初始化 Skill
+├── tests/              # 测试用例（224 tests）
+│   ├── unit/           # 单元测试
+│   └── integration/    # 集成测试
+├── docs/               # 项目文档（详见「关键文档」）
 └── scripts/            # 部署与工具脚本
 ```
 
 ## 开发流程
 
+### 敏捷跟踪
+
+完整流程详见 [docs/AGILE_GUIDE.md](docs/AGILE_GUIDE.md)。
+
+**概念层级**: ADR → Epic → Feature → (Story, 可选) → Task
+
+**GitHub 跟踪**:
+- **Issues**: Epic（label: `epic`）和跨 PR 的 Feature（label: `feature`）建 Issue；Task 不建 Issue
+- **Labels**: `epic` / `feature` / `bug` / `docs` / `refactor` / `infra`
+- **Milestones**: 每个版本一个（如 v0.6.0 = EPIC-007）
+- **文档**: Epic 详细设计在 `docs/epics/EPIC-NNN.md`，架构决策在 `docs/adr/ADR-NNN.md`
+
 ### GitFlow 分支策略
 
 ```
-main (生产) ← release/* ← develop ← feature/*
-                                  ← bugfix/*
-                                  ← hotfix/*
+main (生产) ← develop ← feature/epic-NNN-short-name
+                       ← bugfix/short-name
 ```
 
-- `main`: 生产就绪版本，只接受 release 合并
+- `main`: 生产就绪版本
 - `develop`: 开发主线，功能集成点
-- `feature/*`: 功能分支，如 `feature/ast-chunker`
-- `release/*`: 发布预备分支
-- `hotfix/*`: 生产紧急修复
+- `feature/*`: 功能分支，命名 `feature/epic-NNN-short-name`
 
 ### TDD 开发循环
 
@@ -100,12 +126,8 @@ main (生产) ← release/* ← develop ← feature/*
 
 ### 测试要求
 
-- 核心模块覆盖率 ≥ 90%
-- 整体覆盖率 ≥ 80%
-- 每个 Feature 必须包含：
-  - 单元测试 (`tests/unit/`)
-  - 集成测试 (`tests/integration/`)
-  - 性能基准 (`tests/benchmark/`)
+- 核心模块覆盖率 ≥ 90%，整体 ≥ 80%
+- 每个 Feature 必须包含单元测试 (`tests/unit/`) 和集成测试 (`tests/integration/`)
 
 ## 代码规范
 
@@ -194,40 +216,19 @@ embedding:
 3. `~/.config/loomgraph/config.yaml`
 4. 默认值
 
-## 关键设计决策
+## 架构决策记录 (ADR)
 
-### ADR-001: 选择 LightRAG 而非 Microsoft GraphRAG
-
-- **决策**: 使用 LightRAG 作为图谱构建框架
-- **原因**:
-  - 构建速度快 100x（适合增量更新）
-  - 内存占用低
-  - 易于自定义 embedding 和 LLM 函数
-
-### ADR-002: AST Pre-Chunking 策略
-
-- **决策**: 在 LightRAG.insert() 之前进行 AST 解析
-- **原因**:
-  - LightRAG 默认按 token 切分会破坏代码逻辑完整性
-  - Tree-sitter 可保证函数/类边界完整
-  - Jina Code V2 需要完整代码块才能理解语义
-
-### ADR-003: PostgreSQL 统一存储
-
-- **决策**: 使用 PostgreSQL + pgvector 而非 Neo4j + Milvus
-- **原因**:
-  - 减少运维复杂度
-  - pgvector 性能足够（百万级向量）
-  - 事务一致性保证
-
-## 性能目标
-
-| 指标 | 目标值 | 说明 |
-|------|--------|------|
-| 索引吞吐量 | 10k files/min | 增量索引 |
-| 向量检索延迟 | < 50ms | Top-100 |
-| 图谱检索延迟 | < 200ms | 2-hop 查询 |
-| 显存占用 | < 80GB | 留空间给 LLM |
+| ADR | 决策 | 文档 |
+|-----|------|------|
+| ADR-001 | PostgreSQL 统一存储（LightRAG 管理） | [ADR-001](docs/adr/ADR-001-postgresql-unified-storage.md) |
+| ADR-002 | 选择 LightRAG 框架 | [ADR-002](docs/adr/ADR-002-lightrag-framework.md) |
+| ADR-003 | codeindex tree-sitter 解析 | [ADR-003](docs/adr/ADR-003-code-parser-strategy.md) |
+| ADR-004 | LightRAG Fork 策略 | [ADR-004](docs/adr/ADR-004-lightrag-fork-strategy.md) |
+| ADR-005 | AST 优先提取（不用 LLM） | [ADR-005](docs/adr/ADR-005-extraction-strategy.md) |
+| ADR-006 | MVP 简化（全量重建，无增量 GC） | [ADR-006](docs/adr/ADR-006-mvp-simplification.md) |
+| ADR-007 | 函数体内容注入策略 | [ADR-007](docs/adr/ADR-007-code-content-extraction.md) |
+| ADR-008 | 双向调度器（能力边界） | [ADR-008](docs/adr/ADR-008-bidirectional-orchestrator.md) |
+| ADR-009 | Workspace 即知识快照 | [ADR-009](docs/adr/ADR-009-workspace-as-knowledge-snapshot.md) |
 
 ## CLI 命令 (AI Agent 友好)
 
@@ -254,92 +255,7 @@ embedding:
 | `/loomgraph-sync-advisor --ws1 A --ws2 B` | 跨分支同步建议 + 冲突预测（Claude Code Skill） |
 | `/loomgraph-evolution --entity X` | 代码演化趋势分析（Claude Code Skill） |
 
-### 版本与状态
-
-```bash
-loomgraph version  # 显示版本
-loomgraph status   # 检查 codeindex、LightRAG、embedding 服务
-```
-
-### 索引代码库
-
-```bash
-# 一键索引（默认 Cold Rebuild）
-loomgraph index /path/to/repo
-
-# 明确 Cold Rebuild（清空后重建）
-loomgraph index --clear /path/to/repo
-
-# Warm Update（仅索引 git 变更文件）
-loomgraph update                 # 对比 HEAD~1
-loomgraph update --since HEAD~5  # 对比最近 5 个提交
-```
-
-### 分步索引（高级用法）
-
-```bash
-# Step 1: AST 解析
-codeindex scan /repo --output json > parse_results.json
-
-# Step 2: 生成 Embedding
-loomgraph embed parse_results.json --output embeddings.json
-
-# Step 3: 注入 LightRAG
-loomgraph inject parse_results.json embeddings.json
-```
-
-### 语义搜索
-
-```bash
-loomgraph search "用户认证逻辑"
-loomgraph search "how to validate password" --mode local
-loomgraph search "database connection" --mode hybrid --limit 20
-```
-
-搜索模式：`local`（实体优先）、`global`（全局）、`hybrid`（混合，默认）
-
-### 查询调用图
-
-```bash
-# 谁调用了这个函数
-loomgraph graph "UserService.login" --direction callers
-
-# 这个函数调用了谁
-loomgraph graph "UserService.login" --direction callees
-
-# 指定深度和关系类型
-loomgraph graph "MyClass" --depth 3 --relation-type INHERITS
-```
-
-注意：调用图查询依赖 codeindex 输出 calls 关系。
-
-### 变更影响分析
-
-```bash
-# 分析最近提交的影响
-loomgraph impact HEAD
-
-# 分析暂存区变更
-loomgraph impact --staged
-
-# 分析指定文件
-loomgraph impact --file src/auth/login.py
-```
-
-### 错误处理
-
-命令失败时返回结构化错误，AI Agent 可据此修复：
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "CODEINDEX_NOT_FOUND",
-    "message": "codeindex command not found",
-    "suggestion": "pip install ai-codeindex"
-  }
-}
-```
+详细用法见 [docs/api/CLI_DESIGN.md](docs/api/CLI_DESIGN.md)。
 
 ## 开发命令
 
@@ -371,12 +287,23 @@ mypy src/
 
 ## 关键文档
 
-| 文档 | 路径 | 说明 |
-|------|------|------|
-| 变更日志 | `CHANGELOG.md` | 完整版本变更记录 |
-| 打包指南 | `docs/PACKAGING.md` | 打包流程 + CHANGELOG 维护策略 |
-| 系统设计 | `docs/architecture/SYSTEM_DESIGN.md` | 整体架构和 Pipeline |
-| 数据契约 | `docs/api/DATA_CONTRACT.md` | codeindex ↔ LightRAG 映射 |
-| CLI 设计 | `docs/api/CLI_DESIGN.md` | 命令详细说明 |
-| ADR-005 | `docs/adr/ADR-005-extraction-strategy.md` | AST 优先策略 |
-| ADR-006 | `docs/adr/ADR-006-mvp-simplification.md` | MVP 简化决策 |
+```
+docs/
+├── ROADMAP.md              # 版本路线图（规划 source of truth）
+├── AGILE_GUIDE.md          # 敏捷开发流程（跨三仓库参考）
+├── PACKAGING.md            # 打包发布流程 + CHANGELOG 维护策略
+├── adr/                    # 架构决策记录（9 个 ADR，永久存档）
+├── epics/                  # Epic 详细设计（EPIC-002 ~ EPIC-007）
+├── architecture/
+│   ├── SYSTEM_DESIGN.md    # 系统架构（v0.5.0，三层交付架构）
+│   ├── FEATURE_BOUNDARY.md # LightRAG Fork vs LoomGraph 边界
+│   └── UPDATE_STRATEGY.md  # Hot/Warm/Cold 更新策略
+├── api/
+│   ├── CLI_DESIGN.md           # CLI 命令详细说明
+│   ├── DATA_CONTRACT.md        # codeindex ↔ LightRAG 数据映射
+│   └── LIGHTRAG_INTEGRATION.md # LightRAG API 集成文档
+├── guides/
+│   └── CUSTOMER_PACKAGING.md   # 客户打包分发指南
+├── images/                     # 截图资源
+└── archive/                    # 已归档历史文档（可追溯）
+```
