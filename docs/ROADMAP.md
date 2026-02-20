@@ -113,8 +113,8 @@
 | Skill | 名称 | 功能 | 最低依赖 | 状态 |
 |-------|------|------|----------|------|
 | Skill A | `loomgraph-debt-radar` | 技术债务审计报告 | EPIC-004 (deps/overview) | ✅ |
-| Skill B | `loomgraph-sync-advisor` | 跨分支同步建议 | EPIC-006 (compare) | 📋 规划中 |
-| Skill C | `loomgraph-evolution` | 代码演化趋势分析 | EPIC-006 (compare/similar) | 📋 规划中 |
+| Skill B | `loomgraph-sync-advisor` | 跨分支同步建议 | EPIC-006 (compare) | ✅ |
+| Skill C | `loomgraph-evolution` | 代码演化趋势分析 | EPIC-006 (compare/similar) | ✅ |
 
 详见 [EPIC-007](epics/EPIC-007-entropy-reduction-skills.md)
 
@@ -164,7 +164,7 @@
 | v0.2.5 | Phase 3 | 能力层 | deps + overview (EPIC-004) | ✅ 已发布 |
 | **v0.4.0** | **Phase 3** | **能力层** | **workspace 管理 (list/info/delete)** | **✅ 已完成** |
 | **v0.5.0** | **Phase 3** | **能力层** | **跨 workspace 对比 (compare/similar)** | **✅ 已完成** |
-| v0.6.0 | Phase 3 | Skill 层 | 研发熵减 Skills (debt-radar/sync-advisor/evolution) | 🔄 Skill A 完成 |
+| **v0.6.0** | **Phase 3** | **Skill 层** | **研发熵减 Skills (debt-radar/sync-advisor/evolution)** | **✅ 已完成** |
 | v0.7.0 | Phase 3 | 集成层 | MCP Server (封装全部命令) | 📋 规划中 |
 | v1.0.0 | Phase 4 | — | 生产就绪 | 📋 远期 |
 
