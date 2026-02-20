@@ -1430,6 +1430,101 @@ async def _async_workspace_delete(name: str) -> dict[str, Any]:
     }
 
 
+# ─── Cross-workspace comparison ─────────────────────────────────
+
+
+@main.command()
+@click.option("--ws1", required=True, help="First workspace name")
+@click.option("--ws2", required=True, help="Second workspace name")
+def compare(ws1: str, ws2: str) -> None:
+    """Compare entities and relations between two workspaces."""
+    try:
+        result = asyncio.run(_async_compare(ws1, ws2))
+        output_success(result)
+    except Exception as e:
+        output_error(
+            code=ErrorCode.LIGHTRAG_ERROR,
+            message=f"Workspace comparison failed: {e}",
+            suggestion="Check LightRAG status with: loomgraph status",
+        )
+
+
+async def _async_compare(ws1: str, ws2: str) -> dict[str, Any]:
+    """Run async cross-workspace comparison."""
+    from loomgraph.core.compare import CompareAnalyzer
+    from loomgraph.core.lightrag_client import LightRAGClient
+
+    settings = get_settings()
+    client1 = LightRAGClient(
+        base_url=settings.lightrag.api_url,
+        timeout=settings.lightrag.api_timeout,
+        workspace=ws1,
+    )
+    client2 = LightRAGClient(
+        base_url=settings.lightrag.api_url,
+        timeout=settings.lightrag.api_timeout,
+        workspace=ws2,
+    )
+
+    analyzer = CompareAnalyzer(client1=client1, client2=client2, ws1=ws1, ws2=ws2)
+    result = await analyzer.analyze()
+    return result.to_dict()
+
+
+@main.command()
+@click.option("--entity", "-e", required=True, help="Entity name to search")
+@click.option(
+    "--workspaces", "-w", default=None,
+    help="Comma-separated workspace names (default: all)",
+)
+def similar(entity: str, workspaces: str | None) -> None:
+    """Find similar entities across workspaces."""
+    try:
+        result = asyncio.run(_async_similar(entity, workspaces))
+        output_success(result)
+    except Exception as e:
+        output_error(
+            code=ErrorCode.LIGHTRAG_ERROR,
+            message=f"Similar entity search failed: {e}",
+            suggestion="Check LightRAG status with: loomgraph status",
+        )
+
+
+async def _async_similar(
+    entity: str, workspaces: str | None = None
+) -> dict[str, Any]:
+    """Run async cross-workspace similarity search."""
+    from loomgraph.core.lightrag_client import LightRAGClient
+    from loomgraph.core.similar import SimilarAnalyzer
+
+    settings = get_settings()
+
+    # Resolve workspace list
+    if workspaces:
+        ws_names = [w.strip() for w in workspaces.split(",")]
+    else:
+        # Fetch all workspaces from LightRAG
+        temp_client = LightRAGClient(
+            base_url=settings.lightrag.api_url,
+            timeout=settings.lightrag.api_timeout,
+        )
+        ws_names = await temp_client.list_workspaces()
+
+    # Create a client per workspace
+    clients = [
+        LightRAGClient(
+            base_url=settings.lightrag.api_url,
+            timeout=settings.lightrag.api_timeout,
+            workspace=ws,
+        )
+        for ws in ws_names
+    ]
+
+    analyzer = SimilarAnalyzer(clients=clients, workspace_names=ws_names)
+    result = await analyzer.analyze(entity)
+    return result.to_dict()
+
+
 @main.command("install-skills")
 def install_skills() -> None:
     """Install LoomGraph skills to ~/.claude/skills/.
