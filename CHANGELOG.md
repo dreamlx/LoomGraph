@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `loomgraph compare` command: cross-workspace entity/relation structural diff (EPIC-006).
 - `loomgraph similar` command: cross-workspace similar entity search with exact + fuzzy matching (EPIC-006).
 - `CompareAnalyzer` and `SimilarAnalyzer` core modules with full unit test coverage (21 tests).
+- `/loomgraph-sync-advisor` skill: cross-branch merge advice with conflict prediction (EPIC-007).
+- `/loomgraph-evolution` skill: code evolution tracking across versions with fork divergence analysis (EPIC-007).
 
 ## [0.2.5] - 2026-02-19
 

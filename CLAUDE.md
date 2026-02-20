@@ -252,6 +252,8 @@ embedding:
 | `loomgraph compare --ws1 A --ws2 B` | 跨 workspace 实体/关系 diff |
 | `loomgraph similar -e "<entity>"` | 跨 workspace 相似实体检测 |
 | `/loomgraph-debt-radar [path]` | 生成技术债务审计报告（Claude Code Skill） |
+| `/loomgraph-sync-advisor --ws1 A --ws2 B` | 跨分支同步建议 + 冲突预测（Claude Code Skill） |
+| `/loomgraph-evolution --entity X` | 代码演化趋势分析（Claude Code Skill） |
 
 ### 版本与状态
 
