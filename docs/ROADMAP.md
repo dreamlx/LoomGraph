@@ -7,8 +7,8 @@
 
 ## 📍 当前状态: Phase 3 第一阶段已完成
 
-**已完成**: MVP 核心 + LightRAG 集成 + CLI + 双通道发布 + deps/overview (EPIC-004) + Workspace 管理 (EPIC-005)
-**下一个**: 跨 Workspace 对比 (EPIC-006)
+**已完成**: MVP 核心 + LightRAG 集成 + CLI + 双通道发布 + deps/overview (EPIC-004) + Workspace 管理 (EPIC-005) + 跨 Workspace 对比 (EPIC-006)
+**下一个**: 研发熵减 Skills (EPIC-007)
 
 ---
 
@@ -96,26 +96,25 @@
 
 详见 [EPIC-005](epics/EPIC-005-workspace-management.md)
 
-**v0.5.0 — 跨 Workspace 对比 (EPIC-006)**
+**v0.5.0 — 跨 Workspace 对比 (EPIC-006) ✅**
 
-| Feature | 描述 | 预估 | 阻塞关系 |
-|---------|------|------|----------|
-| `loomgraph compare` | 两个 workspace 的实体/关系 diff | 5d | 依赖 EPIC-005 (workspace 可见性) |
-| `loomgraph similar` | 跨 workspace 相似实体检测 | 3d | 依赖 EPIC-005 |
+| Feature | 描述 | 状态 |
+|---------|------|------|
+| `loomgraph compare` | 两个 workspace 的实体/关系 diff | ✅ |
+| `loomgraph similar` | 跨 workspace 相似实体检测 | ✅ |
 
 详见 [EPIC-006](epics/EPIC-006-cross-workspace-comparison.md)
 
 ### 第三阶段: Skill 交付 — v0.6.0
 
-> **前置**: 能力层 (EPIC-004 + 005 + 006) 全部完成后开发
 > **交付**: 3 个 Claude Code Skills，随 wheel 分发，`install-skills` 安装
 > **原则**: Skill 是编排者，LoomGraph CLI 提供数据，Skill 负责 LLM 推理 + 报告
 
-| Skill | 名称 | 功能 | 最低依赖 |
-|-------|------|------|----------|
-| Skill A | `loomgraph-debt-radar` | 技术债务审计报告 | EPIC-004 (deps/overview) |
-| Skill B | `loomgraph-sync-advisor` | 跨分支同步建议 | EPIC-006 (compare) |
-| Skill C | `loomgraph-evolution` | 代码演化趋势分析 | EPIC-006 (compare/similar) |
+| Skill | 名称 | 功能 | 最低依赖 | 状态 |
+|-------|------|------|----------|------|
+| Skill A | `loomgraph-debt-radar` | 技术债务审计报告 | EPIC-004 (deps/overview) | ✅ |
+| Skill B | `loomgraph-sync-advisor` | 跨分支同步建议 | EPIC-006 (compare) | 📋 规划中 |
+| Skill C | `loomgraph-evolution` | 代码演化趋势分析 | EPIC-006 (compare/similar) | 📋 规划中 |
 
 详见 [EPIC-007](epics/EPIC-007-entropy-reduction-skills.md)
 
@@ -164,8 +163,8 @@
 | v0.2.x | Phase 2 | — | LightRAG 集成 + Git + 客户交付 | ✅ 已发布 |
 | v0.2.5 | Phase 3 | 能力层 | deps + overview (EPIC-004) | ✅ 已发布 |
 | **v0.4.0** | **Phase 3** | **能力层** | **workspace 管理 (list/info/delete)** | **✅ 已完成** |
-| v0.5.0 | Phase 3 | 能力层 | 跨 workspace 对比 (compare/similar) | 📋 规划中 |
-| v0.6.0 | Phase 3 | Skill 层 | 研发熵减 Skills (debt-radar/sync-advisor/evolution) | 📋 规划中 |
+| **v0.5.0** | **Phase 3** | **能力层** | **跨 workspace 对比 (compare/similar)** | **✅ 已完成** |
+| v0.6.0 | Phase 3 | Skill 层 | 研发熵减 Skills (debt-radar/sync-advisor/evolution) | 🔄 Skill A 完成 |
 | v0.7.0 | Phase 3 | 集成层 | MCP Server (封装全部命令) | 📋 规划中 |
 | v1.0.0 | Phase 4 | — | 生产就绪 | 📋 远期 |
 
@@ -186,7 +185,9 @@
 | Git | 8 | ✅ |
 | DepsAnalyzer | 14 | ✅ |
 | OverviewAnalyzer | 10 | ✅ |
-| **Total** | **181** | ✅ |
+| CompareAnalyzer | 11 | ✅ |
+| SimilarAnalyzer | 10 | ✅ |
+| **Total** | **202** | ✅ |
 
 ---
 
