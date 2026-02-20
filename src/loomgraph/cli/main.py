@@ -291,6 +291,7 @@ def index(repo_path: str, clear: bool, workspace: str | None) -> None:
     repo = Path(repo_path).resolve()
 
     # Step 1: Check codeindex
+    click.echo(f"[1/3] Checking codeindex installation...", err=True)
     codeindex_status = check_codeindex()
     if not codeindex_status.get("installed"):
         output_error(
@@ -302,6 +303,7 @@ def index(repo_path: str, clear: bool, workspace: str | None) -> None:
         return
 
     # Step 2: Run codeindex scan
+    click.echo(f"[2/3] Scanning {repo.name}/ with codeindex (this may take a while)...", err=True)
     try:
         result = subprocess.run(
             ["codeindex", "scan", str(repo), "--output", "json"],
@@ -318,6 +320,8 @@ def index(repo_path: str, clear: bool, workspace: str | None) -> None:
             return
 
         parse_results = json.loads(result.stdout)
+        file_count = len(parse_results.get("results", []))
+        click.echo(f"       Scan complete: {file_count} files parsed.", err=True)
 
     except subprocess.TimeoutExpired:
         output_error(
@@ -341,6 +345,7 @@ def index(repo_path: str, clear: bool, workspace: str | None) -> None:
         return
 
     # Step 3: Run embed + inject asynchronously
+    click.echo(f"[3/3] Injecting into LightRAG (entities → relations)...", err=True)
     try:
         result = asyncio.run(_async_index_pipeline(parse_results, clear, workspace))
     except Exception as e:
@@ -353,6 +358,7 @@ def index(repo_path: str, clear: bool, workspace: str | None) -> None:
     duration = time.time() - start_time
     result["duration_seconds"] = round(duration, 2)
     result["repo_path"] = str(repo)
+    click.echo(f"       Done in {result['duration_seconds']}s.", err=True)
 
     output_success(result)
 
