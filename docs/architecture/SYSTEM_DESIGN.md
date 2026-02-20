@@ -1,604 +1,414 @@
 # LoomGraph 系统架构设计
 
-**版本**: 0.2.0
-**更新日期**: 2025-02-03
+**版本**: 0.5.0
+**更新日期**: 2026-02-20
 **状态**: ✅ 确认
 
 ---
 
-## 1. 架构概览
+## 1. 定位
 
-### 1.1 三仓库分层架构
+> codeindex 负责"看"，LoomGraph 负责"想"和"说"，LightRAG 负责"记"。
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              应用层 (Application)                            │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│    ┌─────────────────────────────────────────────────────────────────────┐  │
-│    │                      LoomGraph (指挥部)                              │  │
-│    │                                                                     │  │
-│    │   ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                │  │
-│    │   │  CLI Tool   │  │ MCP Server  │  │  Indexer    │                │  │
-│    │   │ index/search│  │ Claude/IDE  │  │  Pipeline   │                │  │
-│    │   └──────┬──────┘  └──────┬──────┘  └──────┬──────┘                │  │
-│    │          │                │                │                        │  │
-│    │          └────────────────┼────────────────┘                        │  │
-│    │                           │                                         │  │
-│    │   ┌───────────────────────┴───────────────────────┐                │  │
-│    │   │              Core Layer                        │                │  │
-│    │   │  ┌─────────┐ ┌─────────┐ ┌─────────┐         │                │  │
-│    │   │  │ Mapper  │ │Injector │ │Embedding│         │                │  │
-│    │   │  │         │ │         │ │ Client  │         │                │  │
-│    │   │  └─────────┘ └─────────┘ └─────────┘         │                │  │
-│    │   └───────────────────────────────────────────────┘                │  │
-│    └─────────────────────────────────────────────────────────────────────┘  │
-│                              │                    │                         │
-│                              │                    │                         │
-│              ┌───────────────┘                    └───────────────┐         │
-│              │                                                   │         │
-│              ▼                                                   ▼         │
-│    ┌─────────────────────┐                         ┌─────────────────────┐ │
-│    │      codeindex      │                         │       LightRAG      │ │
-│    │   (AST 解析层)      │                         │    (RAG 引擎层)     │ │
-│    │                     │                         │                     │ │
-│    │  • Symbol 提取      │    ParseResult          │  • acreate_entity() │ │
-│    │  • Call 提取        │ ──────────────────────► │  • acreate_relation│ │
-│    │  • Inheritance 提取 │                         │  • aquery()         │ │
-│    │  • Import 提取      │                         │  • PGGraphStorage   │ │
-│    └─────────────────────┘                         └──────────┬──────────┘ │
-│                                                               │            │
-└───────────────────────────────────────────────────────────────┼────────────┘
-                                                                │
-                                                                ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              外部服务 (External)                             │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  ┌───────────────┐  ┌───────────────┐  ┌───────────────────────────────┐   │
-│  │   H200 GPU    │  │   H200 GPU    │  │         PostgreSQL            │   │
-│  │  Jina TEI     │  │    vLLM       │  │  ┌─────────┬─────────────┐   │   │
-│  │  :8080        │  │    :8000      │  │  │pgvector │ Apache AGE  │   │   │
-│  │               │  │  (可选)       │  │  │         │ (图存储)     │   │   │
-│  └───────────────┘  └───────────────┘  │  └─────────┴─────────────┘   │   │
-│                                        │            :5432              │   │
-│                                        └───────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
+| 仓库 | 角色 | 职责 |
+|------|------|------|
+| **codeindex** | 看 | AST 解析，提取代码结构（Symbol / Call / Inheritance / Import） |
+| **LoomGraph** | 想 + 说 | 写入调度 + 读取分析 + Skill 编排，对外提供 CLI 和 Claude Code Skills |
+| **LightRAG** | 记 | 图谱存储 + 向量检索，通过 HTTP API 提供 CRUD |
 
-### 1.2 职责分工
-
-| 仓库 | 职责 | 输入 | 输出 |
-|------|------|------|------|
-| **codeindex** | AST 解析，提取代码结构 | 源代码文件 | ParseResult (Symbol, Call, Inheritance, Import) |
-| **LoomGraph** | 协调调度，数据映射 | ParseResult | LightRAG API 调用 |
-| **LightRAG** | 存储检索，图谱管理 | Entity/Relation Data | 查询结果 |
+**存储所有权**：LoomGraph 不直接操作数据库。全部存储由 LightRAG 管理，LoomGraph 通过 `LightRAGClient`（HTTP）读写。
 
 ---
 
-## 2. MVP 配置 (v0.1.0)
+## 2. 三层交付架构
 
-```yaml
-# loomgraph.yaml - MVP 默认配置
-indexing:
-  # Layer 1: AST 提取 (始终启用，由 codeindex 完成)
-  ast_extraction:
-    enabled: true
-    chunking: "ast"           # 按 Symbol 边界 (函数/类/方法)
-    extract_calls: true       # 提取调用关系
-    extract_inheritance: true # 提取继承关系
-
-  # Layer 2: LLM 语义增强 (MVP 默认关闭)
-  semantic_enhancement:
-    enabled: false  # v0.2.0+ 可启用
-
-embedding:
-  provider: "jina"
-  model: "jinaai/jina-embeddings-v2-base-code"
-  base_url: "http://localhost:8080"
-  batch_size: 32
-  max_length: 8192
-  dimension: 768
-  timeout: 30.0
-
-database:
-  host: "localhost"
-  port: 5432
-  database: "loomgraph"
-  user: "loomgraph"
-  password: "loomgraph_dev"
-
-retrieval:
-  modes: ["keyword", "semantic", "graph"]
-  default_mode: "hybrid"
-  top_k: 10
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                     Skill 层 (Claude Code Skills)                   │
+│                                                                     │
+│  /loomgraph-debt-radar       技术债务审计报告                        │
+│  /loomgraph-sync-advisor     跨分支同步建议 + 冲突预测               │
+│  /loomgraph-evolution        代码演化趋势分析                        │
+│                                                                     │
+│  原则: Skill 是编排者，不做数据计算                                   │
+│        编排 CLI 命令 + codeindex + LLM → 生成 Markdown 报告          │
+├─────────────────────────────────────────────────────────────────────┤
+│                     能力层 (LoomGraph CLI)                           │
+│                                                                     │
+│  写入命令           读取命令             管理命令                     │
+│  ┌───────────┐     ┌───────────────┐    ┌──────────────────┐        │
+│  │ index     │     │ deps          │    │ workspace list   │        │
+│  │ update    │     │ overview      │    │ workspace info   │        │
+│  │ embed     │     │ compare       │    │ workspace delete │        │
+│  │ inject    │     │ similar       │    │ status           │        │
+│  │           │     │ search        │    │ version          │        │
+│  │           │     │ graph         │    │                  │        │
+│  │           │     │ impact        │    │                  │        │
+│  └───────────┘     └───────────────┘    └──────────────────┘        │
+│                                                                     │
+│  输出: 全部 JSON，AI Agent 可直接解析                                 │
+├─────────────────────────────────────────────────────────────────────┤
+│                     基础设施层 (External)                            │
+│                                                                     │
+│  ┌─────────────┐  ┌─────────────────┐  ┌──────────────────────┐    │
+│  │  codeindex  │  │   LightRAG API  │  │     H200 GPU         │    │
+│  │  AST 解析   │  │   :3001         │  │  Jina TEI  :3002     │    │
+│  │  tech-debt  │  │   /graph/*      │  │  GLM-4 vLLM :3000    │    │
+│  └─────────────┘  │   /api/*        │  └──────────────────────┘    │
+│                   │   /query        │                               │
+│                   └────────┬────────┘                               │
+│                            │                                        │
+│                   ┌────────┴────────┐                               │
+│                   │   PostgreSQL    │                               │
+│                   │   pgvector      │                               │
+│                   │   :5432         │                               │
+│                   └─────────────────┘                               │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 3. 数据流架构
+## 3. 数据流
 
-### 3.1 索引流程 (MVP: 全量重建)
+### 3.1 写入路径
 
 ```
-┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐
-│  源代码  │───▶│codeindex │───▶│ LoomGraph│───▶│  Jina    │───▶│ LightRAG │
-│  Files   │    │ parse()  │    │ mapper   │    │ embed()  │    │ create() │
-└──────────┘    └──────────┘    └──────────┘    └──────────┘    └──────────┘
-                     │                │               │               │
-                     │                │               │               │
-                     ▼                ▼               ▼               ▼
-               ParseResult      EntityData/     Embeddings      PostgreSQL
-               • Symbol        RelationData    list[float]     • PGKVStorage
-               • Call                                          • PGVectorStorage
-               • Inheritance                                   • PGGraphStorage
+源代码 → codeindex parse → LoomGraph mapper → LightRAG HTTP API → PostgreSQL
+```
+
+详细流程：
+
+```
+┌──────────┐    ┌──────────┐    ┌───────────────┐    ┌──────────────────┐    ┌──────────┐
+│  源代码  │───▶│codeindex │───▶│   LoomGraph   │───▶│  LightRAG API    │───▶│PostgreSQL│
+│  Files   │    │ parse    │    │   mapper +     │    │                  │    │          │
+│          │    │          │    │   injector     │    │  /graph/entity/  │    │ pgvector │
+└──────────┘    └──────────┘    └───────────────┘    │    create        │    │ graph    │
+                     │                │               │  /graph/relation/│    │          │
+                     ▼                ▼               │    create        │    └──────────┘
+               ParseResult      EntityData +          └──────────────────┘
+               • Symbol         RelationData
+               • Call           (batch_create_graph:
+               • Inheritance     entity → stubs → relations)
                • Import
 ```
 
-### 3.2 检索流程
+**两种写入模式**：
+
+| 模式 | 命令 | 场景 |
+|------|------|------|
+| Cold Rebuild | `loomgraph index <path>` | 首次索引，清空后全量重建 |
+| Warm Update | `loomgraph update --since HEAD~5` | 增量索引 git 变更文件 |
+
+**Workspace 隔离**：每次写入通过 `LIGHTRAG-WORKSPACE` HTTP header 隔离，不同项目/分支写入不同 workspace。
+
+### 3.2 读取路径 — 能力层
 
 ```
-┌──────────┐    ┌───────────────────────────────────────┐    ┌──────────┐
-│  Query   │───▶│            LightRAG aquery()          │───▶│ Results  │
-│ "用户登录"│    │  ┌─────────┐ ┌─────────┐ ┌─────────┐ │    │  排序    │
-└──────────┘    │  │Keyword  │ │Semantic │ │ Graph   │ │    │  融合    │
-                │  │Search   │ │ Search  │ │ Search  │ │    └──────────┘
-                │  └────┬────┘ └────┬────┘ └────┬────┘ │
-                │       │          │          │       │
-                │       ▼          ▼          ▼       │
-                │  ┌─────────────────────────────────┐│
-                │  │        Hybrid Ranking           ││
-                │  └─────────────────────────────────┘│
-                └───────────────────────────────────────┘
+用户/Agent → LoomGraph CLI → LightRAG HTTP API → JSON 结果
 ```
 
-### 3.3 Pipeline 架构 (AI Agent 友好)
+| 命令 | LightRAG 端点 | 数据处理 |
+|------|---------------|----------|
+| `search` | `/query` | 语义检索 (local/global/hybrid) |
+| `graph` | `/query` | 实体关系查询 |
+| `deps` | `/graph/entities/all` + `/graph/relations/all` | 本地聚合：按模块分组依赖 |
+| `overview` | `/graph/entities/all` + `/graph/relations/all` + `/query` | 本地聚合 + 可选 LLM 摘要 |
+| `compare` | 两个 workspace 各调 `/graph/entities/all` + `/graph/relations/all` | 本地 set diff + relation diff |
+| `similar` | N 个 workspace 各调 `/graph/entities/all` + `/graph/relations/all` | 本地 exact + fuzzy 名称匹配 |
+| `impact` | `/query` + git diff | 变更影响分析 + 风险评估 |
 
-#### 3.3.1 设计理念
+**设计原则**：LightRAG 只做存储检索，LoomGraph 在本地完成所有分析逻辑（聚合、diff、匹配、排序）。
 
-LoomGraph 设计为 **Claude Code Skill**，主要用户是 AI Agent：
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                     Claude Code (AI Agent)                       │
-│                                                                 │
-│  • 读取 docs/ 理解工作流程                                        │
-│  • 执行 CLI 命令                                                 │
-│  • 解读 JSON 错误信息                                            │
-│  • 自动修复问题 (安装依赖、调整参数)                               │
-│  • 按需分步执行或一键执行                                         │
-└─────────────────────────────────────────────────────────────────┘
-         │              │              │              │
-         ▼              ▼              ▼              ▼
-    ┌─────────┐   ┌─────────┐   ┌─────────┐   ┌─────────┐
-    │codeindex│   │loomgraph│   │loomgraph│   │loomgraph│
-    │  scan   │   │  embed  │   │ inject  │   │ search  │
-    └─────────┘   └─────────┘   └─────────┘   └─────────┘
-```
-
-**Pipeline 不在代码里，在 AI Agent 的推理中。**
-
-#### 3.3.2 设计原则
-
-| 原则 | 传统设计 (人类) | AI Agent 设计 |
-|------|----------------|---------------|
-| 复杂度 | 隐藏，自动处理 | 暴露，让 AI 理解 |
-| 错误恢复 | 自动重试 | 返回详细错误，AI 决定 |
-| 命令风格 | 单命令完成 | 原子命令可组合 |
-| 输出格式 | 人类友好文本 | 机器可读 JSON |
-| 依赖检查 | 内置自动安装 | 错误信息说明缺什么 |
-
-#### 3.3.3 4-Step Pipeline
+### 3.3 读取路径 — Skill 层
 
 ```
-┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐
-│codeindex │───▶│loomgraph │───▶│loomgraph │───▶│ LightRAG │
-│  scan    │    │  embed   │    │  inject  │    │    DB    │
-└──────────┘    └──────────┘    └──────────┘    └──────────┘
-     │               │               │               │
-     ▼               ▼               ▼               ▼
-  JSON file      JSON file      JSON file       Graph DB
+/skill 触发 → 编排多个 CLI 命令 + codeindex → 收集 JSON → LLM 综合分析 → Markdown 报告
 ```
 
-| Step | CLI 命令 | 输入 | 输出 |
-|------|----------|------|------|
-| **Parse** | `codeindex scan <repo> --output json` | 源代码目录 | `parse_results.json` |
-| **Embed** | `loomgraph embed <json>` | ParseResult JSON | `embeddings.json` |
-| **Inject** | `loomgraph inject <parse> <embed>` | 两个 JSON | LightRAG DB |
-| **Search** | `loomgraph search <query>` | 查询文本 | 搜索结果 JSON |
+| Skill | 编排的命令 | LLM 分析内容 |
+|-------|-----------|-------------|
+| `/loomgraph-debt-radar` | `codeindex tech-debt` + `loomgraph deps` + `loomgraph overview` + `loomgraph workspace info` | 债务等级评定 + 模块健康度排名 + 重构优先级 |
+| `/loomgraph-sync-advisor` | `loomgraph compare` + `loomgraph graph` + `git diff` | 冲突预测 + 合并策略 + 操作顺序 |
+| `/loomgraph-evolution` | `loomgraph similar` + `loomgraph compare` (逐对) + `loomgraph graph` | 分叉类型判断 + 维护代价量化 + 收敛建议 |
 
-#### 3.3.4 codeindex CLI 集成
-
-LoomGraph 通过 **CLI 调用** codeindex（非 Library 导入），确保三个项目完全独立：
-
-```bash
-# codeindex 作为独立工具
-codeindex scan /path/to/repo --output json > parse_results.json
-```
-
-**codeindex CLI 输出格式**：
-
-```json
-{
-  "success": true,
-  "results": [
-    {
-      "path": "src/auth/user.py",
-      "symbols": [
-        {"name": "UserService", "kind": "class", "signature": "class UserService:", ...}
-      ],
-      "calls": [{"caller": "UserService.login", "callee": "db.find", "line": 15}],
-      "inheritances": [{"child": "UserService", "parent": "BaseService"}],
-      "imports": [{"module": "typing", "names": ["Optional"]}]
-    }
-  ],
-  "summary": {"total_files": 5, "total_symbols": 120, "errors": 0}
-}
-```
-
-#### 3.3.5 错误处理策略
-
-**简单原则：快速失败 + 详细错误信息**
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "CODEINDEX_NOT_FOUND",
-    "message": "codeindex command not found in PATH",
-    "suggestion": "pip install matrix-codeindex",
-    "docs": "https://github.com/dreamlx/codeindex#installation"
-  }
-}
-```
-
-AI Agent 看到这个输出后会：
-1. 理解问题：codeindex 未安装
-2. 执行修复：`pip install matrix-codeindex`
-3. 重试命令
-
-**不需要 LoomGraph 内置复杂的重试/恢复逻辑。**
-
-#### 3.3.6 使用示例
-
-**AI Agent 分步执行**:
-```bash
-# 1. 检查环境
-loomgraph status
-
-# 2. 解析代码
-codeindex scan /repo --output json > parse_results.json
-
-# 3. 生成向量
-loomgraph embed parse_results.json --output embeddings.json
-
-# 4. 注入图谱
-loomgraph inject parse_results.json embeddings.json
-
-# 5. 搜索
-loomgraph search "用户认证逻辑"
-```
-
-**AI Agent 一键执行**:
-```bash
-loomgraph index /repo  # 内部调用上述步骤
-```
-
-详见: [CLI_DESIGN.md](../api/CLI_DESIGN.md)
+**Skill 不做数据计算**，只做流程控制和 LLM 推理。数据全部来自 CLI 的 JSON 输出。
 
 ---
 
-## 4. 核心模块设计
+## 4. 核心模块
 
-### 4.1 Mapper 模块 (`src/loomgraph/core/mapper.py`)
+### 4.1 LightRAGClient (`src/loomgraph/core/lightrag_client.py`)
 
-将 codeindex 输出映射为 LightRAG 输入格式。
+LoomGraph 与 LightRAG 通信的唯一通道。基于 httpx，通过 HTTP API 读写。
 
-```python
-def map_symbol_to_entity(symbol: Symbol, file_path: str, language: str) -> EntityData:
-    """Symbol → LightRAG entity_data"""
-    return EntityData(
-        entity_name=symbol.name,
-        entity_data={
-            "entity_type": symbol.kind,
-            "description": symbol.docstring or f"{symbol.kind}: {symbol.name}",
-            "source_id": f"{file_path}:{symbol.line_start}-{symbol.line_end}",
-            "file_path": file_path,
-            "start_line": symbol.line_start,
-            "end_line": symbol.line_end,
-            "signature": symbol.signature,
-            "language": language,
-        }
-    )
+| 方法 | HTTP 端点 | 用途 |
+|------|-----------|------|
+| `create_entity()` | `POST /graph/entity/create` | 创建单个实体 |
+| `create_relation()` | `POST /graph/relation/create` | 创建单个关系 |
+| `batch_create_graph()` | 批量调用上述两个 | 三阶段注入：entity → stubs → relations |
+| `query()` | `POST /query` | 语义查询 |
+| `get_all_entities()` | `GET /graph/entities/all` | 获取 workspace 全部实体 |
+| `get_all_relations()` | `GET /graph/relations/all` | 获取 workspace 全部关系 |
+| `list_workspaces()` | `GET /api/workspaces` | 列出所有 workspace |
+| `delete_all()` | `DELETE /graph/clear` | 清空 workspace |
+| `health_check()` | `GET /health` | 健康检查 |
 
-def map_call_to_relation(call: Call, file_path: str) -> RelationData:
-    """Call → LightRAG edge_data"""
-    return RelationData(
-        src_id=call.caller,
-        tgt_id=call.callee,
-        edge_data={
-            "relation_type": "CALLS",
-            "weight": 1.0,
-            "file_path": file_path,
-            "line_number": call.line,
-        }
-    )
-```
+Workspace 隔离通过 `LIGHTRAG-WORKSPACE` header 实现，每个 client 实例绑定一个 workspace。
 
-### 4.2 Injector 模块 (`src/loomgraph/core/injector.py`)
+### 4.2 写入模块
 
-批量注入 ParseResult 到 LightRAG。
+| 模块 | 文件 | 职责 |
+|------|------|------|
+| **Mapper** | `core/mapper.py` | codeindex ParseResult → EntityData / RelationData |
+| **Injector** | `core/injector.py` | 批量注入到 LightRAG（调用 `batch_create_graph`） |
+| **Indexer** | `core/indexer.py` | 扫描文件 + 编排 parse → map → inject 流水线 |
+| **Adapter** | `core/adapter.py` | codeindex JSON → LoomGraph ParseResult 适配 |
 
-```python
-async def inject_parse_result(
-    rag: LightRAG,
-    result: ParseResult,
-    embeddings: dict[str, list[float]] | None = None,
-) -> InjectResult:
-    """将 codeindex 解析结果注入 LightRAG"""
+### 4.3 分析模块
 
-    # 1. 注入实体
-    for symbol in result.symbols:
-        entity = map_symbol_to_entity(symbol, file_path, language)
-        if embeddings:
-            entity.entity_data["embedding"] = embeddings[entity.entity_name]
-        await rag.acreate_entity(entity.entity_name, entity.entity_data)
+| 模块 | 文件 | 输入 | 输出 |
+|------|------|------|------|
+| **DepsAnalyzer** | `core/deps.py` | 全部 entities + relations | 模块级依赖图 |
+| **OverviewAnalyzer** | `core/overview.py` | 全部 entities + relations + 可选 LLM | 模块概览 + 摘要 |
+| **CompareAnalyzer** | `core/compare.py` | 两个 workspace 的 entities + relations | 实体/关系 diff |
+| **SimilarAnalyzer** | `core/similar.py` | N 个 workspace 的 entities + relations | 相似实体匹配 |
+| **ImpactAnalyzer** | `core/impact/` | git diff + LightRAG query | 变更影响 + 风险评估 |
 
-    # 2. 注入调用关系
-    for call in result.calls:
-        rel = map_call_to_relation(call, file_path)
-        await rag.acreate_relation(rel.src_id, rel.tgt_id, rel.edge_data)
-
-    # 3. 注入继承关系
-    for inh in result.inheritances:
-        rel = map_inheritance_to_relation(inh, file_path)
-        await rag.acreate_relation(rel.src_id, rel.tgt_id, rel.edge_data)
-```
-
-### 4.3 Indexer 模块 (`src/loomgraph/core/indexer.py`)
-
-完整索引流水线。
+所有 Analyzer 遵循相同模式：
 
 ```python
-async def index_repository(
-    repo_path: str,
-    rag: LightRAG,
-    embedding_client: EmbeddingClient,
-    parse_file: Callable,
-) -> IndexResult:
-    """MVP 索引策略：全量重建"""
+@dataclass
+class XxxAnalyzer:
+    client: Any  # LightRAGClient
+    async def analyze(self) -> XxxResult: ...
 
-    # Step 1: 清空该仓库的旧数据
-    await clear_repo_entities(rag, repo_path)
-
-    # Step 2: 扫描代码文件
-    files = scan_code_files(repo_path)
-
-    # Step 3: 解析 → 向量化 → 注入
-    for file_path in files:
-        result = parse_file(file_path)
-        if result.error:
-            continue
-
-        texts = [s.signature or s.name for s in result.symbols]
-        embeddings = await embedding_client.embed(texts)
-        embedding_map = {s.name: emb for s, emb in zip(result.symbols, embeddings)}
-
-        await inject_parse_result(rag, result, embedding_map)
-
-    return IndexResult(repo_path=repo_path, files=len(files), ...)
+@dataclass
+class XxxResult:
+    def to_dict(self) -> dict[str, Any]: ...
 ```
 
 ### 4.4 Embedding 模块 (`src/loomgraph/embedding/jina.py`)
 
-Jina Code V2 客户端，支持 TEI 和 Jina API。
+Jina Code V2 客户端，支持 TEI (Text Embeddings Inference) 部署。
 
-```python
-class JinaEmbeddingClient(EmbeddingClient):
-    """Jina Code V2 via TEI (8K context)"""
-
-    async def embed(self, texts: list[str]) -> EmbeddingResult:
-        """批量向量化，自动分批"""
-        all_embeddings = []
-        for batch in batched(texts, self._config.batch_size):
-            result = await self._embed_batch(batch)
-            all_embeddings.extend(result)
-        return EmbeddingResult(embeddings=all_embeddings, ...)
-
-    async def embed_with_retry(self, texts: list[str], max_retries: int = 3):
-        """带重试的向量化"""
-        ...
-```
+- 8K context window
+- 自动分批 (batch_size=32)
+- 带重试的向量化
 
 ---
 
 ## 5. 存储架构
 
-### 5.1 使用 LightRAG 内置存储
+### 5.1 存储所有权
 
-LoomGraph **不自定义数据库表结构**，完全复用 LightRAG 的 PostgreSQL 存储：
-
-| 组件 | LightRAG 类 | 用途 |
-|------|------------|------|
-| KV 存储 | `PGKVStorage` | 配置、缓存 |
-| 向量存储 | `PGVectorStorage` | Embedding 检索 |
-| 图存储 | `PGGraphStorage` | 实体关系图 (Apache AGE) |
-| 文档状态 | `PGDocStatusStorage` | 索引状态追踪 |
-
-### 5.2 数据库初始化
-
-```sql
--- scripts/init-db.sql (仅启用扩展)
-CREATE EXTENSION IF NOT EXISTS vector;       -- pgvector
-CREATE EXTENSION IF NOT EXISTS pg_trgm;      -- 文本模糊搜索
--- Apache AGE 由 LightRAG 自动管理
 ```
+LoomGraph  ──(HTTP)──▶  LightRAG API  ──(SQL)──▶  PostgreSQL
+  不碰 DB                  拥有 DB                  1 个实例
+```
+
+LoomGraph **无自有数据库表**。`storage/` 目录预留，当前为空。
+
+### 5.2 LightRAG 管理的存储
+
+| 组件 | 用途 |
+|------|------|
+| pgvector | Embedding 向量存储 + 相似度检索 |
+| Graph tables | 实体/关系图谱 |
+| KV store | 配置、缓存 |
+
+### 5.3 Workspace 隔离
+
+每个 workspace 在 LightRAG 内部是独立的数据空间。LoomGraph 通过 HTTP header 切换：
+
+```
+LIGHTRAG-WORKSPACE: myproject        # 单 workspace 操作
+LIGHTRAG-WORKSPACE: myproject:main   # 分支级 workspace
+```
+
+跨 workspace 操作（compare / similar）通过创建多个 `LightRAGClient` 实例实现，每个绑定不同 workspace。
 
 ---
 
-## 6. 关系类型定义
+## 6. 关系类型
 
 | 类型 | 说明 | 来源 |
 |------|------|------|
-| `CALLS` | 函数/方法调用 | codeindex.Call |
-| `INHERITS` | 类继承 | codeindex.Inheritance |
-| `IMPORTS` | 模块导入 | codeindex.Import |
+| `CALLS` | 函数/方法调用 | codeindex Call |
+| `INHERITS` | 类继承 | codeindex Inheritance |
+| `IMPORTS` | 模块导入 | codeindex Import |
 
 ---
 
-## 7. API 设计
+## 7. CLI 设计
 
-### 7.1 CLI 接口
+### 7.1 设计原则
 
-```bash
-# 初始化配置
-loomgraph init --db-url postgresql://... --embedding-url http://...
+LoomGraph 的主要用户是 AI Agent（Claude Code Skills / MCP 客户端）。
 
-# 索引代码库 (全量重建)
-loomgraph index --path /path/to/repo
+| 原则 | 实现 |
+|------|------|
+| 输出格式 | 全部 JSON（`{"success": true, "data": {...}}`） |
+| 错误处理 | 结构化错误 + suggestion 字段，Agent 可据此修复 |
+| 命令风格 | 原子命令可组合，Skill 负责编排 |
+| Workspace | 默认自动检测（当前目录名），`-w` 可覆盖 |
+| 日志 | stderr 输出，不干扰 stdout JSON（pipe-safe） |
 
-# 代码搜索
-loomgraph search "处理用户登录的函数" [--mode hybrid|semantic|keyword]
+### 7.2 命令全览
 
-# 图谱查询
-loomgraph graph --entity "UserService.login" --query callers
+| 分类 | 命令 | 说明 |
+|------|------|------|
+| **写入** | `index <path>` | 一键索引（Cold Rebuild） |
+| | `index --clear <path>` | 清空后重建 |
+| | `update [--since REF]` | 增量索引 git 变更 |
+| | `embed <json>` | 单独生成 Embedding |
+| | `inject <parse> <embed>` | 单独注入 LightRAG |
+| **单 Workspace 读取** | `search "<query>"` | 语义搜索 |
+| | `graph "<entity>"` | 调用关系查询 |
+| | `deps [--depth N]` | 模块级依赖图 |
+| | `overview [--no-summary]` | 项目模块概览 |
+| | `impact [TARGET]` | 变更影响分析 |
+| **跨 Workspace 读取** | `compare --ws1 A --ws2 B` | 实体/关系结构 diff |
+| | `similar -e "<entity>"` | 相似实体检测 |
+| **管理** | `workspace list` | 列出所有 workspace |
+| | `workspace info [NAME]` | 查看 workspace 详情 |
+| | `workspace delete NAME --yes` | 删除 workspace |
+| | `status` | 服务连接状态 |
+| | `version` | 版本信息 |
+| | `install-skills` | 安装 Skills 到 `~/.claude/skills/` |
 
-# 启动 MCP 服务
-loomgraph serve --port 8080
-```
+### 7.3 MCP Server (v0.7.0 规划)
 
-### 7.2 MCP Tools (v0.2.0+)
-
-```json
-{
-  "tools": [
-    {
-      "name": "search_code",
-      "description": "搜索代码库中相关的代码片段",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "query": { "type": "string" },
-          "mode": { "enum": ["hybrid", "semantic", "keyword"] },
-          "limit": { "type": "integer", "default": 10 }
-        },
-        "required": ["query"]
-      }
-    },
-    {
-      "name": "get_callers",
-      "description": "获取调用指定函数的所有函数",
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "entity": { "type": "string" },
-          "depth": { "type": "integer", "default": 1 }
-        },
-        "required": ["entity"]
-      }
-    }
-  ]
-}
-```
+封装全部 CLI 命令为 MCP Tools，服务 Cursor/IDE 用户。当前未实现。
 
 ---
 
-## 8. 部署架构
+## 8. Skill 设计
 
-### 8.1 开发环境 (Docker Compose)
+### 8.1 交付形态
+
+```
+skills/
+├── loomgraph-debt-radar/SKILL.md      # Skill A: 债务雷达
+├── loomgraph-sync-advisor/SKILL.md    # Skill B: 智能同步
+├── loomgraph-evolution/SKILL.md       # Skill C: 演化观察
+├── loomgraph-setup/SKILL.md           # 配置向导
+└── loomgraph-init/SKILL.md            # CLAUDE.md 注入
+```
+
+打包进 wheel → `loomgraph install-skills` → 安装到 `~/.claude/skills/` → Claude Code 自动发现。
+
+### 8.2 Skill 工作模式
+
+每个 Skill 是一个 SKILL.md 文件，包含：
+1. **前置检查** — 验证工具可用、workspace 存在
+2. **数据收集** — 分步执行 CLI 命令，收集 JSON 结果
+3. **LLM 分析** — 将收集的数据汇总，按模板生成报告
+4. **输出** — Markdown 格式的分析报告
+
+Skill 运行在 Claude Code Agent 上下文中，Agent 负责执行 bash 命令和 LLM 推理。
+
+---
+
+## 9. 配置
+
+### 9.1 配置文件
 
 ```yaml
-version: '3.8'
+# .loomgraph.yaml
+lightrag:
+  api_url: "http://117.131.45.179:3001"
+  api_timeout: 30.0
 
+embedding:
+  base_url: "http://117.131.45.179:3002"
+```
+
+### 9.2 配置优先级
+
+1. 环境变量 (`LOOMGRAPH_LIGHTRAG__API_URL`)
+2. `.loomgraph.yaml`（当前目录）
+3. `~/.config/loomgraph/config.yaml`
+4. 默认值
+
+---
+
+## 10. 部署架构
+
+### 10.1 H200 服务器
+
+| 服务 | 端口 | 说明 |
+|------|------|------|
+| GLM-4.7-fp8 (vLLM) | 3000 | LLM 推理（LightRAG 内部使用） |
+| LightRAG API | 3001 | 图谱存储 + 检索 |
+| Jina Code V2 (TEI) | 3002 | 代码 Embedding |
+| PostgreSQL | 5432 | pgvector + 图存储（LightRAG 管理） |
+
+### 10.2 本地开发
+
+```yaml
+# docker-compose.yml — 仅为 LightRAG 提供 PostgreSQL
 services:
   postgres:
     image: pgvector/pgvector:pg16
-    environment:
-      POSTGRES_DB: loomgraph
-      POSTGRES_USER: loomgraph
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-loomgraph_dev}
     ports:
       - "5432:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-
-  embedding:
-    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.1
-    command: --model-id jinaai/jina-embeddings-v2-base-code
-    ports:
-      - "8080:80"
-
-volumes:
-  pgdata:
-```
-
-### 8.2 生产环境 (H200)
-
-```yaml
-services:
-  embedding:
-    image: ghcr.io/huggingface/text-embeddings-inference:89-1.1
-    command: --model-id jinaai/jina-embeddings-v2-base-code --max-batch-tokens 65536
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
 ```
 
 ---
 
-## 9. 测试策略
+## 11. 测试覆盖
 
-### 9.1 测试金字塔
-
-```
-                    ┌─────────────┐
-                    │   E2E Tests │  10%
-                    │  (MCP/CLI)  │
-                    └──────┬──────┘
-                           │
-              ┌────────────┴────────────┐
-              │    Integration Tests    │  30%
-              │  (DB, Embedding, RAG)   │
-              └────────────┬────────────┘
-                           │
-     ┌─────────────────────┴─────────────────────┐
-     │              Unit Tests                    │  60%
-     │  (Mapper, Injector, Indexer, Embedding)   │
-     └───────────────────────────────────────────┘
-```
-
-### 9.2 当前测试覆盖
-
-| 模块 | 测试文件 | 测试数 |
-|------|----------|--------|
-| Config | `tests/unit/test_config.py` | 7 |
-| Mapper | `tests/unit/test_mapper.py` | 26 |
-| Injector | `tests/unit/test_injector.py` | 9 |
-| Embedding | `tests/unit/test_embedding.py` | 11 |
-| Indexer | `tests/unit/test_indexer.py` | 11 |
-| **Total** | | **64** |
+| 模块 | 测试数 |
+|------|--------|
+| Config | 7 |
+| Mapper | 26 |
+| Injector | 8 |
+| Embedding | 11 |
+| Indexer | 11 |
+| CLI | 49 |
+| LightRAGClient | 18 |
+| Impact | 19 |
+| Git | 8 |
+| DepsAnalyzer | 14 |
+| OverviewAnalyzer | 10 |
+| CompareAnalyzer | 11 |
+| SimilarAnalyzer | 10 |
+| Integration | 22 |
+| **Total** | **224** |
 
 ---
 
-## 10. 附录
+## 12. 附录
 
-### 10.1 技术选型
+### 12.1 技术选型
 
 | 选项 | 选择 | 理由 |
 |------|------|------|
-| 向量存储 | pgvector (via LightRAG) | 简化运维，事务一致性 |
-| 图存储 | Apache AGE (via LightRAG) | LightRAG 内置支持 |
-| AST 解析 | codeindex (tree-sitter) | 外部依赖，职责分离 |
-| RAG 框架 | LightRAG | 轻量，已有 API 可复用 |
-| Embedding | Jina Code V2 | 8K context，代码优化 |
+| 向量存储 | pgvector (LightRAG 管理) | 简化运维，事务一致性 |
+| 图存储 | PostgreSQL graph tables (LightRAG 管理) | 单一数据库，LightRAG 内置 |
+| AST 解析 | codeindex (tree-sitter) | 外部 CLI，职责分离 |
+| RAG 框架 | LightRAG (HTTP API) | 轻量，workspace 隔离 |
+| Embedding | Jina Code V2 (8K context) | 代码语义优化 |
+| HTTP 客户端 | httpx (async) | 并发连接复用 |
 
-### 10.2 相关文档
+### 12.2 关键 ADR
 
-- [DATA_CONTRACT.md](../api/DATA_CONTRACT.md) - 数据映射契约
-- [ADR-005](../adr/ADR-005-extraction-strategy.md) - AST 优先策略
-- [ADR-006](../adr/ADR-006-mvp-simplification.md) - MVP 简化决策
-- [WORKSTREAM_ASSIGNMENT.md](../WORKSTREAM_ASSIGNMENT.md) - 工作流分配
+| ADR | 决策 | 影响 |
+|-----|------|------|
+| ADR-001 | PostgreSQL 统一存储 | 单一数据库，LightRAG 管理 |
+| ADR-002 | 选择 LightRAG | 轻量框架，HTTP API |
+| ADR-005 | AST 优先提取 | MVP 不使用 LLM 提取 |
+| ADR-006 | MVP 简化 | 全量重建，无增量 GC |
+| ADR-008 | 双向调度器 | codeindex/LoomGraph 能力边界 |
+| ADR-009 | Workspace 即知识快照 | 从隔离机制到可对比的知识切片 |
+
+### 12.3 相关文档
+
+- [DATA_CONTRACT.md](../api/DATA_CONTRACT.md) — codeindex ↔ LightRAG 数据映射
+- [CLI_DESIGN.md](../api/CLI_DESIGN.md) — CLI 命令详细设计
+- [ROADMAP.md](../ROADMAP.md) — 开发路线图
+- [EPIC-004](../epics/EPIC-004-bidirectional-orchestrator.md) — deps / overview
+- [EPIC-005](../epics/EPIC-005-workspace-management.md) — workspace 管理
+- [EPIC-006](../epics/EPIC-006-cross-workspace-comparison.md) — compare / similar
+- [EPIC-007](../epics/EPIC-007-entropy-reduction-skills.md) — 研发熵减 Skills
