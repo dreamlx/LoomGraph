@@ -1,14 +1,14 @@
 # LoomGraph 开发路线图
 
-**版本**: 0.2.4
-**更新日期**: 2026-02-18
+**版本**: 0.2.5
+**更新日期**: 2026-02-19
 
 ---
 
-## 📍 当前状态: Phase 2 已完成，Phase 3 进行中
+## 📍 当前状态: Phase 3 第一阶段已完成
 
-**已完成**: MVP 核心 + LightRAG 集成 + CLI 全部命令 + 双通道发布 + 客户交付
-**进行中**: 项目级智能查询 (EPIC-004)
+**已完成**: MVP 核心 + LightRAG 集成 + CLI + 双通道发布 + deps/overview (EPIC-004) + Workspace 管理 (EPIC-005) + 跨 Workspace 对比 (EPIC-006)
+**下一个**: 研发熵减 Skills (EPIC-007)
 
 ---
 
@@ -74,10 +74,10 @@
 > **ADR**: [ADR-008 双向调度器](adr/ADR-008-bidirectional-orchestrator.md)
 > **价值**: 任何客户立即可用，单项目架构理解
 
-| EPIC | Feature | 描述 | 预估 |
+| EPIC | Feature | 描述 | 状态 |
 |------|---------|------|------|
-| EPIC-004 | `loomgraph deps` | 模块级依赖图（纯图查询） | 2.5d |
-| EPIC-004 | `loomgraph overview` | 项目模块概览（图查询 + LLM 摘要） | 3.5d |
+| EPIC-004 | `loomgraph deps` | 模块级依赖图（纯图查询） | ✅ v0.2.5 |
+| EPIC-004 | `loomgraph overview` | 项目模块概览（图查询 + LLM 摘要） | ✅ v0.2.5 |
 
 详见 [EPIC-004](epics/EPIC-004-bidirectional-orchestrator.md)
 
@@ -86,39 +86,35 @@
 > **ADR**: [ADR-009 Workspace 即知识快照](adr/ADR-009-workspace-as-knowledge-snapshot.md)
 > **价值**: 多分支/多项目客户，解锁跨分支分析
 
-**v0.4.0 — Workspace 管理 (EPIC-005)**
+**v0.4.0 — Workspace 管理 (EPIC-005) ✅**
 
-| Feature | 描述 | 预估 | 阻塞关系 |
-|---------|------|------|----------|
-| `loomgraph workspace list` | 列出所有 workspace + 统计 | 1.5d | 不阻塞 EPIC-004 |
-| `loomgraph workspace info` | 指定 workspace 详情 | 1d | — |
-| `loomgraph workspace delete` | 清理指定 workspace | 0.5d | — |
+| Feature | 描述 | 状态 |
+|---------|------|------|
+| `loomgraph workspace list` | 列出所有 workspace | ✅ |
+| `loomgraph workspace info` | 指定 workspace 详情 | ✅ |
+| `loomgraph workspace delete` | 清理指定 workspace | ✅ |
 
 详见 [EPIC-005](epics/EPIC-005-workspace-management.md)
 
-> 注: EPIC-005 与 EPIC-004 **互相独立**，可并行开发。但 EPIC-004 客户价值更直接，建议先做。
-> EPIC-005 有技术验证风险（LightRAG 是否暴露 workspace 列表 API），可在 EPIC-004 开发期间验证。
+**v0.5.0 — 跨 Workspace 对比 (EPIC-006) ✅**
 
-**v0.5.0 — 跨 Workspace 对比 (EPIC-006)**
-
-| Feature | 描述 | 预估 | 阻塞关系 |
-|---------|------|------|----------|
-| `loomgraph compare` | 两个 workspace 的实体/关系 diff | 5d | 依赖 EPIC-005 (workspace 可见性) |
-| `loomgraph similar` | 跨 workspace 相似实体检测 | 3d | 依赖 EPIC-005 |
+| Feature | 描述 | 状态 |
+|---------|------|------|
+| `loomgraph compare` | 两个 workspace 的实体/关系 diff | ✅ |
+| `loomgraph similar` | 跨 workspace 相似实体检测 | ✅ |
 
 详见 [EPIC-006](epics/EPIC-006-cross-workspace-comparison.md)
 
 ### 第三阶段: Skill 交付 — v0.6.0
 
-> **前置**: 能力层 (EPIC-004 + 005 + 006) 全部完成后开发
 > **交付**: 3 个 Claude Code Skills，随 wheel 分发，`install-skills` 安装
 > **原则**: Skill 是编排者，LoomGraph CLI 提供数据，Skill 负责 LLM 推理 + 报告
 
-| Skill | 名称 | 功能 | 最低依赖 |
-|-------|------|------|----------|
-| Skill A | `loomgraph-debt-radar` | 技术债务审计报告 | EPIC-004 (deps/overview) |
-| Skill B | `loomgraph-sync-advisor` | 跨分支同步建议 | EPIC-006 (compare) |
-| Skill C | `loomgraph-evolution` | 代码演化趋势分析 | EPIC-006 (compare/similar) |
+| Skill | 名称 | 功能 | 最低依赖 | 状态 |
+|-------|------|------|----------|------|
+| Skill A | `loomgraph-debt-radar` | 技术债务审计报告 | EPIC-004 (deps/overview) | ✅ |
+| Skill B | `loomgraph-sync-advisor` | 跨分支同步建议 | EPIC-006 (compare) | ✅ |
+| Skill C | `loomgraph-evolution` | 代码演化趋势分析 | EPIC-006 (compare/similar) | ✅ |
 
 详见 [EPIC-007](epics/EPIC-007-entropy-reduction-skills.md)
 
@@ -165,10 +161,10 @@
 |------|------|------|----------|------|
 | v0.1.0 | Phase 1 | — | MVP: AST + Embedding + CLI | ✅ 已发布 |
 | v0.2.x | Phase 2 | — | LightRAG 集成 + Git + 客户交付 | ✅ 已发布 |
-| **v0.3.0** | **Phase 3** | **能力层** | **deps + overview (单 ws 智能查询)** | **📋 下一个** |
-| v0.4.0 | Phase 3 | 能力层 | workspace 管理 (list/info/delete) | 📋 规划中 |
-| v0.5.0 | Phase 3 | 能力层 | 跨 workspace 对比 (compare/similar) | 📋 规划中 |
-| v0.6.0 | Phase 3 | Skill 层 | 研发熵减 Skills (debt-radar/sync-advisor/evolution) | 📋 规划中 |
+| v0.2.5 | Phase 3 | 能力层 | deps + overview (EPIC-004) | ✅ 已发布 |
+| **v0.4.0** | **Phase 3** | **能力层** | **workspace 管理 (list/info/delete)** | **✅ 已完成** |
+| **v0.5.0** | **Phase 3** | **能力层** | **跨 workspace 对比 (compare/similar)** | **✅ 已完成** |
+| **v0.6.0** | **Phase 3** | **Skill 层** | **研发熵减 Skills (debt-radar/sync-advisor/evolution)** | **✅ 已完成** |
 | v0.7.0 | Phase 3 | 集成层 | MCP Server (封装全部命令) | 📋 规划中 |
 | v1.0.0 | Phase 4 | — | 生产就绪 | 📋 远期 |
 
@@ -180,12 +176,18 @@
 |------|--------|------|
 | Config | 7 | ✅ |
 | Mapper | 26 | ✅ |
-| Injector | 9 | ✅ |
+| Injector | 8 | ✅ |
 | Embedding | 11 | ✅ |
 | Indexer | 11 | ✅ |
-| CLI | 27 | ✅ |
-| LightRAGClient | 34 | ✅ |
-| **Total** | **125** | ✅ |
+| CLI | 49 | ✅ |
+| LightRAGClient | 18 | ✅ |
+| Impact | 19 | ✅ |
+| Git | 8 | ✅ |
+| DepsAnalyzer | 14 | ✅ |
+| OverviewAnalyzer | 10 | ✅ |
+| CompareAnalyzer | 11 | ✅ |
+| SimilarAnalyzer | 10 | ✅ |
+| **Total** | **202** | ✅ |
 
 ---
 
@@ -265,6 +267,10 @@ EPIC-006 ──────────┐         │            │    ├─�
 
 ## 更新日志
 
+- **2026-02-19 (v0.2.5)**:
+  - EPIC-004 已完成: `loomgraph deps` + `loomgraph overview`
+  - 新增 DepsAnalyzer、OverviewAnalyzer、LightRAGClient bulk API
+  - 测试覆盖更新到 163 tests
 - **2026-02-18 (v0.2.4)**:
   - Phase 3 重构为四阶段: 能力层 → Skill 层 → 集成层
   - 新增 EPIC-007: 研发熵减 Skills (debt-radar/sync-advisor/evolution)

@@ -264,6 +264,89 @@ class TestGetAllEntities:
             assert "Connection failed" in str(exc_info.value)
 
 
+class TestListWorkspaces:
+    """Tests for list_workspaces method."""
+
+    @pytest.fixture
+    def client(self) -> LightRAGClient:
+        """Create a test client."""
+        return LightRAGClient(base_url="http://localhost:3001", timeout=5.0)
+
+    @pytest.mark.asyncio
+    async def test_list_workspaces_success(self, client: LightRAGClient) -> None:
+        """Should return list of workspace names."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"workspaces": ["ws1", "ws2"], "count": 2}
+
+        with patch("httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client.get.return_value = mock_response
+            mock_client_class.return_value = mock_client
+
+            result = await client.list_workspaces()
+
+            assert result == ["ws1", "ws2"]
+            mock_client.get.assert_called_once_with(
+                "http://localhost:3001/api/workspaces",
+                headers={},
+            )
+
+    @pytest.mark.asyncio
+    async def test_list_workspaces_empty(self, client: LightRAGClient) -> None:
+        """Should return empty list when no workspaces exist."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"workspaces": [], "count": 0}
+
+        with patch("httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client.get.return_value = mock_response
+            mock_client_class.return_value = mock_client
+
+            result = await client.list_workspaces()
+
+            assert result == []
+
+    @pytest.mark.asyncio
+    async def test_list_workspaces_api_error(self, client: LightRAGClient) -> None:
+        """Should raise LightRAGAPIError on API failure."""
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        mock_response.json.return_value = {"detail": "Internal server error"}
+
+        with patch("httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client.get.return_value = mock_response
+            mock_client_class.return_value = mock_client
+
+            with pytest.raises(LightRAGAPIError) as exc_info:
+                await client.list_workspaces()
+
+            assert exc_info.value.status_code == 500
+
+    @pytest.mark.asyncio
+    async def test_list_workspaces_connection_error(self, client: LightRAGClient) -> None:
+        """Should raise LightRAGAPIError on connection failure."""
+        with patch("httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client.get.side_effect = httpx.RequestError("Connection refused")
+            mock_client_class.return_value = mock_client
+
+            with pytest.raises(LightRAGAPIError) as exc_info:
+                await client.list_workspaces()
+
+            assert "Connection failed" in str(exc_info.value)
+
+
 class TestGetAllRelations:
     """Tests for get_all_relations method."""
 

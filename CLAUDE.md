@@ -24,16 +24,15 @@ LoomGraph 是一款基于 NVIDIA H200 的企业级代码智能理解引擎，结
 
 ## 三仓库架构
 
-```
-codeindex (AST 解析)  →  LoomGraph (调度)  →  LightRAG (存储检索)
-     CLI                    CLI/Skill              API
-```
+> **一句话**: codeindex 负责**看**（AST 解析），LoomGraph 负责**想**和**说**（映射调度 + Skill 编排），LightRAG 负责**记**（存储检索）。
 
-| 仓库 | 职责 | 路径 |
-|------|------|------|
-| **codeindex** | AST 解析，提取 Symbol/Call/Inheritance | `/Users/dreamlinx/Projects/codeindex` |
-| **LoomGraph** | Pipeline 调度，Embedding，Claude Code Skill | 本项目 |
-| **LightRAG** | 图谱存储，向量检索，查询 | `/Users/dreamlinx/Projects/LightRAG` |
+| 仓库 | 职责 | GitHub | 本地路径 |
+|------|------|--------|----------|
+| **codeindex** | AST 解析，提取 Symbol/Call/Inheritance | [dreamlx/codeindex](https://github.com/dreamlx/codeindex) | `/Users/dreamlinx/Projects/codeindex` |
+| **LoomGraph** | Pipeline 调度，Embedding，CLI/Skill | [dreamlx/LoomGraph](https://github.com/dreamlx/LoomGraph) | 本项目 |
+| **LightRAG** | 图谱存储，向量检索，查询 | [dreamlx/LightRAG](https://github.com/dreamlx/LightRAG) | `/Users/dreamlinx/Projects/LightRAG` |
+
+数据流: `codeindex scan` → ParseResult → `LoomGraph embed/inject` → LightRAG API → PostgreSQL
 
 ## 存储所有权（重要）
 
@@ -246,6 +245,14 @@ embedding:
 | `loomgraph search "<query>"` | 语义搜索代码 |
 | `loomgraph graph "<entity>"` | 查询调用关系 |
 | `loomgraph impact [TARGET]` | 分析代码变更影响 |
+| `loomgraph workspace list` | 列出所有 workspace |
+| `loomgraph workspace info [NAME]` | 查看 workspace 详情（默认自动检测） |
+| `loomgraph workspace delete NAME --yes` | 删除指定 workspace |
+| `loomgraph compare --ws1 A --ws2 B` | 跨 workspace 实体/关系 diff |
+| `loomgraph similar -e "<entity>"` | 跨 workspace 相似实体检测 |
+| `/loomgraph-debt-radar [path]` | 生成技术债务审计报告（Claude Code Skill） |
+| `/loomgraph-sync-advisor --ws1 A --ws2 B` | 跨分支同步建议 + 冲突预测（Claude Code Skill） |
+| `/loomgraph-evolution --entity X` | 代码演化趋势分析（Claude Code Skill） |
 
 ### 版本与状态
 

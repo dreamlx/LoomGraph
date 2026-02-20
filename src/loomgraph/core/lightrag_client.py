@@ -487,6 +487,38 @@ class LightRAGClient:
         )
         return result
 
+    async def list_workspaces(self) -> list[str]:
+        """List all available workspaces.
+
+        Calls GET /api/workspaces without workspace header to get global list.
+
+        Returns:
+            List of workspace name strings
+
+        Raises:
+            LightRAGAPIError: If request fails
+        """
+        async with httpx.AsyncClient(timeout=self.timeout, trust_env=False) as client:
+            try:
+                response = await client.get(
+                    f"{self.base_url}/api/workspaces",
+                    headers=self._get_headers(),
+                )
+                data = response.json()
+
+                if response.status_code >= 400:
+                    detail = data.get("detail", str(data))
+                    raise LightRAGAPIError(
+                        f"List workspaces failed: {detail}",
+                        status_code=response.status_code,
+                        detail=detail,
+                    )
+
+                return data.get("workspaces", [])
+
+            except httpx.RequestError as e:
+                raise LightRAGAPIError(f"Connection failed: {e}") from e
+
     async def get_all_entities(self) -> list[dict[str, Any]]:
         """Get all entities from the knowledge graph.
 

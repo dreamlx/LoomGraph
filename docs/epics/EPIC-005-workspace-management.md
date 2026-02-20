@@ -1,6 +1,6 @@
 # EPIC-005: Workspace 管理
 
-**状态**: 📋 规划中
+**状态**: ✅ 已完成
 **优先级**: P1
 **预估**: 2-3 天
 **ADR**: [ADR-009](../adr/ADR-009-workspace-as-knowledge-snapshot.md)
@@ -142,8 +142,8 @@ loomgraph workspace delete zcyl-backend:old-branch
 
 ## 验收标准
 
-- [ ] `loomgraph workspace list` 返回所有 workspace 及统计
-- [ ] `loomgraph workspace info` 返回指定 workspace 详情
-- [ ] `loomgraph workspace delete` 能清理指定 workspace
+- [x] `loomgraph workspace list` 返回所有 workspace 及统计
+- [x] `loomgraph workspace info` 返回指定 workspace 详情
+- [x] `loomgraph workspace delete` 能清理指定 workspace
 - [ ] 客户文档包含 workspace 命名约定
-- [ ] 单元测试覆盖
+- [x] 单元测试覆盖 (18 new tests: 4 client + 14 CLI)
