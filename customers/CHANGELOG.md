@@ -4,6 +4,47 @@
 
 ---
 
+## [0.6.0] - 2026-02-20
+
+### 新增
+- `loomgraph workspace list` - 列出所有 workspace 及实体/关系数量
+- `loomgraph workspace info [NAME]` - 查看 workspace 详情（默认自动检测当前目录）
+- `loomgraph workspace delete NAME --yes` - 删除指定 workspace 及其全部数据
+- `loomgraph compare --ws1 A --ws2 B` - 跨 workspace 结构对比（新增/删除实体、关系变化）
+- `loomgraph similar -e "<entity>"` - 跨 workspace 相似实体检测（精确匹配 + 模糊匹配）
+- `/loomgraph-debt-radar` Skill - 技术债务审计报告（需 Claude Code 执行）
+- `/loomgraph-sync-advisor` Skill - 跨分支同步建议 + 冲突预测（需 Claude Code 执行）
+- `/loomgraph-evolution` Skill - 代码演化趋势分析（需 Claude Code 执行）
+
+### 使用示例
+```bash
+# Workspace 管理
+loomgraph workspace list
+loomgraph workspace info zcyl-backend
+
+# 跨分支对比（需先为不同分支建立 workspace）
+loomgraph compare --ws1 zcyl-backend-main --ws2 zcyl-backend-feature
+
+# 查找相似实体
+loomgraph similar -e "AuthService"
+
+# Skills（在 Claude Code 中执行）
+# /loomgraph-debt-radar
+# /loomgraph-sync-advisor --ws1 main --ws2 feature-branch
+# /loomgraph-evolution --entity AuthService
+```
+
+### 更新方式
+```bash
+cd /path/to/loomgraph-package
+source ~/.loomgraph-venv/bin/activate
+pip install ./loomgraph-*.whl
+loomgraph install-skills  # 更新 Skills
+loomgraph version  # 应显示 0.6.0
+```
+
+---
+
 ## [0.2.5] - 2026-02-19
 
 ### 新增
@@ -111,6 +152,7 @@ pip install .
 
 | 版本 | 主要功能 | 必须更新？ |
 |------|----------|-----------|
+| 0.6.0 | workspace 管理 + 跨 workspace 对比 + 3 个分析 Skills | **强烈推荐** - 全新分析能力 |
 | 0.2.5 | deps/overview 依赖分析 + 注入修复 | 推荐 - 新分析能力 |
 | 0.2.4 | Workspace 自动检测 | 推荐 - 简化配置 |
 | 0.2.3 | Workspace 隔离 + 更新策略 | 多项目用户必须 |
