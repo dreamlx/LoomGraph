@@ -90,7 +90,7 @@ class TestVersionCommand:
         result = runner.invoke(main, ["version"])
         assert result.exit_code == 0
 
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["success"] is True
         assert "version" in data["data"]
         assert "python" in data["data"]
@@ -99,7 +99,7 @@ class TestVersionCommand:
         """Test --version option."""
         result = runner.invoke(main, ["--version"])
         assert result.exit_code == 0
-        assert "loomgraph" in result.output.lower()
+        assert "loomgraph" in result.stdout.lower()
 
 
 class TestStatusCommand:
@@ -123,7 +123,7 @@ class TestStatusCommand:
         result = runner.invoke(main, ["status"])
         assert result.exit_code == 0
 
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["success"] is True
         assert "dependencies" in data["data"]
 
@@ -145,7 +145,7 @@ class TestStatusCommand:
         result = runner.invoke(main, ["status"])
         assert result.exit_code == 1
 
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["success"] is False
         assert data["error"]["code"] == ErrorCode.DEPENDENCIES_MISSING
 
@@ -168,7 +168,7 @@ class TestIndexCommand:
         result = runner.invoke(main, ["index", str(tmp_path)])
         assert result.exit_code == 1
 
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["success"] is False
         assert data["error"]["code"] == ErrorCode.CODEINDEX_NOT_FOUND
 
@@ -190,7 +190,7 @@ class TestIndexCommand:
         result = runner.invoke(main, ["index", str(tmp_path)])
         assert result.exit_code == 1
 
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["success"] is False
         assert data["error"]["code"] == ErrorCode.CODEINDEX_FAILED
 
@@ -225,7 +225,7 @@ class TestIndexCommand:
         result = runner.invoke(main, ["index", str(tmp_path)])
         assert result.exit_code == 0
 
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["success"] is True
         assert data["data"]["files_scanned"] == 1
         assert data["data"]["entities_created"] == 2
@@ -250,7 +250,7 @@ class TestEmbedCommand:
         result = runner.invoke(main, ["embed", str(invalid_file)])
         assert result.exit_code == 1
 
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["success"] is False
         assert data["error"]["code"] == ErrorCode.INVALID_INPUT
 
@@ -278,7 +278,7 @@ class TestEmbedCommand:
         result = runner.invoke(main, ["embed", str(input_file)])
         assert result.exit_code == 0
 
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["success"] is True
         assert data["data"]["count"] == 1
 
@@ -323,7 +323,7 @@ class TestInjectCommand:
         )
         assert result.exit_code == 0
 
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["success"] is True
         assert data["data"]["entities_created"] == 2
         assert data["data"]["relations_created"] == 2
@@ -345,7 +345,7 @@ class TestSearchCommand:
         result = runner.invoke(main, ["search", "user login"])
         assert result.exit_code == 0
 
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["success"] is True
         assert data["data"]["query"] == "user login"
         assert data["data"]["mode"] == "hybrid"
@@ -365,7 +365,7 @@ class TestSearchCommand:
         )
         assert result.exit_code == 0
 
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["data"]["mode"] == "local"
 
 
@@ -385,7 +385,7 @@ class TestGraphCommand:
         result = runner.invoke(main, ["graph", "UserService.login"])
         assert result.exit_code == 0
 
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["success"] is True
         assert data["data"]["entity"] == "UserService.login"
         assert "callers" in data["data"]
@@ -405,7 +405,7 @@ class TestGraphCommand:
         )
         assert result.exit_code == 0
 
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert "callers" in data["data"]
         assert "callees" not in data["data"]
 
@@ -424,7 +424,7 @@ class TestGraphCommand:
         )
         assert result.exit_code == 0
 
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["success"] is True
 
 
@@ -500,30 +500,30 @@ class TestCLIHelp:
         """Test main help."""
         result = runner.invoke(main, ["--help"])
         assert result.exit_code == 0
-        assert "LoomGraph" in result.output
-        assert "index" in result.output
-        assert "search" in result.output
-        assert "workspace" in result.output
+        assert "LoomGraph" in result.stdout
+        assert "index" in result.stdout
+        assert "search" in result.stdout
+        assert "workspace" in result.stdout
 
     def test_index_help(self, runner: CliRunner) -> None:
         """Test index command help."""
         result = runner.invoke(main, ["index", "--help"])
         assert result.exit_code == 0
-        assert "REPO_PATH" in result.output
+        assert "REPO_PATH" in result.stdout
 
     def test_search_help(self, runner: CliRunner) -> None:
         """Test search command help."""
         result = runner.invoke(main, ["search", "--help"])
         assert result.exit_code == 0
-        assert "QUERY" in result.output
-        assert "--mode" in result.output
+        assert "QUERY" in result.stdout
+        assert "--mode" in result.stdout
 
     def test_graph_help(self, runner: CliRunner) -> None:
         """Test graph command help."""
         result = runner.invoke(main, ["graph", "--help"])
         assert result.exit_code == 0
-        assert "ENTITY_NAME" in result.output
-        assert "--direction" in result.output
+        assert "ENTITY_NAME" in result.stdout
+        assert "--direction" in result.stdout
 
 
 class TestWorkspaceListCommand:
@@ -540,7 +540,7 @@ class TestWorkspaceListCommand:
         result = runner.invoke(main, ["workspace", "list"])
         assert result.exit_code == 0
 
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["success"] is True
         assert data["data"]["workspaces"] == ["customer-backend", "customer-gateway"]
         assert data["data"]["count"] == 2
@@ -556,7 +556,7 @@ class TestWorkspaceListCommand:
         result = runner.invoke(main, ["workspace", "list"])
         assert result.exit_code == 0
 
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["success"] is True
         assert data["data"]["workspaces"] == []
         assert data["data"]["count"] == 0
@@ -569,7 +569,7 @@ class TestWorkspaceListCommand:
         result = runner.invoke(main, ["workspace", "list"])
         assert result.exit_code == 1
 
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["success"] is False
 
 
@@ -590,7 +590,7 @@ class TestWorkspaceInfoCommand:
         result = runner.invoke(main, ["workspace", "info", "customer-backend"])
         assert result.exit_code == 0
 
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["success"] is True
         assert data["data"]["name"] == "customer-backend"
         assert data["data"]["entities"] == 245
@@ -612,7 +612,7 @@ class TestWorkspaceInfoCommand:
         result = runner.invoke(main, ["workspace", "info"])
         assert result.exit_code == 0
 
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["success"] is True
         assert data["data"]["entities"] == 50
 
@@ -630,7 +630,7 @@ class TestWorkspaceInfoCommand:
         result = runner.invoke(main, ["workspace", "info", "--workspace", "custom-ws"])
         assert result.exit_code == 0
 
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["success"] is True
         assert data["data"]["name"] == "custom-ws"
 
@@ -642,7 +642,7 @@ class TestWorkspaceInfoCommand:
         result = runner.invoke(main, ["workspace", "info", "bad-ws"])
         assert result.exit_code == 1
 
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["success"] is False
 
 
@@ -660,7 +660,7 @@ class TestWorkspaceDeleteCommand:
         result = runner.invoke(main, ["workspace", "delete", "old-ws", "--yes"])
         assert result.exit_code == 0
 
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["success"] is True
         assert data["data"]["deleted_workspace"] == "old-ws"
 
@@ -669,7 +669,7 @@ class TestWorkspaceDeleteCommand:
         result = runner.invoke(main, ["workspace", "delete", "old-ws"])
         assert result.exit_code == 1
 
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["success"] is False
         assert data["error"]["code"] == ErrorCode.INVALID_INPUT
         assert "--yes" in data["error"]["suggestion"]
@@ -682,7 +682,7 @@ class TestWorkspaceDeleteCommand:
         result = runner.invoke(main, ["workspace", "delete", "bad-ws", "--yes"])
         assert result.exit_code == 1
 
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["success"] is False
 
 
@@ -693,9 +693,9 @@ class TestWorkspaceHelp:
         """Test workspace group help."""
         result = runner.invoke(main, ["workspace", "--help"])
         assert result.exit_code == 0
-        assert "list" in result.output
-        assert "info" in result.output
-        assert "delete" in result.output
+        assert "list" in result.stdout
+        assert "info" in result.stdout
+        assert "delete" in result.stdout
 
     def test_workspace_list_help(self, runner: CliRunner) -> None:
         """Test workspace list help."""
@@ -706,13 +706,13 @@ class TestWorkspaceHelp:
         """Test workspace info help."""
         result = runner.invoke(main, ["workspace", "info", "--help"])
         assert result.exit_code == 0
-        assert "--workspace" in result.output
+        assert "--workspace" in result.stdout
 
     def test_workspace_delete_help(self, runner: CliRunner) -> None:
         """Test workspace delete help."""
         result = runner.invoke(main, ["workspace", "delete", "--help"])
         assert result.exit_code == 0
-        assert "--yes" in result.output
+        assert "--yes" in result.stdout
 
 
 class TestDepsCommand:
@@ -732,7 +732,7 @@ class TestDepsCommand:
         result = runner.invoke(main, ["deps"])
         assert result.exit_code == 0
 
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["success"] is True
         assert "src/cli" in data["data"]["modules"]
         assert len(data["data"]["dependencies"]) == 1
@@ -749,7 +749,7 @@ class TestDepsCommand:
         result = runner.invoke(main, ["deps", "--depth", "1"])
         assert result.exit_code == 0
 
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["success"] is True
 
     @patch("loomgraph.cli.main.asyncio.run")
@@ -760,7 +760,7 @@ class TestDepsCommand:
         result = runner.invoke(main, ["deps"])
         assert result.exit_code == 1
 
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["success"] is False
         assert "Connection refused" in data["error"]["message"]
 
@@ -768,7 +768,7 @@ class TestDepsCommand:
         """Test deps command help."""
         result = runner.invoke(main, ["deps", "--help"])
         assert result.exit_code == 0
-        assert "--depth" in result.output
+        assert "--depth" in result.stdout
 
 
 class TestOverviewCommand:
@@ -798,7 +798,7 @@ class TestOverviewCommand:
         result = runner.invoke(main, ["overview"])
         assert result.exit_code == 0
 
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["success"] is True
         assert len(data["data"]["modules"]) == 1
         assert data["data"]["modules"][0]["name"] == "src/core"
@@ -818,12 +818,52 @@ class TestOverviewCommand:
         result = runner.invoke(main, ["overview", "--no-summary"])
         assert result.exit_code == 0
 
-        data = json.loads(result.output)
+        data = json.loads(result.stdout)
         assert data["success"] is True
 
     def test_overview_help(self, runner: CliRunner) -> None:
         """Test overview command help."""
         result = runner.invoke(main, ["overview", "--help"])
         assert result.exit_code == 0
-        assert "--no-summary" in result.output
-        assert "--depth" in result.output
+        assert "--no-summary" in result.stdout
+        assert "--depth" in result.stdout
+
+
+class TestIndexProgressFeedback:
+    """Tests that index command outputs progress to stderr."""
+
+    @patch("loomgraph.cli.main.asyncio.run")
+    @patch("subprocess.run")
+    @patch("loomgraph.cli.main.check_codeindex")
+    def test_index_progress_messages(
+        self,
+        mock_check: MagicMock,
+        mock_subprocess: MagicMock,
+        mock_asyncio: MagicMock,
+        runner: CliRunner,
+        tmp_path: Path,
+        sample_parse_results: dict[str, Any],
+    ) -> None:
+        """Index command should emit progress messages to stderr."""
+        mock_check.return_value = {"installed": True, "version": "1.0.0"}
+        mock_subprocess.return_value = MagicMock(
+            returncode=0,
+            stdout=json.dumps(sample_parse_results),
+            stderr="",
+        )
+        mock_asyncio.return_value = {
+            "files_scanned": 1,
+            "files_indexed": 1,
+            "files_skipped": 0,
+            "entities_created": 2,
+            "relations_created": 2,
+            "skipped_files": [],
+        }
+
+        # mix_stderr=False separates stdout/stderr
+        result = runner.invoke(main, ["index", str(tmp_path)], catch_exceptions=False)
+        assert result.exit_code == 0
+
+        # Stdout should be JSON
+        data = json.loads(result.stdout)
+        assert data["success"] is True

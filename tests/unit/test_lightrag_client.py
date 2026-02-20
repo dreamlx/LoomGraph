@@ -415,3 +415,126 @@ class TestGetAllRelations:
                 await client.get_all_relations()
 
             assert "Connection failed" in str(exc_info.value)
+
+
+class TestBatchCreateGraphRetry:
+    """Tests for retry logic in batch_create_graph."""
+
+    @pytest.fixture
+    def client(self) -> LightRAGClient:
+        """Create a test client."""
+        return LightRAGClient(base_url="http://localhost:3001", timeout=5.0)
+
+    @pytest.mark.asyncio
+    async def test_retry_on_500_then_success(self, client: LightRAGClient) -> None:
+        """Should retry on 500 and succeed on next attempt."""
+        fail_resp = MagicMock()
+        fail_resp.status_code = 500
+        fail_resp.json.return_value = {"detail": "Internal server error"}
+
+        ok_resp = MagicMock()
+        ok_resp.status_code = 200
+        ok_resp.json.return_value = {"status": "ok"}
+
+        with patch("httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            # First call fails with 500, second succeeds
+            mock_client.post.side_effect = [fail_resp, ok_resp]
+            mock_client_class.return_value = mock_client
+
+            entities = [{"entity_name": "Foo", "entity_type": "class", "description": "test"}]
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                result = await client.batch_create_graph(entities, [], max_retries=3)
+
+            assert result["details"]["entities_count"] == 1
+            assert mock_client.post.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_retry_exhausted_records_error(self, client: LightRAGClient) -> None:
+        """Should record error after all retries exhausted."""
+        fail_resp = MagicMock()
+        fail_resp.status_code = 502
+        fail_resp.json.return_value = {"detail": "Bad Gateway"}
+        fail_resp.text = "Bad Gateway"
+
+        with patch("httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client.post.return_value = fail_resp
+            mock_client_class.return_value = mock_client
+
+            entities = [{"entity_name": "Foo", "entity_type": "class"}]
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                result = await client.batch_create_graph(entities, [], max_retries=2)
+
+            assert result["details"]["entities_count"] == 0
+            assert result["status"] == "partial"
+            # 1 initial + 2 retries = 3 calls
+            assert mock_client.post.call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_no_retry_on_400(self, client: LightRAGClient) -> None:
+        """Should NOT retry on 400 client errors."""
+        bad_req = MagicMock()
+        bad_req.status_code = 400
+        bad_req.json.return_value = {"detail": "Bad request"}
+        bad_req.text = "Bad request"
+
+        with patch("httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client.post.return_value = bad_req
+            mock_client_class.return_value = mock_client
+
+            entities = [{"entity_name": "Foo", "entity_type": "class"}]
+            result = await client.batch_create_graph(entities, [], max_retries=3)
+
+            assert result["details"]["entities_count"] == 0
+            # Only 1 call — no retries for 400
+            assert mock_client.post.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_default_concurrency_is_5(self, client: LightRAGClient) -> None:
+        """Default concurrency should be 5 (not 10)."""
+        import inspect
+        sig = inspect.signature(client.batch_create_graph)
+        assert sig.parameters["concurrency"].default == 5
+
+    @pytest.mark.asyncio
+    async def test_relation_retry_on_503(self, client: LightRAGClient) -> None:
+        """Should retry relation creation on 503."""
+        # Entity creation succeeds immediately
+        entity_ok = MagicMock()
+        entity_ok.status_code = 200
+        entity_ok.json.return_value = {"status": "ok"}
+
+        # Relation: first 503, then success
+        rel_fail = MagicMock()
+        rel_fail.status_code = 503
+        rel_fail.json.return_value = {"detail": "Service Unavailable"}
+
+        rel_ok = MagicMock()
+        rel_ok.status_code = 200
+        rel_ok.json.return_value = {"status": "ok"}
+
+        with patch("httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            # Entity create → ok, Relation create → 503 → ok
+            mock_client.post.side_effect = [entity_ok, rel_fail, rel_ok]
+            mock_client_class.return_value = mock_client
+
+            entities = [{"entity_name": "A", "entity_type": "class"}]
+            relations = [{"src_id": "A", "tgt_id": "A", "keywords": "self"}]
+
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                result = await client.batch_create_graph(entities, relations, max_retries=2)
+
+            assert result["details"]["entities_count"] == 1
+            assert result["details"]["relationships_count"] == 1
+            assert mock_client.post.call_count == 3

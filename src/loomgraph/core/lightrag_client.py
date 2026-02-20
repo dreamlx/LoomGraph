@@ -332,7 +332,8 @@ class LightRAGClient:
         self,
         entities: list[dict[str, Any]],
         relationships: list[dict[str, Any]],
-        concurrency: int = 10,
+        concurrency: int = 5,
+        max_retries: int = 3,
     ) -> dict[str, Any]:
         """Batch create entities and relations via graph endpoints.
 
@@ -349,7 +350,8 @@ class LightRAGClient:
                 Each has: entity_name, entity_type, description, source_id, ...
             relationships: List of relation dicts from collect_kg_data().
                 Each has: src_id, tgt_id, description, keywords, source_id, ...
-            concurrency: Max concurrent HTTP requests (default: 10)
+            concurrency: Max concurrent HTTP requests (default: 5)
+            max_retries: Max retries on server errors (500/502/503)
 
         Returns:
             Dict with entities_created, relations_created, external_stubs, errors
@@ -366,6 +368,28 @@ class LightRAGClient:
         known_entities: set[str] = set()
 
         async with httpx.AsyncClient(timeout=self.timeout, trust_env=False) as client:
+
+            async def _post_with_retry(
+                url: str, json_data: dict[str, Any]
+            ) -> httpx.Response:
+                """POST with exponential backoff on server errors."""
+                last_resp: httpx.Response | None = None
+                for attempt in range(max_retries + 1):
+                    last_resp = await client.post(
+                        url, headers=headers, json=json_data
+                    )
+                    if last_resp.status_code not in (500, 502, 503):
+                        return last_resp
+                    if attempt < max_retries:
+                        delay = 1.0 * (2 ** attempt)  # 1s, 2s, 4s
+                        logger.warning(
+                            f"Server error {last_resp.status_code} on {url}, "
+                            f"retry {attempt + 1}/{max_retries} in {delay}s"
+                        )
+                        await asyncio.sleep(delay)
+                assert last_resp is not None
+                return last_resp
+
             # Pass 1: Create all project entities concurrently
             async def _create_entity(entity: dict[str, Any]) -> bool:
                 nonlocal entities_created
@@ -373,10 +397,9 @@ class LightRAGClient:
                 data = {k: v for k, v in entity.items() if k != "entity_name"}
                 async with sem:
                     try:
-                        resp = await client.post(
+                        resp = await _post_with_retry(
                             f"{self.base_url}/graph/entity/create",
-                            headers=headers,
-                            json={"entity_name": name, "entity_data": data},
+                            {"entity_name": name, "entity_data": data},
                         )
                         if resp.status_code < 400:
                             entities_created += 1
@@ -409,10 +432,9 @@ class LightRAGClient:
                     nonlocal external_stubs_created
                     async with sem:
                         try:
-                            resp = await client.post(
+                            resp = await _post_with_retry(
                                 f"{self.base_url}/graph/entity/create",
-                                headers=headers,
-                                json={
+                                {
                                     "entity_name": name,
                                     "entity_data": {
                                         "entity_type": "external",
@@ -445,10 +467,9 @@ class LightRAGClient:
                 data = {k: v for k, v in rel.items() if k not in ("src_id", "tgt_id")}
                 async with sem:
                     try:
-                        resp = await client.post(
+                        resp = await _post_with_retry(
                             f"{self.base_url}/graph/relation/create",
-                            headers=headers,
-                            json={
+                            {
                                 "source_entity": src,
                                 "target_entity": tgt,
                                 "relation_data": data,
