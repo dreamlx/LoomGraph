@@ -7,12 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-02-20
+
 ### Added
+- `loomgraph workspace list` command: list all workspaces with entity/relation counts (EPIC-005).
+- `loomgraph workspace info [NAME]` command: workspace details with top entities (EPIC-005).
+- `loomgraph workspace delete NAME` command: delete a workspace and all its data (EPIC-005).
 - `loomgraph compare` command: cross-workspace entity/relation structural diff (EPIC-006).
 - `loomgraph similar` command: cross-workspace similar entity search with exact + fuzzy matching (EPIC-006).
 - `CompareAnalyzer` and `SimilarAnalyzer` core modules with full unit test coverage (21 tests).
+- `/loomgraph-debt-radar` skill: technical debt audit report with dependency analysis (EPIC-007).
 - `/loomgraph-sync-advisor` skill: cross-branch merge advice with conflict prediction (EPIC-007).
 - `/loomgraph-evolution` skill: code evolution tracking across versions with fork divergence analysis (EPIC-007).
+
+### Changed
+- Docs reorganized: archived 11 outdated files, consolidated LightRAG integration docs, migrated issues to GitHub.
 
 ## [0.2.5] - 2026-02-19
 
@@ -110,11 +119,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - System design document
 - Project roadmap, epics, and feature definitions
 
-[Unreleased]: https://github.com/user/loomgraph/compare/v0.2.5...HEAD
-[0.2.5]: https://github.com/user/loomgraph/compare/v0.2.4...v0.2.5
-[0.2.4]: https://github.com/user/loomgraph/compare/v0.2.3...v0.2.4
-[0.2.3]: https://github.com/user/loomgraph/compare/v0.2.2...v0.2.3
-[0.2.2]: https://github.com/user/loomgraph/compare/v0.2.1...v0.2.2
-[0.2.1]: https://github.com/user/loomgraph/compare/v0.2.0...v0.2.1
-[0.2.0]: https://github.com/user/loomgraph/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/user/loomgraph/releases/tag/v0.1.0
+[Unreleased]: https://github.com/dreamlx/LoomGraph/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/dreamlx/LoomGraph/compare/v0.2.5...v0.6.0
+[0.2.5]: https://github.com/dreamlx/LoomGraph/compare/v0.2.4...v0.2.5
+[0.2.4]: https://github.com/dreamlx/LoomGraph/compare/v0.2.3...v0.2.4
+[0.2.3]: https://github.com/dreamlx/LoomGraph/compare/v0.2.2...v0.2.3
+[0.2.2]: https://github.com/dreamlx/LoomGraph/compare/v0.2.1...v0.2.2
+[0.2.1]: https://github.com/dreamlx/LoomGraph/compare/v0.2.0...v0.2.1
+[0.2.0]: https://github.com/dreamlx/LoomGraph/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/dreamlx/LoomGraph/releases/tag/v0.1.0
