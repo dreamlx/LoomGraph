@@ -11,12 +11,15 @@ disable-model-invocation: true
 ### 要追加的内容
 
 ```markdown
-## 代码搜索 (LoomGraph)
+## 代码智能 (LoomGraph)
 
 本项目已用 LoomGraph 索引，可使用以下命令：
 
-- `loomgraph search "<查询>"` - 语义搜索代码
-- `loomgraph graph "<类名.方法名>"` - 查询调用关系
+- `loomgraph search "<实体名>"` - 搜索代码实体（类、函数、模块）
+- `loomgraph graph "<实体名>"` - 查询调用关系（callers/callees）
+- `loomgraph deps` - 模块依赖分析
+- `loomgraph overview` - 项目模块概览
+- `loomgraph workspace info` - 查看索引统计
 - `loomgraph status` - 检查服务状态
 
 如需重新索引：`loomgraph index .`

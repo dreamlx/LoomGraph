@@ -178,7 +178,7 @@ Step 4: LLM 综合分析
 | 命令 | 用途 | 依赖 EPIC |
 |------|------|-----------|
 | `loomgraph compare` | 跨 workspace 结构 diff | EPIC-006 |
-| `loomgraph impact` | 变更影响分析 | 已有 |
+| `loomgraph graph` | 实体调用关系查询 | 已有 |
 | `loomgraph workspace list` | 发现可用 workspace | EPIC-005 |
 | `git diff` | 代码级差异 | git |
 
