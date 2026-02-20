@@ -249,6 +249,9 @@ embedding:
 | `loomgraph workspace list` | 列出所有 workspace |
 | `loomgraph workspace info [NAME]` | 查看 workspace 详情（默认自动检测） |
 | `loomgraph workspace delete NAME --yes` | 删除指定 workspace |
+| `loomgraph compare --ws1 A --ws2 B` | 跨 workspace 实体/关系 diff |
+| `loomgraph similar -e "<entity>"` | 跨 workspace 相似实体检测 |
+| `/loomgraph-debt-radar [path]` | 生成技术债务审计报告（Claude Code Skill） |
 
 ### 版本与状态
 
