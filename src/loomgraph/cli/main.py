@@ -54,9 +54,9 @@ def get_auto_workspace(workspace: str | None) -> str | None:
     if workspace:
         return workspace
 
-    # Auto-detect from current directory name
+    # Auto-detect from current directory name (lowercase for LightRAG compatibility)
     cwd = Path.cwd()
-    return cwd.name
+    return cwd.name.lower()
 
 
 # ============================================

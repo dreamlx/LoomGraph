@@ -238,36 +238,60 @@ class LightRAGClient:
     async def delete_all(self) -> dict[str, Any]:
         """Delete all data from LightRAG (Cold Rebuild).
 
-        This clears all entities, relations, chunks, and caches.
-        Use with caution - this operation is irreversible.
+        Clears both document layer and graph layer:
+        1. DELETE /documents — clears chunks, embeddings, document cache
+        2. DELETE /graph/clear — clears entities, relations, graph storage
 
         Returns:
-            Response from LightRAG confirming deletion
+            Combined response from both operations
 
         Raises:
             LightRAGAPIError: If deletion fails
         """
         async with httpx.AsyncClient(timeout=self.timeout, trust_env=False) as client:
-            try:
-                response = await client.delete(
-                    f"{self.base_url}/documents",
-                    headers=self._get_headers(),
-                )
-                data = response.json() if response.content else {}
+            headers = self._get_headers()
+            result: dict[str, Any] = {}
 
-                if response.status_code >= 400:
-                    detail = data.get("detail", str(data)) if data else f"HTTP {response.status_code}"
+            # 1. Clear document layer
+            try:
+                resp = await client.delete(
+                    f"{self.base_url}/documents",
+                    headers=headers,
+                )
+                data = resp.json() if resp.content else {}
+                if resp.status_code >= 400:
+                    detail = data.get("detail", str(data)) if data else f"HTTP {resp.status_code}"
                     raise LightRAGAPIError(
-                        f"Failed to delete all documents: {detail}",
-                        status_code=response.status_code,
+                        f"Failed to clear documents: {detail}",
+                        status_code=resp.status_code,
                         detail=detail,
                     )
-
-                logger.info("Successfully deleted all documents from LightRAG")
-                return data
-
+                result["documents"] = data
+                logger.info("Cleared document layer")
             except httpx.RequestError as e:
                 raise LightRAGAPIError(f"Connection failed: {e}") from e
+
+            # 2. Clear graph layer
+            try:
+                resp = await client.delete(
+                    f"{self.base_url}/graph/clear",
+                    headers=headers,
+                )
+                data = resp.json() if resp.content else {}
+                if resp.status_code >= 400:
+                    detail = data.get("detail", str(data)) if data else f"HTTP {resp.status_code}"
+                    logger.warning("Graph clear failed (may not be supported): %s", detail)
+                    result["graph"] = {"status": "skipped", "detail": detail}
+                else:
+                    result["graph"] = data
+                    logger.info("Cleared graph layer")
+                    # Wait for async storage cleanup to complete
+                    await asyncio.sleep(3)
+            except httpx.RequestError:
+                logger.warning("Graph clear endpoint not available, skipping")
+                result["graph"] = {"status": "skipped"}
+
+            return result
 
     async def insert_custom_kg(
         self,
