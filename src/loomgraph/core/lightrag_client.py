@@ -338,7 +338,7 @@ class LightRAGClient:
         """Batch create entities and relations via graph endpoints.
 
         Three-pass approach:
-        1. Create ALL project entities concurrently
+        1. Create ALL project entities concurrently (upsert: edit if exists)
         2. Auto-create stub entities for external dependencies
         3. Create ALL relations concurrently
 
@@ -390,7 +390,7 @@ class LightRAGClient:
                 assert last_resp is not None
                 return last_resp
 
-            # Pass 1: Create all project entities concurrently
+            # Pass 1: Create all project entities concurrently (upsert)
             async def _create_entity(entity: dict[str, Any]) -> bool:
                 nonlocal entities_created
                 name = entity.get("entity_name", "")
@@ -407,9 +407,17 @@ class LightRAGClient:
                             return True
                         detail = resp.json().get("detail", resp.text)
                         if "already exist" in str(detail).lower():
-                            entities_created += 1
-                            known_entities.add(name)
-                            return True
+                            # Upsert: update existing entity via edit
+                            edit_resp = await _post_with_retry(
+                                f"{self.base_url}/graph/entity/edit",
+                                {"entity_name": name, "updated_data": data},
+                            )
+                            if edit_resp.status_code < 400:
+                                entities_created += 1
+                                known_entities.add(name)
+                                return True
+                            entity_errors.append(f"{name}: edit failed after exists")
+                            return False
                         entity_errors.append(f"{name}: {detail}")
                         return False
                     except Exception as e:
