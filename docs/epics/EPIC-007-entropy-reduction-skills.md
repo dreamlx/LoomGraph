@@ -1,6 +1,6 @@
 # EPIC-007: 研发熵减 Skills — Claude Code 技能交付
 
-**状态**: 📋 规划中（等待能力层完成）
+**状态**: ✅ 已完成（Skill A/B/C SKILL.md 全部交付）
 **优先级**: P1
 **预估**: 8-12 天
 **ADR**: [ADR-009](../adr/ADR-009-workspace-as-knowledge-snapshot.md)
@@ -125,11 +125,11 @@ Step 4: LLM 综合分析
 
 ### Stories
 
-| Story | 描述 | 预估 |
-|-------|------|------|
-| A-S1 | 编写 SKILL.md 工作流 | 1d |
-| A-S2 | 设计报告模板 + LLM prompt | 1d |
-| A-S3 | 端到端验证 (用客户项目) | 0.5d |
+| Story | 描述 | 预估 | 状态 |
+|-------|------|------|------|
+| A-S1 | 编写 SKILL.md 工作流 | 1d | ✅ |
+| A-S2 | 设计报告模板 + LLM prompt | 1d | ✅ |
+| A-S3 | 端到端验证 (用客户项目) | 0.5d | 📋 |
 
 ---
 
@@ -214,9 +214,9 @@ Step 4: LLM 综合分析
 
 | Story | 描述 | 预估 |
 |-------|------|------|
-| B-S1 | 编写 SKILL.md 工作流 | 1.5d |
-| B-S2 | 设计报告模板 + LLM prompt | 1d |
-| B-S3 | 多分支场景验证 | 1d |
+| B-S1 | 编写 SKILL.md 工作流 | 1.5d | ✅ |
+| B-S2 | 设计报告模板 + LLM prompt | 1d | ✅ |
+| B-S3 | 多分支场景验证 | 1d | 📋 |
 
 ---
 
@@ -298,9 +298,9 @@ Step 3: LLM 演化分析
 
 | Story | 描述 | 预估 |
 |-------|------|------|
-| C-S1 | 编写 SKILL.md 工作流 | 1.5d |
-| C-S2 | 设计报告模板 + LLM prompt | 1.5d |
-| C-S3 | 多版本快照场景验证 | 1d |
+| C-S1 | 编写 SKILL.md 工作流 | 1.5d | ✅ |
+| C-S2 | 设计报告模板 + LLM prompt | 1.5d | ✅ |
+| C-S3 | 多版本快照场景验证 | 1d | 📋 |
 
 ---
 
@@ -372,9 +372,12 @@ Phase 2: Skill 层 (能力层完成后)
 
 ## 验收标准
 
-- [ ] 3 个 SKILL.md 随 wheel 分发，`install-skills` 可安装
+- [x] 3 个 SKILL.md 随 wheel 分发，`install-skills` 可安装
+- [x] Skill A: SKILL.md 工作流 + 报告模板已编写
 - [ ] Skill A: 用客户项目生成完整的债务审计报告
+- [x] Skill B: SKILL.md 工作流 + 报告模板已编写
 - [ ] Skill B: 用两个分支 workspace 生成同步建议报告
+- [x] Skill C: SKILL.md 工作流 + 报告模板已编写
 - [ ] Skill C: 用多版本 workspace 生成演化分析报告
 - [ ] 每个 Skill 的 LLM prompt 经过调优，报告质量稳定
 
