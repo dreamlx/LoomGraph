@@ -1284,6 +1284,77 @@ async def _async_overview(
     return result.to_dict()
 
 
+@main.command()
+@click.argument("repo_path", type=click.Path(exists=True))
+@click.option("--workspace", "-w", default=None, help="Workspace name (default: current directory name)")
+@click.option("--use-graph", is_flag=True, help="Query knowledge graph for IR/MC dimensions")
+def health(repo_path: str, workspace: str | None, use_graph: bool) -> None:
+    """Compute code health score for a repository.
+
+    Scans source files and computes an 8-dimension health score (0-100).
+
+    REPO_PATH: Directory path to analyze
+
+    Dimensions: CQ (code quality), TS (type safety), MT (maintainability),
+    DC (dead code), IR (impact risk), MC (module coupling),
+    TC (test coverage), CS (change scope).
+
+    Use --use-graph to compute IR and MC from the knowledge graph
+    (requires prior indexing).
+    """
+    from loomgraph.core.health import (
+        aggregate_metrics,
+        compute_score,
+        scan_directory,
+    )
+
+    repo = Path(repo_path).resolve()
+    file_metrics = scan_directory(repo)
+
+    if not file_metrics:
+        output_error(
+            code=ErrorCode.INVALID_INPUT,
+            message="No code files found in repository",
+            suggestion="Check the path contains source code files",
+        )
+        return
+
+    agg = aggregate_metrics(file_metrics)
+
+    # Graph-based dimensions
+    graph_dims: dict[str, int] = {}
+    if use_graph:
+        try:
+            graph_dims = asyncio.run(_async_health_graph(workspace))
+        except Exception:
+            pass  # Fall back to defaults
+
+    score = compute_score(agg, **graph_dims)
+    score.file_metrics = [
+        {"path": m.path, "lines": m.lines, "is_test": m.is_test}
+        for m in file_metrics[:20]  # Limit output
+    ]
+
+    result = score.to_dict()
+    result["aggregated"] = agg
+    result["repo_path"] = str(repo)
+    output_success(result)
+
+
+async def _async_health_graph(workspace: str | None = None) -> dict[str, int]:
+    """Fetch graph-based health dimensions."""
+    from loomgraph.core.health import compute_graph_dimensions
+    from loomgraph.core.lightrag_client import LightRAGClient
+
+    settings = get_settings()
+    client = LightRAGClient(
+        base_url=settings.lightrag.api_url,
+        timeout=settings.lightrag.api_timeout,
+        workspace=get_auto_workspace(workspace),
+    )
+    return await compute_graph_dimensions(client)
+
+
 @main.group()
 def workspace() -> None:
     """Manage workspaces."""
