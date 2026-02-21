@@ -73,14 +73,19 @@ class OverviewAnalyzer:
             if not name or not source_id:
                 continue
 
+            # Skip external stubs — they add noise without analytical value
+            if entity_type == "external" or source_id == "external":
+                continue
+
             module = extract_module(source_id, self.depth)
             entity_module[name] = module
 
             md = module_data[module]
             md["entities"].append(name)
             md["entity_types"][entity_type] += 1
-            # Extract just the filename
-            filename = PurePosixPath(source_id).name
+            # Strip line range suffix (e.g., "main.py:1037-1126" → "main.py")
+            clean_source = source_id.split(":")[0] if ":" in source_id else source_id
+            filename = PurePosixPath(clean_source).name
             md["files"].add(filename)
 
         # Count relations per entity for ranking
