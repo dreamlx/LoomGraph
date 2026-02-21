@@ -1,8 +1,9 @@
-"""CLI commands for search and graph queries."""
+"""CLI commands for find, query, and graph queries."""
 
 from __future__ import annotations
 
 import asyncio
+import sys
 from typing import Any
 
 import click
@@ -17,13 +18,47 @@ from loomgraph.core.config import get_settings
 @click.option("--type", "-t", "entity_type", default=None, help="Filter by entity type (e.g. function, class, module)")
 @click.option("--workspace", "-w", default=None, help="Workspace name (default: current directory name)")
 @click.option("--limit", "-n", default=20, help="Maximum number of results")
-def search(query: str, entity_type: str | None, workspace: str | None, limit: int) -> None:
-    """Search entities in the knowledge graph.
+@click.option("--with-relations", is_flag=True, default=False, help="Include callers/callees for each matched entity")
+@click.option("--depth", default=1, help="BFS expansion depth for --with-relations (default: 1)")
+def find(
+    query: str,
+    entity_type: str | None,
+    workspace: str | None,
+    limit: int,
+    with_relations: bool,
+    depth: int,
+) -> None:
+    """Find entities in the knowledge graph by name matching.
 
-    QUERY: Search term to match against entity names and descriptions
+    QUERY: Search term to match against entity names and descriptions.
+    Returns structured entity matches with type, source_id, and relevance score.
+
+    Use --with-relations to include callers/callees for each match (saves N+1 calls).
     """
     try:
-        result = asyncio.run(_async_search(query, entity_type, workspace, limit))
+        result = asyncio.run(_async_find(query, entity_type, workspace, limit, with_relations, depth))
+        output_success(result)
+    except Exception as e:
+        output_error(
+            code=ErrorCode.LIGHTRAG_ERROR,
+            message=f"Find failed: {e}",
+            suggestion="Check LightRAG status with: loomgraph status",
+        )
+
+
+@main.command(hidden=True)
+@click.argument("query")
+@click.option("--type", "-t", "entity_type", default=None, help="Filter by entity type")
+@click.option("--workspace", "-w", default=None, help="Workspace name")
+@click.option("--limit", "-n", default=20, help="Maximum number of results")
+def search(query: str, entity_type: str | None, workspace: str | None, limit: int) -> None:
+    """[Deprecated] Use 'find' instead."""
+    print(
+        "WARNING: 'loomgraph search' is deprecated, use 'loomgraph find' instead.",
+        file=sys.stderr,
+    )
+    try:
+        result = asyncio.run(_async_find(query, entity_type, workspace, limit))
         output_success(result)
     except Exception as e:
         output_error(
@@ -33,13 +68,19 @@ def search(query: str, entity_type: str | None, workspace: str | None, limit: in
         )
 
 
-async def _async_search(
+async def _async_find(
     query: str,
     entity_type: str | None = None,
     workspace: str | None = None,
     limit: int = 20,
+    with_relations: bool = False,
+    depth: int = 1,
 ) -> dict[str, Any]:
-    """Search entities via graph layer API (structural search)."""
+    """Find entities via graph layer API (structural search).
+
+    When with_relations=True, also fetches relations and attaches
+    callers/callees to each matched entity via BFS expansion.
+    """
     from difflib import SequenceMatcher
 
     from loomgraph.core.lightrag_client import LightRAGClient
@@ -99,11 +140,153 @@ async def _async_search(
     scored.sort(key=lambda x: (-x[0], x[1]["entity"]))
     matches = [item for _, item in scored[:limit]]
 
+    # Attach relations if requested
+    if with_relations and matches:
+        relations = await client.get_all_relations()
+        _attach_relations(matches, relations, depth)
+
     return {
         "query": query,
         "total_entities": len(entities),
         "matches_count": len(matches),
         "matches": matches,
+    }
+
+
+def _attach_relations(
+    matches: list[dict[str, Any]],
+    relations: list[dict[str, Any]],
+    depth: int = 1,
+) -> None:
+    """Attach callers/callees to matched entities via BFS expansion.
+
+    Builds an adjacency list from all relations, then for each matched entity,
+    performs BFS up to `depth` layers to collect callers and callees.
+    """
+    from collections import defaultdict
+
+    # Build adjacency: src→tgt (outgoing) and tgt→src (incoming)
+    outgoing: dict[str, list[dict[str, str]]] = defaultdict(list)
+    incoming: dict[str, list[dict[str, str]]] = defaultdict(list)
+
+    for rel in relations:
+        src = rel.get("src_id", "") or rel.get("source", "")
+        tgt = rel.get("tgt_id", "") or rel.get("target", "")
+        keywords = rel.get("keywords", "UNKNOWN")
+
+        if src and tgt:
+            outgoing[src].append({"entity": tgt, "relation": keywords})
+            incoming[tgt].append({"entity": src, "relation": keywords})
+
+    for match in matches:
+        entity_name = match["entity"]
+
+        # BFS for callees (outgoing edges)
+        callees = _bfs_collect(entity_name, outgoing, depth)
+        # BFS for callers (incoming edges)
+        callers = _bfs_collect(entity_name, incoming, depth)
+
+        match["callers"] = sorted(callers, key=lambda x: x["entity"])
+        match["callees"] = sorted(callees, key=lambda x: x["entity"])
+
+
+def _bfs_collect(
+    start: str,
+    adj: dict[str, list[dict[str, str]]],
+    depth: int,
+) -> list[dict[str, str]]:
+    """BFS from start entity along adjacency edges up to given depth.
+
+    Returns deduplicated list of {entity, relation} dicts (excludes start itself).
+    """
+    visited: set[str] = {start}
+    result: list[dict[str, str]] = []
+    frontier = [start]
+
+    for _ in range(depth):
+        next_frontier: list[str] = []
+        for node in frontier:
+            for edge in adj.get(node, []):
+                neighbor = edge["entity"]
+                if neighbor not in visited:
+                    visited.add(neighbor)
+                    result.append(edge)
+                    next_frontier.append(neighbor)
+        frontier = next_frontier
+        if not frontier:
+            break
+
+    return result
+
+
+@main.command()
+@click.argument("question")
+@click.option(
+    "--mode",
+    type=click.Choice(["hybrid", "local", "global", "naive"]),
+    default="hybrid",
+    help="Query mode: hybrid (default), local, global, or naive",
+)
+@click.option("--workspace", "-w", default=None, help="Workspace name (default: current directory name)")
+def query(question: str, mode: str, workspace: str | None) -> None:
+    """Ask a natural language question about the codebase.
+
+    QUESTION: A natural language question (e.g. "How does authentication work?").
+    Uses LightRAG's RAG engine to generate answers from the knowledge graph.
+
+    Modes: hybrid (graph+vector+LLM), local (entity-centric), global (topic extraction), naive (vector only).
+    """
+    try:
+        result = asyncio.run(_async_query(question, mode, workspace))
+        output_success(result)
+    except Exception as e:
+        error_msg = str(e)
+        if "Connection" in error_msg or "connect" in error_msg.lower():
+            suggestion = "LLM service may be unavailable. Check H200 status, or use 'loomgraph find' for structural search."
+        elif "timeout" in error_msg.lower() or "timed out" in error_msg.lower():
+            suggestion = "Query timed out. Try a simpler question, or use --mode naive for faster results."
+        else:
+            suggestion = "Check LightRAG status with: loomgraph status. Use 'loomgraph find' as fallback."
+        output_error(
+            code=ErrorCode.LIGHTRAG_ERROR,
+            message=f"Query failed: {e}",
+            suggestion=suggestion,
+        )
+
+
+async def _async_query(
+    question: str,
+    mode: str = "hybrid",
+    workspace: str | None = None,
+) -> dict[str, Any]:
+    """Run semantic query via LightRAG RAG engine."""
+    from loomgraph.core.lightrag_client import LightRAGClient
+
+    settings = get_settings()
+    client = LightRAGClient(
+        base_url=settings.lightrag.api_url,
+        timeout=settings.lightrag.api_timeout,
+        workspace=get_auto_workspace(workspace),
+    )
+
+    data = await client.query(query=question, mode=mode)
+
+    # LightRAG returns {"response": "..."} or similar structure
+    response_text = data.get("response", "") if isinstance(data, dict) else str(data)
+
+    if not response_text or response_text.strip() == "":
+        return {
+            "query": question,
+            "mode": mode,
+            "response": "No relevant information found in the knowledge graph for this question.",
+            "workspace": get_auto_workspace(workspace),
+        }
+
+    return {
+        "query": question,
+        "mode": mode,
+        "response": response_text,
+        "workspace": get_auto_workspace(workspace),
     }
 
 
@@ -159,6 +342,14 @@ async def _async_graph_query(
     )
 
     relations = await client.get_all_relations()
+    entities = await client.get_all_entities()
+
+    # Build entity name → source_id lookup
+    source_id_map: dict[str, str] = {}
+    for ent in entities:
+        name = ent.get("entity_name", "") or ent.get("entity_id", "") or ent.get("id", "")
+        if name:
+            source_id_map[name] = ent.get("source_id", "")
 
     # Filter relations by entity_name (handle both field name variants)
     callers: list[dict[str, str]] = []
@@ -174,11 +365,14 @@ async def _async_graph_query(
             continue
 
         if tgt == entity_name:
-            callers.append({"entity": src, "relation": keywords})
+            callers.append({"entity": src, "relation": keywords, "source_id": source_id_map.get(src, "")})
         if src == entity_name:
-            callees.append({"entity": tgt, "relation": keywords})
+            callees.append({"entity": tgt, "relation": keywords, "source_id": source_id_map.get(tgt, "")})
 
-    result: dict[str, Any] = {"entity": entity_name}
+    result: dict[str, Any] = {
+        "entity": entity_name,
+        "source_id": source_id_map.get(entity_name, ""),
+    }
 
     if direction in ("callers", "both"):
         result["callers"] = sorted(callers, key=lambda x: x["entity"])
