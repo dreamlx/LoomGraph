@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`find` command** (EPIC-008): structured entity discovery with `--type` filter, `--with-relations` for callers/callees in one call, `--depth N` for BFS expansion. Replaces `search`.
+- **`query` command** (EPIC-008): semantic knowledge Q&A via LightRAG RAG engine. Supports `--mode hybrid|local|global|naive`. Includes error handling for LLM unavailability with `find` fallback suggestion.
+- **`graph` source_id enhancement** (EPIC-008): graph results now include `source_id` (file path) for the queried entity and all callers/callees.
+- `search` retained as hidden alias with deprecation warning (one version transition period).
+- 17 new unit tests for find, query, graph enhancements, and BFS helpers.
+
 ### Changed
 - **CLI module split**: refactored `cli/main.py` (1722 lines, 42 functions) into 8 focused submodules (`_common`, `_deps_check`, `_indexing`, `_search`, `_analysis`, `_workspace`, `_setup`). Entry point `main.py` reduced to 46 lines. All 265 tests pass, backward-compatible re-exports preserved.
 
