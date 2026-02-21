@@ -37,7 +37,7 @@
 | Story | 状态 |
 |-------|------|
 | LightRAGClient (httpx, graph endpoints) | ✅ |
-| batch_create_graph() (entity → stubs → relations) | ✅ |
+| batch_create_graph() → insert_custom_kg() 迁移 | ✅ (已迁移到单次 insert_custom_kg，636x 提速) |
 | query API (local/global/hybrid/naive) | ✅ |
 | delete_all() (workspace 隔离) | ✅ |
 | 集成测试 (H200 真实连接) | ✅ |

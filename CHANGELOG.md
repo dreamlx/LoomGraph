@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Injection migration**: replaced N× `batch_create_graph()` (entity/create + relation/create) with single `insert_custom_kg()` call — ~636x faster on typical projects (~350s → <1s).
+- `delete_all()` simplified to single `DELETE /graph/clear` (clears all 11 storage layers).
+- `loomgraph update` now uses `DELETE /graph/by_source` + `insert_custom_kg` for true incremental update (delete old → re-inject changed files).
+
+### Added
+- `LightRAGClient.delete_by_source()`: delete entities/relations/chunks by source_id list.
+- `build_chunks()`: generates per-file chunks with module docstring + symbol signatures, enabling semantic search via document layer.
+- `create_external_stubs()`: extracted stub entity creation logic for reuse across injection paths.
+- 18 new unit tests for `insert_custom_kg`, `delete_by_source`, `build_chunks`, `create_external_stubs`.
+
 ## [0.6.0] - 2026-02-20
 
 ### Added

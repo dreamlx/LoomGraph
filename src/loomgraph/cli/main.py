@@ -369,11 +369,12 @@ async def _async_index_pipeline(
     workspace: str | None = None,
     repo_path: Path | None = None,
 ) -> dict[str, Any]:
-    """Run the async indexing pipeline.
+    """Run the async indexing pipeline via insert_custom_kg.
 
-    Two-pass batch approach via graph endpoints:
-    1. Collect all entities and relations from all files
-    2. Create all entities first, then all relations (solves cross-file ordering)
+    Single-pass batch approach:
+    1. Collect all entities, relations, and chunks from all files
+    2. Create external stubs for missing targets
+    3. Inject everything in one insert_custom_kg call
 
     Args:
         parse_results: Output from codeindex scan --output json
@@ -381,7 +382,7 @@ async def _async_index_pipeline(
         workspace: Optional workspace name
         repo_path: Repo root path; if set, file paths are stored as relative paths
     """
-    from loomgraph.core.injector import collect_kg_data
+    from loomgraph.core.injector import build_chunks, collect_kg_data, create_external_stubs
     from loomgraph.core.lightrag_client import LightRAGAPIError, LightRAGClient
     from loomgraph.core.models import (
         Call,
@@ -407,13 +408,14 @@ async def _async_index_pipeline(
         except LightRAGAPIError:
             pass  # Will be reported in result
 
-    # Pass 1: Collect all entities and relations from all files
+    # Step 1: Collect all entities, relations, and chunks from all files
     files_scanned = 0
     files_indexed = 0
     files_skipped = 0
     skipped_files: list[dict[str, str]] = []
     all_entities: list[dict[str, Any]] = []
     all_relations: list[dict[str, Any]] = []
+    all_chunks: list[dict[str, Any]] = []
 
     results = parse_results.get("results", [])
     files_scanned = len(results)
@@ -488,8 +490,10 @@ async def _async_index_pipeline(
 
         try:
             entities, relations = collect_kg_data(parse_result)
+            chunks = build_chunks(parse_result)
             all_entities.extend(entities)
             all_relations.extend(relations)
+            all_chunks.extend(chunks)
             files_indexed += 1
         except Exception as e:
             files_skipped += 1
@@ -499,25 +503,28 @@ async def _async_index_pipeline(
                 "detail": str(e),
             })
 
-    # Pass 2: Create entities → stubs → relations via graph endpoints
+    # Step 2: Create external stubs for missing relation targets
+    stubs = create_external_stubs(all_entities, all_relations)
+    all_entities.extend(stubs)
+    external_stubs = len(stubs)
+
+    # Step 3: Single insert_custom_kg call
     entities_created = 0
     relations_created = 0
-    external_stubs = 0
     injection_errors: list[str] = []
 
     if all_entities or all_relations:
         try:
-            kg_result = await client.batch_create_graph(all_entities, all_relations)
+            kg_result = await client.insert_custom_kg(
+                all_entities, all_relations, all_chunks,
+            )
             details = kg_result.get("details", {})
-            entities_created = details.get("entities_count", 0)
-            relations_created = details.get("relationships_count", 0)
-            external_stubs = details.get("external_stubs", 0)
-            if kg_result.get("errors"):
-                injection_errors.extend(kg_result["errors"])
+            entities_created = details.get("entities_count", len(all_entities))
+            relations_created = details.get("relationships_count", len(all_relations))
         except LightRAGAPIError as e:
-            injection_errors.append(f"Batch injection failed: {e.message}")
+            injection_errors.append(f"insert_custom_kg failed: {e.message}")
         except Exception as e:
-            injection_errors.append(f"Batch injection failed: {e}")
+            injection_errors.append(f"insert_custom_kg failed: {e}")
 
     result: dict[str, Any] = {
         "mode": "cold_rebuild" if clear else "append",
@@ -1124,11 +1131,14 @@ async def _async_warm_update(
     repo_path: Path,
     workspace: str | None,
 ) -> dict[str, Any]:
-    """Run async warm update pipeline.
+    """Run async warm update pipeline via delete_by_source + insert_custom_kg.
 
-    Two-pass batch approach via graph endpoints.
+    Three-step approach:
+    1. Parse changed files, collect entities/relations/chunks
+    2. Delete old data for changed files (delete_by_source)
+    3. Re-inject via single insert_custom_kg call
     """
-    from loomgraph.core.injector import collect_kg_data
+    from loomgraph.core.injector import build_chunks, collect_kg_data, create_external_stubs
     from loomgraph.core.lightrag_client import LightRAGAPIError, LightRAGClient
     from loomgraph.core.models import (
         Call,
@@ -1150,8 +1160,10 @@ async def _async_warm_update(
     errors: list[str] = []
     all_entities: list[dict[str, Any]] = []
     all_relations: list[dict[str, Any]] = []
+    all_chunks: list[dict[str, Any]] = []
+    source_ids: list[str] = []
 
-    # Pass 1: Parse all changed files and collect KG data
+    # Step 1: Parse all changed files and collect KG data
     for file_path in changed_files:
         full_path = repo_path / file_path
 
@@ -1238,31 +1250,45 @@ async def _async_warm_update(
 
         try:
             entities, relations = collect_kg_data(parse_result)
+            chunks = build_chunks(parse_result)
             all_entities.extend(entities)
             all_relations.extend(relations)
+            all_chunks.extend(chunks)
+            source_ids.append(str(path))
             files_indexed += 1
         except Exception as e:
             files_skipped += 1
             errors.append(f"Mapping failed {path}: {e}")
 
-    # Pass 2: Create entities → stubs → relations via graph endpoints
+    # Step 2: Delete old data for changed files
+    if source_ids:
+        try:
+            await client.delete_by_source(source_ids)
+        except LightRAGAPIError as e:
+            errors.append(f"delete_by_source failed: {e.message}")
+        except Exception as e:
+            errors.append(f"delete_by_source failed: {e}")
+
+    # Step 3: Create external stubs + single insert_custom_kg call
+    stubs = create_external_stubs(all_entities, all_relations)
+    all_entities.extend(stubs)
+    external_stubs = len(stubs)
+
     entities_created = 0
     relations_created = 0
-    external_stubs = 0
 
     if all_entities or all_relations:
         try:
-            kg_result = await client.batch_create_graph(all_entities, all_relations)
+            kg_result = await client.insert_custom_kg(
+                all_entities, all_relations, all_chunks,
+            )
             details = kg_result.get("details", {})
-            entities_created = details.get("entities_count", 0)
-            relations_created = details.get("relationships_count", 0)
-            external_stubs = details.get("external_stubs", 0)
-            if kg_result.get("errors"):
-                errors.extend(kg_result["errors"])
+            entities_created = details.get("entities_count", len(all_entities))
+            relations_created = details.get("relationships_count", len(all_relations))
         except LightRAGAPIError as e:
-            errors.append(f"Batch injection failed: {e.message}")
+            errors.append(f"insert_custom_kg failed: {e.message}")
         except Exception as e:
-            errors.append(f"Batch injection failed: {e}")
+            errors.append(f"insert_custom_kg failed: {e}")
 
     result: dict[str, Any] = {
         "mode": "warm",

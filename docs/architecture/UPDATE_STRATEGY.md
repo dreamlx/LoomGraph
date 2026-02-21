@@ -245,10 +245,11 @@ def get_git_changed_files(since: str = "HEAD~1") -> list[str]:
 
 | API | 用途 | 状态 |
 |-----|------|------|
-| `DELETE /documents` | Cold Rebuild 清空 | ✅ 已确认可用 |
-| `POST /graph/entity/create` | 创建实体 | ✅ 已使用 |
-| `POST /graph/relation/create` | 创建关系 | ✅ 已使用 |
-| `POST /insert_custom_kg` | 批量注入（优化） | ❌ HTTP 端点待添加 |
+| `POST /documents/insert_custom_kg` | 批量全层注入（主写入路径） | ✅ 已迁移 |
+| `DELETE /graph/by_source` | 按 source_id 跨层删除（Warm Update） | ✅ 已使用 |
+| `DELETE /graph/clear` | Cold Rebuild 清空全部 11 层 | ✅ 已使用 |
+| `POST /graph/entity/create` | 创建单个实体（已弃用） | ✅ 保留兼容 |
+| `POST /graph/relation/create` | 创建单个关系（已弃用） | ✅ 保留兼容 |
 
 ---
 
