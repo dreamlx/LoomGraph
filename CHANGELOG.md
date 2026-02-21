@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **CLI module split**: refactored `cli/main.py` (1722 lines, 42 functions) into 8 focused submodules (`_common`, `_deps_check`, `_indexing`, `_search`, `_analysis`, `_workspace`, `_setup`). Entry point `main.py` reduced to 46 lines. All 265 tests pass, backward-compatible re-exports preserved.
+
 ## [0.6.1] - 2026-02-21
 
 ### Changed

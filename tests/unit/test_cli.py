@@ -105,9 +105,9 @@ class TestVersionCommand:
 class TestStatusCommand:
     """Tests for the status command."""
 
-    @patch("loomgraph.cli.main.check_codeindex")
-    @patch("loomgraph.cli.main.check_lightrag_api")
-    @patch("loomgraph.cli.main.check_embedding")
+    @patch("loomgraph.cli._setup.check_codeindex")
+    @patch("loomgraph.cli._setup.check_lightrag_api")
+    @patch("loomgraph.cli._setup.check_embedding")
     def test_status_all_ok(
         self,
         mock_embedding: MagicMock,
@@ -127,9 +127,9 @@ class TestStatusCommand:
         assert data["success"] is True
         assert "dependencies" in data["data"]
 
-    @patch("loomgraph.cli.main.check_codeindex")
-    @patch("loomgraph.cli.main.check_lightrag_api")
-    @patch("loomgraph.cli.main.check_embedding")
+    @patch("loomgraph.cli._setup.check_codeindex")
+    @patch("loomgraph.cli._setup.check_lightrag_api")
+    @patch("loomgraph.cli._setup.check_embedding")
     def test_status_lightrag_unavailable(
         self,
         mock_embedding: MagicMock,
@@ -158,7 +158,7 @@ class TestIndexCommand:
         result = runner.invoke(main, ["index", "/nonexistent/path"])
         assert result.exit_code != 0
 
-    @patch("loomgraph.cli.main.check_codeindex")
+    @patch("loomgraph.cli._indexing.check_codeindex")
     def test_index_codeindex_not_found(
         self, mock_check: MagicMock, runner: CliRunner, tmp_path: Path
     ) -> None:
@@ -173,7 +173,7 @@ class TestIndexCommand:
         assert data["error"]["code"] == ErrorCode.CODEINDEX_NOT_FOUND
 
     @patch("subprocess.run")
-    @patch("loomgraph.cli.main.check_codeindex")
+    @patch("loomgraph.cli._indexing.check_codeindex")
     def test_index_codeindex_failed(
         self,
         mock_check: MagicMock,
@@ -194,9 +194,9 @@ class TestIndexCommand:
         assert data["success"] is False
         assert data["error"]["code"] == ErrorCode.CODEINDEX_FAILED
 
-    @patch("loomgraph.cli.main.asyncio.run")
+    @patch("loomgraph.cli._indexing.asyncio.run")
     @patch("subprocess.run")
-    @patch("loomgraph.cli.main.check_codeindex")
+    @patch("loomgraph.cli._indexing.check_codeindex")
     def test_index_success(
         self,
         mock_check: MagicMock,
@@ -254,7 +254,7 @@ class TestEmbedCommand:
         assert data["success"] is False
         assert data["error"]["code"] == ErrorCode.INVALID_INPUT
 
-    @patch("loomgraph.cli.main.asyncio.run")
+    @patch("loomgraph.cli._indexing.asyncio.run")
     def test_embed_success(
         self,
         mock_asyncio_run: MagicMock,
@@ -332,7 +332,7 @@ class TestInjectCommand:
 class TestSearchCommand:
     """Tests for the search command."""
 
-    @patch("loomgraph.cli.main.asyncio.run")
+    @patch("loomgraph.cli._search.asyncio.run")
     def test_search_basic(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test basic search command."""
         mock_run.return_value = {
@@ -350,7 +350,7 @@ class TestSearchCommand:
         assert data["data"]["query"] == "user login"
         assert data["data"]["matches_count"] == 1
 
-    @patch("loomgraph.cli.main.asyncio.run")
+    @patch("loomgraph.cli._search.asyncio.run")
     def test_search_with_options(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test search with type filter and limit."""
         mock_run.return_value = {
@@ -375,7 +375,7 @@ class TestSearchCommand:
 class TestGraphCommand:
     """Tests for the graph command."""
 
-    @patch("loomgraph.cli.main.asyncio.run")
+    @patch("loomgraph.cli._search.asyncio.run")
     def test_graph_basic(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test basic graph query."""
         mock_run.return_value = {
@@ -395,7 +395,7 @@ class TestGraphCommand:
         assert "callers" in data["data"]
         assert "callees" in data["data"]
 
-    @patch("loomgraph.cli.main.asyncio.run")
+    @patch("loomgraph.cli._search.asyncio.run")
     def test_graph_callers_only(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test graph query for callers only."""
         mock_run.return_value = {
@@ -414,7 +414,7 @@ class TestGraphCommand:
         assert "callers" in data["data"]
         assert "callees" not in data["data"]
 
-    @patch("loomgraph.cli.main.asyncio.run")
+    @patch("loomgraph.cli._search.asyncio.run")
     def test_graph_with_relation_type(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test graph query with relation type filter."""
         mock_run.return_value = {
@@ -535,7 +535,7 @@ class TestCLIHelp:
 class TestWorkspaceListCommand:
     """Tests for the workspace list command."""
 
-    @patch("loomgraph.cli.main.asyncio.run")
+    @patch("loomgraph.cli._workspace.asyncio.run")
     def test_workspace_list_basic(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test basic workspace list command."""
         mock_run.return_value = {
@@ -551,7 +551,7 @@ class TestWorkspaceListCommand:
         assert data["data"]["workspaces"] == ["customer-backend", "customer-gateway"]
         assert data["data"]["count"] == 2
 
-    @patch("loomgraph.cli.main.asyncio.run")
+    @patch("loomgraph.cli._workspace.asyncio.run")
     def test_workspace_list_empty(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test workspace list when no workspaces exist."""
         mock_run.return_value = {
@@ -567,7 +567,7 @@ class TestWorkspaceListCommand:
         assert data["data"]["workspaces"] == []
         assert data["data"]["count"] == 0
 
-    @patch("loomgraph.cli.main.asyncio.run")
+    @patch("loomgraph.cli._workspace.asyncio.run")
     def test_workspace_list_error(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test workspace list error handling."""
         mock_run.side_effect = Exception("Connection refused")
@@ -582,7 +582,7 @@ class TestWorkspaceListCommand:
 class TestWorkspaceInfoCommand:
     """Tests for the workspace info command."""
 
-    @patch("loomgraph.cli.main.asyncio.run")
+    @patch("loomgraph.cli._workspace.asyncio.run")
     def test_workspace_info_basic(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test workspace info with explicit name."""
         mock_run.return_value = {
@@ -604,7 +604,7 @@ class TestWorkspaceInfoCommand:
         assert "entity_types" in data["data"]
         assert "relation_types" in data["data"]
 
-    @patch("loomgraph.cli.main.asyncio.run")
+    @patch("loomgraph.cli._workspace.asyncio.run")
     def test_workspace_info_auto_detect(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test workspace info with auto-detect (no name argument)."""
         mock_run.return_value = {
@@ -622,7 +622,7 @@ class TestWorkspaceInfoCommand:
         assert data["success"] is True
         assert data["data"]["entities"] == 50
 
-    @patch("loomgraph.cli.main.asyncio.run")
+    @patch("loomgraph.cli._workspace.asyncio.run")
     def test_workspace_info_with_workspace_option(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test workspace info with -w option."""
         mock_run.return_value = {
@@ -640,7 +640,7 @@ class TestWorkspaceInfoCommand:
         assert data["success"] is True
         assert data["data"]["name"] == "custom-ws"
 
-    @patch("loomgraph.cli.main.asyncio.run")
+    @patch("loomgraph.cli._workspace.asyncio.run")
     def test_workspace_info_error(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test workspace info error handling."""
         mock_run.side_effect = Exception("Connection refused")
@@ -655,7 +655,7 @@ class TestWorkspaceInfoCommand:
 class TestWorkspaceDeleteCommand:
     """Tests for the workspace delete command."""
 
-    @patch("loomgraph.cli.main.asyncio.run")
+    @patch("loomgraph.cli._workspace.asyncio.run")
     def test_workspace_delete_success(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test workspace delete with --yes flag."""
         mock_run.return_value = {
@@ -680,7 +680,7 @@ class TestWorkspaceDeleteCommand:
         assert data["error"]["code"] == ErrorCode.INVALID_INPUT
         assert "--yes" in data["error"]["suggestion"]
 
-    @patch("loomgraph.cli.main.asyncio.run")
+    @patch("loomgraph.cli._workspace.asyncio.run")
     def test_workspace_delete_error(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test workspace delete error handling."""
         mock_run.side_effect = Exception("Connection refused")
@@ -724,7 +724,7 @@ class TestWorkspaceHelp:
 class TestDepsCommand:
     """Tests for the deps command."""
 
-    @patch("loomgraph.cli.main.asyncio.run")
+    @patch("loomgraph.cli._analysis.asyncio.run")
     def test_deps_basic(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test basic deps command."""
         mock_run.return_value = {
@@ -743,7 +743,7 @@ class TestDepsCommand:
         assert "src/cli" in data["data"]["modules"]
         assert len(data["data"]["dependencies"]) == 1
 
-    @patch("loomgraph.cli.main.asyncio.run")
+    @patch("loomgraph.cli._analysis.asyncio.run")
     def test_deps_with_depth(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test deps command with --depth option."""
         mock_run.return_value = {
@@ -758,7 +758,7 @@ class TestDepsCommand:
         data = json.loads(result.stdout)
         assert data["success"] is True
 
-    @patch("loomgraph.cli.main.asyncio.run")
+    @patch("loomgraph.cli._analysis.asyncio.run")
     def test_deps_error(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test deps command error handling."""
         mock_run.side_effect = Exception("Connection refused")
@@ -780,7 +780,7 @@ class TestDepsCommand:
 class TestOverviewCommand:
     """Tests for the overview command."""
 
-    @patch("loomgraph.cli.main.asyncio.run")
+    @patch("loomgraph.cli._analysis.asyncio.run")
     def test_overview_basic(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test basic overview command."""
         mock_run.return_value = {
@@ -809,7 +809,7 @@ class TestOverviewCommand:
         assert len(data["data"]["modules"]) == 1
         assert data["data"]["modules"][0]["name"] == "src/core"
 
-    @patch("loomgraph.cli.main.asyncio.run")
+    @patch("loomgraph.cli._analysis.asyncio.run")
     def test_overview_no_summary(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test overview with --no-summary flag."""
         mock_run.return_value = {
@@ -838,9 +838,9 @@ class TestOverviewCommand:
 class TestIndexProgressFeedback:
     """Tests that index command outputs progress to stderr."""
 
-    @patch("loomgraph.cli.main.asyncio.run")
+    @patch("loomgraph.cli._indexing.asyncio.run")
     @patch("subprocess.run")
-    @patch("loomgraph.cli.main.check_codeindex")
+    @patch("loomgraph.cli._indexing.check_codeindex")
     def test_index_progress_messages(
         self,
         mock_check: MagicMock,
@@ -887,7 +887,7 @@ class TestAsyncGraphQuery:
             {"src_id": "handler", "tgt_id": "AuthService", "keywords": "CALLS"},
         ]
 
-    @patch("loomgraph.cli.main.get_settings")
+    @patch("loomgraph.cli._search.get_settings")
     @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_relations")
     async def test_both_directions(
         self, mock_rels: MagicMock, mock_settings: MagicMock, mock_relations: list
@@ -896,7 +896,7 @@ class TestAsyncGraphQuery:
         mock_settings.return_value = MagicMock(
             lightrag=MagicMock(api_url="http://test:3001", api_timeout=5.0)
         )
-        from loomgraph.cli.main import _async_graph_query
+        from loomgraph.cli._search import _async_graph_query
 
         result = await _async_graph_query("AuthService", "both", "all", "test-ws")
 
@@ -904,7 +904,7 @@ class TestAsyncGraphQuery:
         assert len(result["callers"]) == 2  # main, handler
         assert len(result["callees"]) == 2  # db.query, BaseService
 
-    @patch("loomgraph.cli.main.get_settings")
+    @patch("loomgraph.cli._search.get_settings")
     @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_relations")
     async def test_relation_type_filter(
         self, mock_rels: MagicMock, mock_settings: MagicMock, mock_relations: list
@@ -913,7 +913,7 @@ class TestAsyncGraphQuery:
         mock_settings.return_value = MagicMock(
             lightrag=MagicMock(api_url="http://test:3001", api_timeout=5.0)
         )
-        from loomgraph.cli.main import _async_graph_query
+        from loomgraph.cli._search import _async_graph_query
 
         result = await _async_graph_query("AuthService", "both", "INHERITS", "test-ws")
 
@@ -921,7 +921,7 @@ class TestAsyncGraphQuery:
         assert len(result["callees"]) == 1
         assert result["callees"][0]["entity"] == "BaseService"
 
-    @patch("loomgraph.cli.main.get_settings")
+    @patch("loomgraph.cli._search.get_settings")
     @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_relations")
     async def test_no_matches(
         self, mock_rels: MagicMock, mock_settings: MagicMock
@@ -932,14 +932,14 @@ class TestAsyncGraphQuery:
         mock_settings.return_value = MagicMock(
             lightrag=MagicMock(api_url="http://test:3001", api_timeout=5.0)
         )
-        from loomgraph.cli.main import _async_graph_query
+        from loomgraph.cli._search import _async_graph_query
 
         result = await _async_graph_query("NonExistent", "both", "all", "test-ws")
 
         assert result["callers"] == []
         assert result["callees"] == []
 
-    @patch("loomgraph.cli.main.get_settings")
+    @patch("loomgraph.cli._search.get_settings")
     @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_relations")
     async def test_callers_sorted(
         self, mock_rels: MagicMock, mock_settings: MagicMock, mock_relations: list
@@ -948,7 +948,7 @@ class TestAsyncGraphQuery:
         mock_settings.return_value = MagicMock(
             lightrag=MagicMock(api_url="http://test:3001", api_timeout=5.0)
         )
-        from loomgraph.cli.main import _async_graph_query
+        from loomgraph.cli._search import _async_graph_query
 
         result = await _async_graph_query("AuthService", "callers", "all", "test-ws")
 
@@ -969,7 +969,7 @@ class TestAsyncSearch:
             {"entity_name": "db_connect", "entity_type": "function", "source_id": "db.py:1-20", "description": "Database connection"},
         ]
 
-    @patch("loomgraph.cli.main.get_settings")
+    @patch("loomgraph.cli._search.get_settings")
     @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_entities")
     async def test_exact_match(
         self, mock_ents: MagicMock, mock_settings: MagicMock, mock_entities: list
@@ -978,7 +978,7 @@ class TestAsyncSearch:
         mock_settings.return_value = MagicMock(
             lightrag=MagicMock(api_url="http://test:3001", api_timeout=5.0)
         )
-        from loomgraph.cli.main import _async_search
+        from loomgraph.cli._search import _async_search
 
         result = await _async_search("AuthService", None, "test-ws", 20)
 
@@ -986,7 +986,7 @@ class TestAsyncSearch:
         assert result["matches"][0]["entity"] == "AuthService"
         assert result["matches"][0]["score"] == 1.0
 
-    @patch("loomgraph.cli.main.get_settings")
+    @patch("loomgraph.cli._search.get_settings")
     @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_entities")
     async def test_substring_match(
         self, mock_ents: MagicMock, mock_settings: MagicMock, mock_entities: list
@@ -995,7 +995,7 @@ class TestAsyncSearch:
         mock_settings.return_value = MagicMock(
             lightrag=MagicMock(api_url="http://test:3001", api_timeout=5.0)
         )
-        from loomgraph.cli.main import _async_search
+        from loomgraph.cli._search import _async_search
 
         result = await _async_search("auth", None, "test-ws", 20)
 
@@ -1004,7 +1004,7 @@ class TestAsyncSearch:
         assert "AuthService" in names
         assert "authenticate" in names
 
-    @patch("loomgraph.cli.main.get_settings")
+    @patch("loomgraph.cli._search.get_settings")
     @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_entities")
     async def test_type_filter(
         self, mock_ents: MagicMock, mock_settings: MagicMock, mock_entities: list
@@ -1013,14 +1013,14 @@ class TestAsyncSearch:
         mock_settings.return_value = MagicMock(
             lightrag=MagicMock(api_url="http://test:3001", api_timeout=5.0)
         )
-        from loomgraph.cli.main import _async_search
+        from loomgraph.cli._search import _async_search
 
         result = await _async_search("Service", "class", "test-ws", 20)
 
         for m in result["matches"]:
             assert m["type"] == "class"
 
-    @patch("loomgraph.cli.main.get_settings")
+    @patch("loomgraph.cli._search.get_settings")
     @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_entities")
     async def test_limit(
         self, mock_ents: MagicMock, mock_settings: MagicMock, mock_entities: list
@@ -1029,13 +1029,13 @@ class TestAsyncSearch:
         mock_settings.return_value = MagicMock(
             lightrag=MagicMock(api_url="http://test:3001", api_timeout=5.0)
         )
-        from loomgraph.cli.main import _async_search
+        from loomgraph.cli._search import _async_search
 
         result = await _async_search("a", None, "test-ws", 2)
 
         assert result["matches_count"] <= 2
 
-    @patch("loomgraph.cli.main.get_settings")
+    @patch("loomgraph.cli._search.get_settings")
     @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_entities")
     async def test_no_match(
         self, mock_ents: MagicMock, mock_settings: MagicMock, mock_entities: list
@@ -1044,13 +1044,13 @@ class TestAsyncSearch:
         mock_settings.return_value = MagicMock(
             lightrag=MagicMock(api_url="http://test:3001", api_timeout=5.0)
         )
-        from loomgraph.cli.main import _async_search
+        from loomgraph.cli._search import _async_search
 
         result = await _async_search("zzzznonexistent", None, "test-ws", 20)
 
         assert result["matches_count"] == 0
 
-    @patch("loomgraph.cli.main.get_settings")
+    @patch("loomgraph.cli._search.get_settings")
     @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_entities")
     async def test_scores_descending(
         self, mock_ents: MagicMock, mock_settings: MagicMock, mock_entities: list
@@ -1059,7 +1059,7 @@ class TestAsyncSearch:
         mock_settings.return_value = MagicMock(
             lightrag=MagicMock(api_url="http://test:3001", api_timeout=5.0)
         )
-        from loomgraph.cli.main import _async_search
+        from loomgraph.cli._search import _async_search
 
         result = await _async_search("auth", None, "test-ws", 20)
 
