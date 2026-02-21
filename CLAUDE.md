@@ -83,7 +83,7 @@ loomgraph/
 │   │   ├── _common.py           # ErrorCode, output helpers, workspace auto-detect
 │   │   ├── _deps_check.py       # check_codeindex/lightrag_api/embedding
 │   │   ├── _indexing.py         # index, embed, inject, update
-│   │   ├── _search.py           # search, graph
+│   │   ├── _search.py           # find, query, graph
 │   │   ├── _analysis.py         # impact, deps, overview
 │   │   ├── _workspace.py        # workspace group + compare/similar
 │   │   └── _setup.py            # status, install-skills, setup-config, version
@@ -252,7 +252,9 @@ embedding:
 | `loomgraph index <path>` | 一键索引代码库 |
 | `loomgraph index --clear <path>` | Cold Rebuild（清空重建） |
 | `loomgraph update [--since REF]` | Warm Update（增量索引 git 变更） |
-| `loomgraph search "<query>"` | 语义搜索代码 |
+| `loomgraph find "<query>"` | 结构化实体发现（名字匹配 + 类型过滤） |
+| `loomgraph find "<query>" --with-relations` | 实体 + callers/callees 一次返回 |
+| `loomgraph query "<question>"` | 语义知识问答（RAG 引擎，LLM 驱动） |
 | `loomgraph graph "<entity>"` | 查询调用关系 |
 | `loomgraph impact [TARGET]` | 分析代码变更影响 |
 | `loomgraph workspace list` | 列出所有 workspace |
