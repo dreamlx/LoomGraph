@@ -106,13 +106,13 @@ def map_symbol_to_entity(
     """
     entity_name = symbol.name
 
-    # Build description: signature | Language | file:line
-    # This allows semantic search to find code by signature, language, or location
-    description_parts = []
+    # Build description: kind: name | signature | docstring (truncated) | Language | file:line
+    # kind prefix improves semantic search; docstring truncation prevents bloated descriptions
+    description_parts = [f"{symbol.kind}: {symbol.name}"]
     if symbol.signature:
         description_parts.append(symbol.signature)
     if symbol.docstring:
-        description_parts.append(symbol.docstring)
+        description_parts.append(symbol.docstring[:200])
     description_parts.append(f"{language.capitalize()} | {file_path}:{symbol.line_start}-{symbol.line_end}")
 
     entity_data: dict[str, Any] = {

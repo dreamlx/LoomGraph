@@ -37,6 +37,9 @@ def collect_kg_data(
     This avoids the ordering problem where cross-file relations fail
     because target entities haven't been created yet.
 
+    Relations are pre-validated: only relations where at least one
+    endpoint is a known entity are included.
+
     Args:
         result: ParseResult from codeindex
 
@@ -69,33 +72,39 @@ def collect_kg_data(
             **entity.entity_data,
         })
 
+    # Collect known entity names for relation validation
+    known_names = {e["entity_name"] for e in entities}
+
     # Call relations
     for call in result.calls:
         rel = map_call_to_relation(call, file_path)
-        relations.append({
-            "src_id": rel.src_id,
-            "tgt_id": rel.tgt_id,
-            **rel.edge_data,
-        })
-
-    # Inheritance relations
-    for inh in result.inheritances:
-        rel = map_inheritance_to_relation(inh, file_path)
-        relations.append({
-            "src_id": rel.src_id,
-            "tgt_id": rel.tgt_id,
-            **rel.edge_data,
-        })
-
-    # Import relations
-    for imp in result.imports:
-        rels = map_import_to_relation(imp, module_name, file_path)
-        for rel in rels:
+        if rel.src_id in known_names or rel.tgt_id in known_names:
             relations.append({
                 "src_id": rel.src_id,
                 "tgt_id": rel.tgt_id,
                 **rel.edge_data,
             })
+
+    # Inheritance relations
+    for inh in result.inheritances:
+        rel = map_inheritance_to_relation(inh, file_path)
+        if rel.src_id in known_names or rel.tgt_id in known_names:
+            relations.append({
+                "src_id": rel.src_id,
+                "tgt_id": rel.tgt_id,
+                **rel.edge_data,
+            })
+
+    # Import relations
+    for imp in result.imports:
+        rels = map_import_to_relation(imp, module_name, file_path)
+        for rel in rels:
+            if rel.src_id in known_names or rel.tgt_id in known_names:
+                relations.append({
+                    "src_id": rel.src_id,
+                    "tgt_id": rel.tgt_id,
+                    **rel.edge_data,
+                })
 
     return entities, relations
 

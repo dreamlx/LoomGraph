@@ -361,6 +361,7 @@ class LightRAGClient:
         entity_errors: list[str] = []
         relation_errors: list[str] = []
         entities_created = 0
+        entities_existing = 0
         relations_created = 0
         external_stubs_created = 0
         known_entities: set[str] = set()
@@ -368,7 +369,7 @@ class LightRAGClient:
         async with httpx.AsyncClient(timeout=self.timeout, trust_env=False) as client:
             # Pass 1: Create all project entities concurrently
             async def _create_entity(entity: dict[str, Any]) -> bool:
-                nonlocal entities_created
+                nonlocal entities_created, entities_existing
                 name = entity.get("entity_name", "")
                 data = {k: v for k, v in entity.items() if k != "entity_name"}
                 async with sem:
@@ -384,7 +385,7 @@ class LightRAGClient:
                             return True
                         detail = resp.json().get("detail", resp.text)
                         if "already exist" in str(detail).lower():
-                            entities_created += 1
+                            entities_existing += 1
                             known_entities.add(name)
                             return True
                         entity_errors.append(f"{name}: {detail}")
@@ -427,7 +428,6 @@ class LightRAGClient:
                                 return True
                             detail = resp.json().get("detail", resp.text)
                             if "already exist" in str(detail).lower():
-                                external_stubs_created += 1
                                 known_entities.add(name)
                                 return True
                             return False
@@ -471,6 +471,7 @@ class LightRAGClient:
             "status": "success" if not all_errors else "partial",
             "details": {
                 "entities_count": entities_created,
+                "entities_existing": entities_existing,
                 "relationships_count": relations_created,
                 "external_stubs": external_stubs_created,
             },

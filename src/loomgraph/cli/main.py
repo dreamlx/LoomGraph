@@ -368,7 +368,8 @@ async def _async_index_pipeline(
     1. Collect all entities and relations from all files
     2. Create all entities first, then all relations (solves cross-file ordering)
     """
-    from loomgraph.core.injector import collect_kg_data
+    from loomgraph.chunking import chunk_file
+    from loomgraph.core.injector import collect_kg_data, _path_to_module_name
     from loomgraph.core.lightrag_client import LightRAGAPIError, LightRAGClient
     from loomgraph.core.models import (
         Call,
@@ -401,6 +402,7 @@ async def _async_index_pipeline(
     skipped_files: list[dict[str, str]] = []
     all_entities: list[dict[str, Any]] = []
     all_relations: list[dict[str, Any]] = []
+    all_chunks: list[dict[str, Any]] = []
 
     results = parse_results.get("results", [])
     files_scanned = len(results)
@@ -470,6 +472,14 @@ async def _async_index_pipeline(
             entities, relations = collect_kg_data(parse_result)
             all_entities.extend(entities)
             all_relations.extend(relations)
+
+            # AST-based chunking for finer vector retrieval
+            source = file_result.get("source", "")
+            if source:
+                module_name = _path_to_module_name(path)
+                chunks = chunk_file(source, parse_result, module_name)
+                all_chunks.extend([c.to_dict() for c in chunks])
+
             files_indexed += 1
         except Exception as e:
             files_skipped += 1
@@ -481,8 +491,10 @@ async def _async_index_pipeline(
 
     # Pass 2: Create entities → stubs → relations via graph endpoints
     entities_created = 0
+    entities_existing = 0
     relations_created = 0
     external_stubs = 0
+    chunks_count = len(all_chunks)
     injection_errors: list[str] = []
 
     if all_entities or all_relations:
@@ -490,6 +502,7 @@ async def _async_index_pipeline(
             kg_result = await client.batch_create_graph(all_entities, all_relations)
             details = kg_result.get("details", {})
             entities_created = details.get("entities_count", 0)
+            entities_existing = details.get("entities_existing", 0)
             relations_created = details.get("relationships_count", 0)
             external_stubs = details.get("external_stubs", 0)
             if kg_result.get("errors"):
@@ -499,13 +512,22 @@ async def _async_index_pipeline(
         except Exception as e:
             injection_errors.append(f"Batch injection failed: {e}")
 
+    # Pass 3: Inject chunks via insert_custom_kg if any were generated
+    if all_chunks:
+        try:
+            await client.insert_custom_kg([], [], chunks=all_chunks)
+        except Exception as e:
+            injection_errors.append(f"Chunk injection failed: {e}")
+
     result: dict[str, Any] = {
         "mode": "cold_rebuild" if clear else "append",
         "files_scanned": files_scanned,
         "files_indexed": files_indexed,
         "files_skipped": files_skipped,
         "entities_created": entities_created,
+        "entities_existing": entities_existing,
         "relations_created": relations_created,
+        "chunks_generated": chunks_count,
         "skipped_files": skipped_files,
     }
 
