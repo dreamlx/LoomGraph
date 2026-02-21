@@ -98,7 +98,11 @@ class DepsAnalyzer:
         for entity in entities:
             name = entity.get("entity_name", "") or entity.get("entity_id", "") or entity.get("id", "")
             source_id = entity.get("source_id", "")
+            entity_type = entity.get("entity_type", "unknown")
             if not name or not source_id:
+                continue
+            # Skip external stubs — they produce meaningless "." module deps
+            if entity_type == "external" or source_id == "external":
                 continue
             module = extract_module(source_id, self.depth)
             entity_module[name] = module
