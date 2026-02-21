@@ -275,20 +275,20 @@ class TestRiskAssessor:
 
 
 class TestImpactAnalyzer:
-    """Tests for impact analysis logic."""
+    """Tests for graph-based impact analysis."""
 
     @pytest.mark.asyncio
     async def test_analyze_with_no_callers(self) -> None:
-        """Test analyzing when no callers are found."""
+        """Test analyzing when no callers are found in the graph."""
         mock_client = MagicMock()
-        mock_client.query = AsyncMock(return_value={"response": ""})
+        mock_client.get_all_relations = AsyncMock(return_value=[])
+        mock_client.get_all_entities = AsyncMock(return_value=[])
 
         analyzer = ImpactAnalyzer(
             lightrag_client=mock_client,
             repo_path=Path("."),
         )
 
-        # Mock git parser and extractor
         with patch.object(GitDiffParser, "get_changed_files_for_commit") as mock_git:
             mock_git.return_value = [
                 ChangedFile(
@@ -313,59 +313,75 @@ class TestImpactAnalyzer:
         assert result.commit == "abc1234"
         assert len(result.changed_symbols) == 1
         assert result.changed_symbols[0].name == "test_func"
+        assert len(result.direct_callers) == 0
+        # Risk assessment should be auto-populated
+        assert result.risk_assessment is not None
+        assert result.risk_assessment.level == "low"
 
     @pytest.mark.asyncio
-    async def test_identify_affected_modules(self) -> None:
-        """Test that affected modules are correctly identified."""
+    async def test_graph_based_caller_lookup(self) -> None:
+        """Test that callers are found via graph relations, not NL queries."""
         mock_client = MagicMock()
-        mock_client.query = AsyncMock(return_value={"response": ""})
+        mock_client.get_all_relations = AsyncMock(return_value=[
+            {"src_id": "handler.process", "tgt_id": "service.validate", "keywords": "CALLS"},
+            {"src_id": "main.run", "tgt_id": "handler.process", "keywords": "CALLS"},
+            {"src_id": "service.validate", "tgt_id": "utils.check", "keywords": "CALLS"},
+        ])
+        mock_client.get_all_entities = AsyncMock(return_value=[
+            {"entity_name": "handler.process", "entity_data": {"file_path": "src/handler.py", "line_start": 10}},
+            {"entity_name": "main.run", "entity_data": {"file_path": "src/main.py", "line_start": 5}},
+            {"entity_name": "service.validate", "entity_data": {"file_path": "src/service.py", "line_start": 20}},
+        ])
 
-        analyzer = ImpactAnalyzer(lightrag_client=mock_client)
-
-        modules = analyzer._identify_affected_modules(
-            symbols=[
-                ChangedSymbol(
-                    name="func1",
-                    file="src/auth/service.py",
-                    change_type=ChangeType.MODIFIED,
-                ),
-                ChangedSymbol(
-                    name="func2",
-                    file="src/api/handler.py",
-                    change_type=ChangeType.MODIFIED,
-                ),
-            ],
-            direct_callers=[
-                Caller(name="caller1", file="src/main.py"),
-            ],
-            indirect_callers=[],
+        analyzer = ImpactAnalyzer(
+            lightrag_client=mock_client,
+            repo_path=Path("."),
+            max_depth=2,
         )
 
-        assert "src.auth.service" in modules
-        assert "src.api.handler" in modules
-        assert "src.main" in modules
+        with patch.object(GitDiffParser, "get_changed_files_for_commit") as mock_git:
+            mock_git.return_value = [
+                ChangedFile(path="src/service.py", change_type=ChangeType.MODIFIED, added_lines=[(20, 25)])
+            ]
+            with patch.object(GitDiffParser, "get_current_commit", return_value="def5678"):
+                with patch.object(ChangedSymbolExtractor, "extract_from_files") as mock_extract:
+                    mock_extract.return_value = [
+                        ChangedSymbol(name="service.validate", file="src/service.py",
+                                      change_type=ChangeType.MODIFIED, lines_changed=5)
+                    ]
+                    result = await analyzer.analyze_commit("HEAD")
+
+        # handler.process calls service.validate -> direct caller
+        assert len(result.direct_callers) == 1
+        assert result.direct_callers[0].name == "handler.process"
+        assert result.direct_callers[0].file == "src/handler.py"
+        assert result.direct_callers[0].depth == 1
+
+        # main.run calls handler.process -> indirect caller
+        assert len(result.indirect_callers) == 1
+        assert result.indirect_callers[0].name == "main.run"
+        assert result.indirect_callers[0].depth == 2
+
+        # No NL query should have been made
+        mock_client.query.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_identify_affected_tests(self) -> None:
-        """Test that affected tests are correctly identified."""
+    async def test_graph_data_cached(self) -> None:
+        """Test that graph data is loaded only once (cached)."""
         mock_client = MagicMock()
-        mock_client.query = AsyncMock(return_value={"response": ""})
+        mock_client.get_all_relations = AsyncMock(return_value=[])
+        mock_client.get_all_entities = AsyncMock(return_value=[])
 
-        analyzer = ImpactAnalyzer(lightrag_client=mock_client)
+        analyzer = ImpactAnalyzer(lightrag_client=mock_client, repo_path=Path("."))
 
-        tests = analyzer._identify_affected_tests(
-            direct_callers=[
-                Caller(name="test_func", file="tests/test_service.py"),
-                Caller(name="handler", file="src/handler.py"),
-            ],
-            indirect_callers=[
-                Caller(name="test_integration", file="tests/integration/test_api.py"),
-            ],
-        )
+        with patch.object(GitDiffParser, "get_changed_files_for_commit", return_value=[]):
+            with patch.object(GitDiffParser, "get_current_commit", return_value="abc"):
+                with patch.object(ChangedSymbolExtractor, "extract_from_files", return_value=[]):
+                    await analyzer.analyze_commit("HEAD")
+                    await analyzer.analyze_commit("HEAD")
 
-        assert "tests/test_service.py" in tests
-        assert "tests/integration/test_api.py" in tests
-        assert "src/handler.py" not in tests
+        # get_all_relations should be called only once (cached)
+        assert mock_client.get_all_relations.call_count == 1
 
 
 class TestImpactModels:

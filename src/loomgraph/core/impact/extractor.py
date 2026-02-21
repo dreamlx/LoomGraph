@@ -204,10 +204,10 @@ class ChangedSymbolExtractor:
         return count
 
     def _run_codeindex(self, file_path: Path) -> list[dict]:
-        """Run codeindex CLI to get symbols from a file.
+        """Get symbols from a file using codeindex.
 
-        Uses codeindex parse CLI command for loose coupling.
-        See: https://github.com/dreamlx/codeindex docs/guides/loomgraph-integration.md
+        Tries the Python API first (faster, no subprocess overhead),
+        falls back to CLI if the library isn't installed.
 
         Args:
             file_path: Path to the file
@@ -215,6 +215,28 @@ class ChangedSymbolExtractor:
         Returns:
             List of symbol dicts from codeindex
         """
+        # Try Python API first
+        try:
+            from codeindex.parser import parse_file
+
+            result = parse_file(file_path)
+            if result.error:
+                return []
+            return [
+                {
+                    "name": s.name,
+                    "kind": s.kind,
+                    "line_start": s.line_start,
+                    "line_end": s.line_end,
+                }
+                for s in result.symbols
+            ]
+        except ImportError:
+            pass  # Fall through to CLI
+        except Exception:
+            pass  # Fall through to CLI
+
+        # Fallback: CLI subprocess
         try:
             result = subprocess.run(
                 ["codeindex", "parse", str(file_path)],
@@ -223,22 +245,11 @@ class ChangedSymbolExtractor:
                 timeout=30,
             )
 
-            # Exit code 1 = file not found, 2 = unsupported type, 3 = parse error
             if result.returncode in (1, 2):
                 return []
 
-            # Parse JSON output
             data = json.loads(result.stdout)
-
-            # Return symbols list (format matches codeindex v0.13.0+)
             return data.get("symbols", [])
 
-        except subprocess.TimeoutExpired:
-            return []
-        except json.JSONDecodeError:
-            return []
-        except FileNotFoundError:
-            # codeindex not installed
-            return []
-        except Exception:
+        except (subprocess.TimeoutExpired, json.JSONDecodeError, FileNotFoundError, Exception):
             return []
