@@ -65,11 +65,16 @@ class OverviewAnalyzer:
         entity_module: dict[str, str] = {}
 
         for entity in entities:
-            name = entity.get("entity_name", "")
+            # Handle both injection format (entity_name) and API response format (entity_id/id)
+            name = entity.get("entity_name", "") or entity.get("entity_id", "") or entity.get("id", "")
             source_id = entity.get("source_id", "")
             entity_type = entity.get("entity_type", "unknown")
 
             if not name or not source_id:
+                continue
+
+            # Skip external stubs — they add noise without analytical value
+            if entity_type == "external" or source_id == "external":
                 continue
 
             module = extract_module(source_id, self.depth)
@@ -78,15 +83,17 @@ class OverviewAnalyzer:
             md = module_data[module]
             md["entities"].append(name)
             md["entity_types"][entity_type] += 1
-            # Extract just the filename
-            filename = PurePosixPath(source_id).name
+            # Strip line range suffix (e.g., "main.py:1037-1126" → "main.py")
+            clean_source = source_id.split(":")[0] if ":" in source_id else source_id
+            filename = PurePosixPath(clean_source).name
             md["files"].add(filename)
 
         # Count relations per entity for ranking
         entity_relation_count: dict[str, int] = defaultdict(int)
         for relation in relations:
-            src = relation.get("src_id", "")
-            tgt = relation.get("tgt_id", "")
+            # Handle both injection format (src_id/tgt_id) and API response format (source/target)
+            src = relation.get("src_id", "") or relation.get("source", "")
+            tgt = relation.get("tgt_id", "") or relation.get("target", "")
             if src:
                 entity_relation_count[src] += 1
             if tgt:

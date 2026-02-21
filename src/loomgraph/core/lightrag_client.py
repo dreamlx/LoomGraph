@@ -238,32 +238,69 @@ class LightRAGClient:
     async def delete_all(self) -> dict[str, Any]:
         """Delete all data from LightRAG (Cold Rebuild).
 
-        This clears all entities, relations, chunks, and caches.
-        Use with caution - this operation is irreversible.
+        Calls DELETE /graph/clear which clears all 11 storage layers
+        (graph, vectors, chunks, etc.) in one request.
 
         Returns:
-            Response from LightRAG confirming deletion
+            Response from the clear operation
 
         Raises:
             LightRAGAPIError: If deletion fails
         """
         async with httpx.AsyncClient(timeout=self.timeout, trust_env=False) as client:
             try:
-                response = await client.delete(
-                    f"{self.base_url}/documents",
+                resp = await client.delete(
+                    f"{self.base_url}/graph/clear",
                     headers=self._get_headers(),
+                )
+                data = resp.json() if resp.content else {}
+                if resp.status_code >= 400:
+                    detail = data.get("detail", str(data)) if data else f"HTTP {resp.status_code}"
+                    raise LightRAGAPIError(
+                        f"Failed to clear graph: {detail}",
+                        status_code=resp.status_code,
+                        detail=detail,
+                    )
+                logger.info("Cleared all storage layers via /graph/clear")
+                # Wait for async storage cleanup to complete
+                await asyncio.sleep(3)
+                return {"graph": data}
+            except httpx.RequestError as e:
+                raise LightRAGAPIError(f"Connection failed: {e}") from e
+
+    async def delete_by_source(self, source_ids: list[str]) -> dict[str, Any]:
+        """Delete all data associated with given source_ids.
+
+        Used for warm update: delete old data for changed files before re-injecting.
+
+        Args:
+            source_ids: List of source_id strings (e.g., file paths)
+
+        Returns:
+            Response with deletion counts
+
+        Raises:
+            LightRAGAPIError: If deletion fails
+        """
+        async with httpx.AsyncClient(timeout=self.timeout, trust_env=False) as client:
+            try:
+                response = await client.request(
+                    "DELETE",
+                    f"{self.base_url}/graph/by_source",
+                    headers=self._get_headers(),
+                    json={"source_ids": source_ids},
                 )
                 data = response.json() if response.content else {}
 
                 if response.status_code >= 400:
                     detail = data.get("detail", str(data)) if data else f"HTTP {response.status_code}"
                     raise LightRAGAPIError(
-                        f"Failed to delete all documents: {detail}",
+                        f"Failed to delete by source: {detail}",
                         status_code=response.status_code,
                         detail=detail,
                     )
 
-                logger.info("Successfully deleted all documents from LightRAG")
+                logger.info(f"Deleted data for {len(source_ids)} source(s)")
                 return data
 
             except httpx.RequestError as e:
@@ -332,12 +369,13 @@ class LightRAGClient:
         self,
         entities: list[dict[str, Any]],
         relationships: list[dict[str, Any]],
-        concurrency: int = 10,
+        concurrency: int = 5,
+        max_retries: int = 3,
     ) -> dict[str, Any]:
         """Batch create entities and relations via graph endpoints.
 
         Three-pass approach:
-        1. Create ALL project entities concurrently
+        1. Create ALL project entities concurrently (upsert: edit if exists)
         2. Auto-create stub entities for external dependencies
         3. Create ALL relations concurrently
 
@@ -349,7 +387,8 @@ class LightRAGClient:
                 Each has: entity_name, entity_type, description, source_id, ...
             relationships: List of relation dicts from collect_kg_data().
                 Each has: src_id, tgt_id, description, keywords, source_id, ...
-            concurrency: Max concurrent HTTP requests (default: 10)
+            concurrency: Max concurrent HTTP requests (default: 5)
+            max_retries: Max retries on server errors (500/502/503)
 
         Returns:
             Dict with entities_created, relations_created, external_stubs, errors
@@ -366,17 +405,38 @@ class LightRAGClient:
         known_entities: set[str] = set()
 
         async with httpx.AsyncClient(timeout=self.timeout, trust_env=False) as client:
-            # Pass 1: Create all project entities concurrently
+
+            async def _post_with_retry(
+                url: str, json_data: dict[str, Any]
+            ) -> httpx.Response:
+                """POST with exponential backoff on server errors."""
+                last_resp: httpx.Response | None = None
+                for attempt in range(max_retries + 1):
+                    last_resp = await client.post(
+                        url, headers=headers, json=json_data
+                    )
+                    if last_resp.status_code not in (500, 502, 503):
+                        return last_resp
+                    if attempt < max_retries:
+                        delay = 1.0 * (2 ** attempt)  # 1s, 2s, 4s
+                        logger.warning(
+                            f"Server error {last_resp.status_code} on {url}, "
+                            f"retry {attempt + 1}/{max_retries} in {delay}s"
+                        )
+                        await asyncio.sleep(delay)
+                assert last_resp is not None
+                return last_resp
+
+            # Pass 1: Create all project entities concurrently (upsert)
             async def _create_entity(entity: dict[str, Any]) -> bool:
                 nonlocal entities_created
                 name = entity.get("entity_name", "")
                 data = {k: v for k, v in entity.items() if k != "entity_name"}
                 async with sem:
                     try:
-                        resp = await client.post(
+                        resp = await _post_with_retry(
                             f"{self.base_url}/graph/entity/create",
-                            headers=headers,
-                            json={"entity_name": name, "entity_data": data},
+                            {"entity_name": name, "entity_data": data},
                         )
                         if resp.status_code < 400:
                             entities_created += 1
@@ -384,9 +444,17 @@ class LightRAGClient:
                             return True
                         detail = resp.json().get("detail", resp.text)
                         if "already exist" in str(detail).lower():
-                            entities_created += 1
-                            known_entities.add(name)
-                            return True
+                            # Upsert: update existing entity via edit
+                            edit_resp = await _post_with_retry(
+                                f"{self.base_url}/graph/entity/edit",
+                                {"entity_name": name, "updated_data": data},
+                            )
+                            if edit_resp.status_code < 400:
+                                entities_created += 1
+                                known_entities.add(name)
+                                return True
+                            entity_errors.append(f"{name}: edit failed after exists")
+                            return False
                         entity_errors.append(f"{name}: {detail}")
                         return False
                     except Exception as e:
@@ -409,10 +477,9 @@ class LightRAGClient:
                     nonlocal external_stubs_created
                     async with sem:
                         try:
-                            resp = await client.post(
+                            resp = await _post_with_retry(
                                 f"{self.base_url}/graph/entity/create",
-                                headers=headers,
-                                json={
+                                {
                                     "entity_name": name,
                                     "entity_data": {
                                         "entity_type": "external",
@@ -445,10 +512,9 @@ class LightRAGClient:
                 data = {k: v for k, v in rel.items() if k not in ("src_id", "tgt_id")}
                 async with sem:
                     try:
-                        resp = await client.post(
+                        resp = await _post_with_retry(
                             f"{self.base_url}/graph/relation/create",
-                            headers=headers,
-                            json={
+                            {
                                 "source_entity": src,
                                 "target_entity": tgt,
                                 "relation_data": data,

@@ -50,7 +50,7 @@ cat ~/.config/loomgraph/config.yaml 2>/dev/null || echo "配置文件不存在"
 
 如果不存在，提示用户提供 LightRAG 服务地址，然后执行：
 ```bash
-loomgraph setup-config --lightrag-url <用户提供的URL>
+loomgraph setup-config --lightrag-url <用户提供的URL> --embedding-url ""
 ```
 
 > 服务地址由 LoomGraph 技术团队提供。如果用户不知道地址，请联系技术团队获取。

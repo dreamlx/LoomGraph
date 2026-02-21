@@ -91,13 +91,18 @@ class DepsAnalyzer:
         relations = await self.client.get_all_relations()
 
         # Build entity_name → module mapping
+        # Handle both injection format (entity_name) and API response format (entity_id/id)
         entity_module: dict[str, str] = {}
         modules_set: set[str] = set()
 
         for entity in entities:
-            name = entity.get("entity_name", "")
+            name = entity.get("entity_name", "") or entity.get("entity_id", "") or entity.get("id", "")
             source_id = entity.get("source_id", "")
+            entity_type = entity.get("entity_type", "unknown")
             if not name or not source_id:
+                continue
+            # Skip external stubs — they produce meaningless "." module deps
+            if entity_type == "external" or source_id == "external":
                 continue
             module = extract_module(source_id, self.depth)
             entity_module[name] = module
@@ -110,8 +115,9 @@ class DepsAnalyzer:
         )
 
         for relation in relations:
-            src_name = relation.get("src_id", "")
-            tgt_name = relation.get("tgt_id", "")
+            # Handle both injection format (src_id/tgt_id) and API response format (source/target)
+            src_name = relation.get("src_id", "") or relation.get("source", "")
+            tgt_name = relation.get("tgt_id", "") or relation.get("target", "")
             rel_type = relation.get("keywords", "UNKNOWN")
 
             src_module = entity_module.get(src_name)

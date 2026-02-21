@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .lightrag_client import LightRAGAPIError, LightRAGClient
 from .mapper import (
@@ -43,8 +43,6 @@ def collect_kg_data(
     Returns:
         Tuple of (entities, relations) in insert_custom_kg dict format
     """
-    from typing import Any
-
     file_path = str(result.path)
     language = detect_language(file_path)
     module_name = _path_to_module_name(result.path)
@@ -98,6 +96,75 @@ def collect_kg_data(
             })
 
     return entities, relations
+
+
+def build_chunks(result: ParseResult) -> list[dict[str, Any]]:
+    """Build insert_custom_kg chunks for a single file.
+
+    Each file produces one chunk containing module docstring + symbol signatures,
+    enabling semantic search over file contents.
+
+    Args:
+        result: ParseResult from codeindex
+
+    Returns:
+        List with one chunk dict (content, source_id, tokens, chunk_order_index, full_doc_id)
+    """
+    content_parts: list[str] = []
+    if result.module_docstring:
+        content_parts.append(result.module_docstring)
+    for symbol in result.symbols:
+        line = symbol.signature if symbol.signature else f"{symbol.kind} {symbol.name}"
+        if symbol.docstring:
+            line += f"\n  {symbol.docstring[:200]}"
+        content_parts.append(line)
+
+    content = "\n".join(content_parts)
+    if not content:
+        content = str(result.path)
+
+    return [{
+        "content": content,
+        "source_id": str(result.path),
+        "tokens": len(content.split()),
+        "chunk_order_index": 0,
+        "full_doc_id": str(result.path),
+    }]
+
+
+def create_external_stubs(
+    all_entities: list[dict[str, Any]],
+    all_relations: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Create stub entities for external dependencies referenced in relations.
+
+    Scans all relation src_id/tgt_id fields and creates an "external" stub entity
+    for any name not found in the entity list.
+
+    Args:
+        all_entities: Collected entities from collect_kg_data()
+        all_relations: Collected relations from collect_kg_data()
+
+    Returns:
+        List of stub entity dicts to append to all_entities
+    """
+    known = {e["entity_name"] for e in all_entities}
+    stubs: list[dict[str, Any]] = []
+    seen_stubs: set[str] = set()
+
+    for rel in all_relations:
+        for field in ("src_id", "tgt_id"):
+            name = rel.get(field, "")
+            if name and name not in known and name not in seen_stubs:
+                stubs.append({
+                    "entity_name": name,
+                    "entity_type": "external",
+                    "description": f"External dependency: {name}",
+                    "source_id": "external",
+                })
+                seen_stubs.add(name)
+
+    return stubs
 
 
 async def inject_parse_result(
