@@ -277,18 +277,34 @@ def status() -> None:
 @main.command()
 @click.argument("repo_path", type=click.Path(exists=True))
 @click.option("--clear/--no-clear", default=True, help="Clear old data before indexing")
+@click.option("--incremental", is_flag=True, default=False, help="Skip unchanged files (hash-based)")
 @click.option("--workspace", "-w", default=None, help="Workspace name (default: current directory name)")
-def index(repo_path: str, clear: bool, workspace: str | None) -> None:
+def index(repo_path: str, clear: bool, incremental: bool, workspace: str | None) -> None:
     """Index a code repository (one-step pipeline).
 
     Calls: codeindex scan → embed → inject
 
     REPO_PATH: Directory path to index
+
+    Use --incremental to skip files that haven't changed since the last
+    index run. File changes are detected via SHA-256 hashes stored in
+    .loomgraph/meta.json inside the repository.
     """
     import time
 
     start_time = time.time()
     repo = Path(repo_path).resolve()
+
+    # When --incremental, disable --clear to preserve existing data
+    if incremental:
+        clear = False
+
+    # Load incremental meta if needed
+    old_hashes: dict[str, str] = {}
+    if incremental:
+        from loomgraph.core.indexer import load_meta
+        meta = load_meta(repo)
+        old_hashes = meta.file_hashes
 
     # Step 1: Check codeindex
     codeindex_status = check_codeindex()
@@ -342,7 +358,10 @@ def index(repo_path: str, clear: bool, workspace: str | None) -> None:
 
     # Step 3: Run embed + inject asynchronously
     try:
-        result = asyncio.run(_async_index_pipeline(parse_results, clear, workspace))
+        result = asyncio.run(_async_index_pipeline(
+            parse_results, clear, workspace,
+            incremental=incremental, old_hashes=old_hashes, repo_path=repo,
+        ))
     except Exception as e:
         output_error(
             code=ErrorCode.LIGHTRAG_ERROR,
@@ -361,12 +380,19 @@ async def _async_index_pipeline(
     parse_results: dict[str, Any],
     clear: bool,
     workspace: str | None = None,
+    *,
+    incremental: bool = False,
+    old_hashes: dict[str, str] | None = None,
+    repo_path: Path | None = None,
 ) -> dict[str, Any]:
     """Run the async indexing pipeline.
 
     Two-pass batch approach via graph endpoints:
     1. Collect all entities and relations from all files
     2. Create all entities first, then all relations (solves cross-file ordering)
+
+    When incremental=True, files whose SHA-256 hash matches old_hashes
+    are skipped. Updated hashes are persisted to .loomgraph/meta.json.
     """
     from loomgraph.core.injector import collect_kg_data
     from loomgraph.core.lightrag_client import LightRAGAPIError, LightRAGClient
@@ -377,6 +403,13 @@ async def _async_index_pipeline(
         ParseResult,
         Symbol,
     )
+
+    if old_hashes is None:
+        old_hashes = {}
+
+    # Will collect new hashes for meta persistence
+    import hashlib
+    new_hashes: dict[str, str] = {}
 
     settings = get_settings()
     client = LightRAGClient(
@@ -416,6 +449,24 @@ async def _async_index_pipeline(
                 "detail": file_result["error"],
             })
             continue
+
+        # Incremental: compute hash and skip unchanged files
+        file_path_str = str(path)
+        if incremental and repo_path and path.is_absolute() and path.exists():
+            try:
+                file_bytes = path.read_bytes()
+                file_hash = hashlib.sha256(file_bytes).hexdigest()
+                rel_key = str(path.relative_to(repo_path))
+                new_hashes[rel_key] = file_hash
+                if old_hashes.get(rel_key) == file_hash:
+                    files_skipped += 1
+                    skipped_files.append({
+                        "path": file_path_str,
+                        "reason": "unchanged",
+                    })
+                    continue
+            except (OSError, ValueError):
+                pass  # Fall through to index this file
 
         symbols = [
             Symbol(
@@ -500,7 +551,7 @@ async def _async_index_pipeline(
             injection_errors.append(f"Batch injection failed: {e}")
 
     result: dict[str, Any] = {
-        "mode": "cold_rebuild" if clear else "append",
+        "mode": "incremental" if incremental else ("cold_rebuild" if clear else "append"),
         "files_scanned": files_scanned,
         "files_indexed": files_indexed,
         "files_skipped": files_skipped,
@@ -519,6 +570,24 @@ async def _async_index_pipeline(
         result["injection_errors"] = injection_errors[:10]
         if len(injection_errors) > 10:
             result["injection_errors_total"] = len(injection_errors)
+
+    # Save incremental meta for next run
+    if incremental and repo_path:
+        from datetime import datetime, timezone
+        from loomgraph.core.indexer import save_meta
+        from loomgraph.core.models import IncrementalMeta
+
+        meta = IncrementalMeta(
+            version=1,
+            workspace=get_auto_workspace(workspace) or "",
+            file_hashes=new_hashes,
+            last_indexed=datetime.now(timezone.utc).isoformat(),
+            files_count=files_scanned,
+            entities_count=entities_created,
+            relations_count=relations_created,
+        )
+        save_meta(repo_path, meta)
+        result["meta_saved"] = True
 
     return result
 

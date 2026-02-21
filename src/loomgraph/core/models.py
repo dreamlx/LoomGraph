@@ -102,6 +102,23 @@ class IndexResult:
 
 
 @dataclass
+class IncrementalMeta:
+    """Metadata for incremental indexing via file hash tracking.
+
+    Stored as .loomgraph/meta.json in the repository root.
+    Tracks SHA-256 hashes of indexed files to skip unchanged ones.
+    """
+
+    version: int = 1
+    workspace: str = ""
+    file_hashes: dict[str, str] = field(default_factory=dict)
+    last_indexed: str = ""
+    files_count: int = 0
+    entities_count: int = 0
+    relations_count: int = 0
+
+
+@dataclass
 class EntityData:
     """Entity data prepared for LightRAG acreate_entity()."""
 

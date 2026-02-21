@@ -11,14 +11,17 @@ Pipeline:
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
 from loomgraph.core.injector import inject_parse_result
 from loomgraph.core.lightrag_client import LightRAGClient
 from loomgraph.core.mapper import detect_language
-from loomgraph.core.models import IndexResult, ParseResult
+from loomgraph.core.models import IncrementalMeta, IndexResult, ParseResult
 
 if TYPE_CHECKING:
     pass
@@ -88,6 +91,100 @@ SKIP_DIRS: set[str] = {
     "eggs",
     "*.egg-info",
 }
+
+# Meta file location
+META_DIR = ".loomgraph"
+META_FILE = "meta.json"
+
+
+def _file_hash(path: Path) -> str:
+    """Compute SHA-256 hash of a file."""
+    h = hashlib.sha256()
+    h.update(path.read_bytes())
+    return h.hexdigest()
+
+
+def load_meta(repo_path: Path) -> IncrementalMeta:
+    """Load incremental indexing metadata from .loomgraph/meta.json."""
+    meta_file = repo_path / META_DIR / META_FILE
+    if not meta_file.exists():
+        return IncrementalMeta()
+    try:
+        data = json.loads(meta_file.read_text(encoding="utf-8"))
+        return IncrementalMeta(
+            version=data.get("version", 1),
+            workspace=data.get("workspace", ""),
+            file_hashes=data.get("file_hashes", {}),
+            last_indexed=data.get("last_indexed", ""),
+            files_count=data.get("files_count", 0),
+            entities_count=data.get("entities_count", 0),
+            relations_count=data.get("relations_count", 0),
+        )
+    except (json.JSONDecodeError, OSError) as e:
+        logger.warning("Failed to load meta: %s", e)
+        return IncrementalMeta()
+
+
+def save_meta(repo_path: Path, meta: IncrementalMeta) -> None:
+    """Save incremental indexing metadata to .loomgraph/meta.json."""
+    meta_dir = repo_path / META_DIR
+    meta_dir.mkdir(parents=True, exist_ok=True)
+    data = {
+        "version": meta.version,
+        "workspace": meta.workspace,
+        "file_hashes": meta.file_hashes,
+        "last_indexed": meta.last_indexed,
+        "files_count": meta.files_count,
+        "entities_count": meta.entities_count,
+        "relations_count": meta.relations_count,
+    }
+    (meta_dir / META_FILE).write_text(
+        json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+
+def compute_file_hashes(
+    files: list[Path], repo_path: Path
+) -> dict[str, str]:
+    """Compute SHA-256 hashes for a list of files.
+
+    Returns:
+        Dict mapping relative file path to its hash.
+    """
+    hashes: dict[str, str] = {}
+    for f in files:
+        try:
+            key = str(f.relative_to(repo_path))
+            hashes[key] = _file_hash(f)
+        except (OSError, ValueError) as e:
+            logger.warning("Hash failed for %s: %s", f, e)
+    return hashes
+
+
+def filter_changed_files(
+    files: list[Path],
+    new_hashes: dict[str, str],
+    old_hashes: dict[str, str],
+    repo_path: Path,
+) -> tuple[list[Path], int]:
+    """Filter files to only those that changed since last index.
+
+    Returns:
+        Tuple of (files_to_index, files_skipped_count).
+    """
+    changed: list[Path] = []
+    skipped = 0
+    for f in files:
+        try:
+            key = str(f.relative_to(repo_path))
+        except ValueError:
+            changed.append(f)
+            continue
+        if old_hashes.get(key) == new_hashes.get(key):
+            skipped += 1
+        else:
+            changed.append(f)
+    return changed, skipped
 
 
 def scan_code_files(
