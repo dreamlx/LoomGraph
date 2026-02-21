@@ -1,14 +1,14 @@
 # LoomGraph 开发路线图
 
-**版本**: 0.2.5
-**更新日期**: 2026-02-19
+**版本**: 0.6.1
+**更新日期**: 2026-02-21
 
 ---
 
-## 📍 当前状态: Phase 3 第一阶段已完成
+## 📍 当前状态: Phase 3 前三阶段已完成
 
-**已完成**: MVP 核心 + LightRAG 集成 + CLI + 双通道发布 + deps/overview (EPIC-004) + Workspace 管理 (EPIC-005) + 跨 Workspace 对比 (EPIC-006)
-**下一个**: 研发熵减 Skills (EPIC-007)
+**已完成**: MVP 核心 + LightRAG 集成 + CLI + 双通道发布 + deps/overview (EPIC-004) + Workspace 管理 (EPIC-005) + 跨 Workspace 对比 (EPIC-006) + 研发熵减 Skills (EPIC-007) + insert_custom_kg 迁移 (636x 提速)
+**下一个**: 搜索体系重构 (EPIC-008, v0.7.0) — find / query / graph 三分
 
 ---
 
@@ -118,7 +118,20 @@
 
 详见 [EPIC-007](epics/EPIC-007-entropy-reduction-skills.md)
 
-### 第四阶段: IDE 集成 — v0.7.0
+### 第四阶段: 搜索体系重构 — v0.7.0
+
+> **背景**: `search` 命令与 Claude Code 原生工具重叠，而 LightRAG 的语义问答能力未暴露
+> **价值**: 为无 Serena MCP 的企业用户提供结构化实体发现 + 语义知识问答
+
+| EPIC | Feature | 描述 | 状态 |
+|------|---------|------|------|
+| EPIC-008 | `find` | 重命名 `search`，新增 `--with-relations` | 📋 |
+| EPIC-008 | `query` | 语义问答（封装 LightRAG RAG 引擎） | 📋 |
+| EPIC-008 | `graph` 微调 | 结果添加 source_id | 📋 |
+
+详见 [EPIC-008](epics/EPIC-008-search-architecture-redesign.md)
+
+### 第五阶段: IDE 集成 — v0.8.0
 
 > **定位**: 封装所有 CLI 能力为 MCP 工具，服务 Cursor/IDE 用户
 > **放最后的原因**: 能封装最多命令；当前客户群体用 Claude Code Skills，MCP 不紧急
@@ -126,7 +139,8 @@
 | Story | 描述 | 封装的命令 |
 |-------|------|-----------|
 | MCP 框架搭建 | FastMCP | — |
-| search_code 工具 | 语义搜索 | search |
+| find_entities 工具 | 实体发现 | find |
+| query_code 工具 | 语义问答 | query |
 | get_deps 工具 | 模块依赖 | deps |
 | get_overview 工具 | 项目概览 | overview |
 | workspace 工具 | workspace 管理 | workspace list/info |
@@ -162,32 +176,48 @@
 | v0.1.0 | Phase 1 | — | MVP: AST + Embedding + CLI | ✅ 已发布 |
 | v0.2.x | Phase 2 | — | LightRAG 集成 + Git + 客户交付 | ✅ 已发布 |
 | v0.2.5 | Phase 3 | 能力层 | deps + overview (EPIC-004) | ✅ 已发布 |
-| **v0.4.0** | **Phase 3** | **能力层** | **workspace 管理 (list/info/delete)** | **✅ 已完成** |
-| **v0.5.0** | **Phase 3** | **能力层** | **跨 workspace 对比 (compare/similar)** | **✅ 已完成** |
-| **v0.6.0** | **Phase 3** | **Skill 层** | **研发熵减 Skills (debt-radar/sync-advisor/evolution)** | **✅ 已完成** |
-| v0.7.0 | Phase 3 | 集成层 | MCP Server (封装全部命令) | 📋 规划中 |
+| v0.4.0 | Phase 3 | 能力层 | workspace 管理 (list/info/delete) (EPIC-005) | ✅ 已发布 |
+| v0.5.0 | Phase 3 | 能力层 | 跨 workspace 对比 (compare/similar) (EPIC-006) | ✅ 已发布 |
+| v0.6.0 | Phase 3 | Skill 层 | 研发熵减 Skills (debt-radar/sync-advisor/evolution) (EPIC-007) | ✅ 已发布 |
+| v0.6.1 | Phase 3 | — | insert_custom_kg 迁移 (636x 提速) + CLI 模块拆分 | ✅ 已发布 |
+| v0.7.0 | Phase 3 | 能力层 | 搜索体系重构: find / query / graph 三分 (EPIC-008) | 📋 规划中 |
+| v0.8.0 | Phase 3 | 集成层 | MCP Server (封装全部命令) | 📋 规划中 |
 | v1.0.0 | Phase 4 | — | 生产就绪 | 📋 远期 |
 
 ---
 
 ## 测试覆盖
 
+### 单元测试
+
 | 模块 | 测试数 | 状态 |
 |------|--------|------|
-| Config | 7 | ✅ |
+| CLI | 60 | ✅ |
+| LightRAGClient | 32 | ✅ |
 | Mapper | 26 | ✅ |
-| Injector | 8 | ✅ |
+| Impact | 19 | ✅ |
+| Injector | 18 | ✅ |
+| DepsAnalyzer | 14 | ✅ |
+| Config | 13 | ✅ |
 | Embedding | 11 | ✅ |
 | Indexer | 11 | ✅ |
-| CLI | 49 | ✅ |
-| LightRAGClient | 18 | ✅ |
-| Impact | 19 | ✅ |
-| Git | 8 | ✅ |
-| DepsAnalyzer | 14 | ✅ |
-| OverviewAnalyzer | 10 | ✅ |
 | CompareAnalyzer | 11 | ✅ |
+| OverviewAnalyzer | 10 | ✅ |
 | SimilarAnalyzer | 10 | ✅ |
-| **Total** | **202** | ✅ |
+| Git | 8 | ✅ |
+| **小计** | **243** | ✅ |
+
+### 集成测试
+
+| 模块 | 测试数 | 状态 |
+|------|--------|------|
+| Adapter | 10 | ✅ |
+| H200 E2E | 5 | ✅ |
+| LightRAG E2E | 4 | ✅ |
+| LightRAG Connection | 3 | ✅ |
+| **小计** | **22** | ✅ |
+
+| **Total** | **265** | ✅ |
 
 ---
 
@@ -203,6 +233,7 @@
 | ADR-007 | Code Content 提取 | 函数体内容注入策略 |
 | **ADR-008** | **双向调度器** | **codeindex/LoomGraph 能力边界** |
 | **ADR-009** | **Workspace 即知识快照** | **从隔离机制到可对比的知识切片** |
+| **ADR-010** | **搜索体系重构** | **find/query/graph 三分，语义问答差异化** |
 
 ---
 
@@ -228,36 +259,40 @@ v0.6.0                                Skill A: debt-radar
                                       Skill B: sync-advisor
                                       Skill C: evolution
 
-v0.7.0                                MCP Server
+v0.7.0                                搜索体系重构               query API
+                                      find / query / graph
+
+v0.8.0                                MCP Server
                                       (封装全部命令)
 ```
 
 ### 功能依赖关系图
 
 ```
-                          能力层                    Skill 层           集成层
-                     (v0.3.0 ~ v0.5.0)             (v0.6.0)          (v0.7.0)
-                    ┌─────────────────┐        ┌──────────────┐   ┌──────────┐
-                    │                 │        │              │   │          │
-EPIC-004 ──────────┤ deps            ├───────→│ Skill A      │   │          │
-(v0.3.0)           │ overview        │   ┌───→│ 债务雷达     │   │          │
-  独立 ↕           │                 │   │    │              │   │          │
-EPIC-005 ──────────┤ workspace       ├───┘    ├──────────────┤   │ MCP      │
-(v0.4.0)           │ list/info/delete│        │              │   │ Server   │
-                    │                 │        │ Skill B      │   │          │
-  阻塞 ↓           └────────┬────────┘   ┌───→│ 智能同步     │   │ 封装全部 │
-                             │            │    │              │   │ CLI 命令 │
-EPIC-006 ──────────┐         │            │    ├──────────────┤   │          │
-(v0.5.0)           │ compare ├────────────┘    │              │   │          │
- 需要 005          │ similar ├────────────────→│ Skill C      │   │          │
-                    │         │                 │ 演化观察     │   │          │
-                    └─────────┘                 └──────────────┘   └──────────┘
+                          能力层                    Skill 层         搜索重构         集成层
+                     (v0.3.0 ~ v0.5.0)             (v0.6.0)         (v0.7.0)        (v0.8.0)
+                    ┌─────────────────┐        ┌──────────────┐   ┌──────────┐   ┌──────────┐
+                    │                 │        │              │   │          │   │          │
+EPIC-004 ──────────┤ deps            ├───────→│ Skill A      │   │          │   │          │
+(v0.3.0)           │ overview        │   ┌───→│ 债务雷达     │   │ find     │   │          │
+  独立 ↕           │                 │   │    │              │   │ query    │   │          │
+EPIC-005 ──────────┤ workspace       ├───┘    ├──────────────┤   │ graph    │   │ MCP      │
+(v0.4.0)           │ list/info/delete│        │              │   │ 微调     │   │ Server   │
+                    │                 │        │ Skill B      │   │          │   │          │
+  阻塞 ↓           └────────┬────────┘   ┌───→│ 智能同步     │   │ EPIC-008 │   │ 封装全部 │
+                             │            │    │              │   │          │   │ CLI 命令 │
+EPIC-006 ──────────┐         │            │    ├──────────────┤   │          │   │          │
+(v0.5.0)           │ compare ├────────────┘    │              │   │          │   │          │
+ 需要 005          │ similar ├────────────────→│ Skill C      │   │          │   │          │
+                    │         │                 │ 演化观察     │   │          │   │          │
+                    └─────────┘                 └──────────────┘   └──────────┘   └──────────┘
 
 阻塞关系:
   EPIC-004 ←→ EPIC-005   互相独立，可并行（但建议 004 先行）
   EPIC-005  →  EPIC-006   006 需要 workspace 可见性
   EPIC-004  →  Skill A    deps/overview 是数据源
   EPIC-006  →  Skill B/C  compare/similar 是数据源
+  EPIC-008    独立         不依赖其他 EPIC，依赖 v0.6.1 的 insert_custom_kg
   全部能力层 →  MCP       MCP 封装所有命令，放最后覆盖面最广
 ```
 
@@ -267,6 +302,20 @@ EPIC-006 ──────────┐         │            │    ├─�
 
 ## 更新日志
 
+- **2026-02-21 (v0.7.0 规划)**:
+  - EPIC-008 创建: 搜索体系重构 — find / query / graph 三分
+  - Issue #7 关闭 (superseded by EPIC-008)
+  - v0.7.0 = 搜索重构，MCP Server 推迟到 v0.8.0
+- **2026-02-21 (v0.6.1)**:
+  - `insert_custom_kg` 迁移完成: 636x 提速 (350s → <1s)
+  - 增量更新: `delete_by_source` + `insert_custom_kg`
+  - CLI 模块拆分: `main.py` (1722 行) → 8 个子模块（`_common`, `_deps_check`, `_indexing`, `_search`, `_analysis`, `_workspace`, `_setup`）
+  - 测试覆盖更新到 265 tests
+- **2026-02-20 (v0.6.0)**:
+  - EPIC-005 已完成: `workspace list/info/delete`
+  - EPIC-006 已完成: `compare` + `similar` (跨 workspace)
+  - EPIC-007 已完成: 3 个 Claude Code Skills (debt-radar/sync-advisor/evolution)
+  - 文档整理: 归档 11 个过时文件，合并 LightRAG 集成文档
 - **2026-02-19 (v0.2.5)**:
   - EPIC-004 已完成: `loomgraph deps` + `loomgraph overview`
   - 新增 DepsAnalyzer、OverviewAnalyzer、LightRAGClient bulk API

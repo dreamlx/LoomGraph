@@ -68,7 +68,7 @@ loomgraph/
 │   │   ├── config.py           # Pydantic Settings 配置
 │   │   ├── models.py           # 数据模型 (ParseResult, EntityData, RelationData)
 │   │   ├── mapper.py           # Symbol → Entity/Relation 映射
-│   │   ├── injector.py         # LightRAG 注入（batch_create_graph）
+│   │   ├── injector.py         # LightRAG 注入（insert_custom_kg）
 │   │   ├── indexer.py          # 索引 Pipeline (scan + index)
 │   │   ├── lightrag_client.py  # LightRAG HTTP 客户端
 │   │   ├── deps.py             # DepsAnalyzer（模块依赖分析）
@@ -78,7 +78,15 @@ loomgraph/
 │   │   ├── git.py              # Git 变更检测
 │   │   └── impact/             # 变更影响分析
 │   ├── embedding/      # Embedding 客户端（Jina Code V2）
-│   ├── cli/            # CLI 命令（Click）
+│   ├── cli/            # CLI 命令（Click，按职责拆分为 8 个子模块）
+│   │   ├── main.py              # Click group 入口 + re-export
+│   │   ├── _common.py           # ErrorCode, output helpers, workspace auto-detect
+│   │   ├── _deps_check.py       # check_codeindex/lightrag_api/embedding
+│   │   ├── _indexing.py         # index, embed, inject, update
+│   │   ├── _search.py           # search, graph
+│   │   ├── _analysis.py         # impact, deps, overview
+│   │   ├── _workspace.py        # workspace group + compare/similar
+│   │   └── _setup.py            # status, install-skills, setup-config, version
 │   └── mcp/            # MCP 服务接口（v0.7.0 规划）
 ├── skills/             # Claude Code Skills
 │   ├── loomgraph-debt-radar/      # Skill A: 技术债务审计
@@ -86,7 +94,7 @@ loomgraph/
 │   ├── loomgraph-evolution/       # Skill C: 代码演化趋势
 │   ├── loomgraph-setup/           # 环境配置 Skill
 │   └── loomgraph-init/            # 项目初始化 Skill
-├── tests/              # 测试用例（224 tests）
+├── tests/              # 测试用例（265 tests）
 │   ├── unit/           # 单元测试
 │   └── integration/    # 集成测试
 ├── docs/               # 项目文档（详见「关键文档」）
@@ -229,6 +237,7 @@ embedding:
 | ADR-007 | 函数体内容注入策略 | [ADR-007](docs/adr/ADR-007-code-content-extraction.md) |
 | ADR-008 | 双向调度器（能力边界） | [ADR-008](docs/adr/ADR-008-bidirectional-orchestrator.md) |
 | ADR-009 | Workspace 即知识快照 | [ADR-009](docs/adr/ADR-009-workspace-as-knowledge-snapshot.md) |
+| ADR-010 | 搜索体系重构 (find/query/graph) | [ADR-010](docs/adr/ADR-010-search-architecture-redesign.md) |
 
 ## CLI 命令 (AI Agent 友好)
 
