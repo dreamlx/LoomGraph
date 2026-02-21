@@ -4,6 +4,23 @@
 
 ---
 
+## [0.6.1] - 2026-02-21
+
+### 改进
+- 注入性能提升 636 倍：`loomgraph index` 和 `loomgraph update` 从 ~350 秒降至 <1 秒
+- `loomgraph update` 现在是真正的增量更新（先删旧数据，再注入新数据），不再产生重复实体
+- Cold Rebuild (`loomgraph index --clear`) 简化为单次清理操作
+
+### 更新方式
+```bash
+source ~/.loomgraph-venv/bin/activate
+pip install ./loomgraph-*.whl
+loomgraph install-skills
+loomgraph version  # 应显示 0.6.1
+```
+
+---
+
 ## [0.6.0] - 2026-02-20
 
 ### 新增
@@ -152,6 +169,7 @@ pip install .
 
 | 版本 | 主要功能 | 必须更新？ |
 |------|----------|-----------|
+| 0.6.1 | 注入性能 636x 提升 + 真增量更新 | **推荐** - 索引速度大幅提升 |
 | 0.6.0 | workspace 管理 + 跨 workspace 对比 + 3 个分析 Skills | **强烈推荐** - 全新分析能力 |
 | 0.2.5 | deps/overview 依赖分析 + 注入修复 | 推荐 - 新分析能力 |
 | 0.2.4 | Workspace 自动检测 | 推荐 - 简化配置 |

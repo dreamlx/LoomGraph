@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **CLI module split**: refactored `cli/main.py` (1722 lines, 42 functions) into 8 focused submodules (`_common`, `_deps_check`, `_indexing`, `_search`, `_analysis`, `_workspace`, `_setup`). Entry point `main.py` reduced to 46 lines. All 265 tests pass, backward-compatible re-exports preserved.
+
+## [0.6.1] - 2026-02-21
+
+### Changed
+- **Injection migration**: replaced N× `batch_create_graph()` (entity/create + relation/create) with single `insert_custom_kg()` call — ~636x faster on typical projects (~350s → <1s).
+- `delete_all()` simplified to single `DELETE /graph/clear` (clears all 11 storage layers).
+- `loomgraph update` now uses `DELETE /graph/by_source` + `insert_custom_kg` for true incremental update (delete old → re-inject changed files).
+
+### Added
+- `LightRAGClient.delete_by_source()`: delete entities/relations/chunks by source_id list.
+- `build_chunks()`: generates per-file chunks with module docstring + symbol signatures, enabling semantic search via document layer.
+- `create_external_stubs()`: extracted stub entity creation logic for reuse across injection paths.
+- 18 new unit tests for `insert_custom_kg`, `delete_by_source`, `build_chunks`, `create_external_stubs`.
+
 ## [0.6.0] - 2026-02-20
 
 ### Added
@@ -120,6 +136,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Project roadmap, epics, and feature definitions
 
 [Unreleased]: https://github.com/dreamlx/LoomGraph/compare/v0.6.0...HEAD
+[0.6.1]: https://github.com/dreamlx/LoomGraph/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/dreamlx/LoomGraph/compare/v0.2.5...v0.6.0
 [0.2.5]: https://github.com/dreamlx/LoomGraph/compare/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/dreamlx/LoomGraph/compare/v0.2.3...v0.2.4

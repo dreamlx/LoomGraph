@@ -7,6 +7,7 @@ Configuration priority (highest to lowest):
 4. Default values
 """
 
+import os
 from pathlib import Path
 from typing import Any, Literal
 
@@ -162,6 +163,35 @@ def flatten_dict(d: dict[str, Any], parent_key: str = "", sep: str = "__") -> di
     return dict(items)
 
 
+
+def _remove_env_overrides(
+    config: dict[str, Any], key_parts: list[str] | None = None
+) -> dict[str, Any]:
+    """Remove YAML config keys that have corresponding env var overrides.
+
+    For nested configs, uses __ as delimiter to match pydantic-settings convention.
+    E.g., yaml key lightrag.api_url → env var LOOMGRAPH_LIGHTRAG__API_URL
+
+    Only leaf (non-dict) values are checked; dict values are recursed into.
+    """
+    if key_parts is None:
+        key_parts = []
+
+    result: dict[str, Any] = {}
+    for key, value in config.items():
+        current_parts = [*key_parts, key.upper()]
+        env_name = "LOOMGRAPH_" + "__".join(current_parts)
+
+        if isinstance(value, dict):
+            filtered = _remove_env_overrides(value, current_parts)
+            if filtered:
+                result[key] = filtered
+        else:
+            if env_name not in os.environ:
+                result[key] = value
+    return result
+
+
 def get_settings() -> Settings:
     """Get or create global settings instance.
 
@@ -169,17 +199,19 @@ def get_settings() -> Settings:
     1. Environment variables (LOOMGRAPH_*)
     2. YAML config file (.loomgraph.yaml)
     3. Default values
+
+    YAML values are passed as init kwargs to Settings(), but any key
+    that has a corresponding env var override is stripped first so that
+    pydantic-settings resolves the env var instead.
     """
     global _settings
     if _settings is None:
-        # Load YAML config first
         yaml_config = load_yaml_config()
 
         if yaml_config:
-            # Flatten for pydantic-settings
-            flat_config = flatten_dict(yaml_config)
-            # Create settings with YAML values as defaults
-            _settings = Settings(**yaml_config)
+            # Strip YAML keys that have env var overrides
+            filtered = _remove_env_overrides(yaml_config)
+            _settings = Settings(**filtered)
         else:
             _settings = Settings()
 

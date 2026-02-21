@@ -119,24 +119,39 @@ ORDER BY e.workspace;
 
 路由注册: `lightrag/api/lightrag_server.py`，与 `/graph/*` 同级。此端点**不需要** `LIGHTRAG-WORKSPACE` header。
 
-### 5.2 批量注入端点 (P2, 非阻塞)
+### 5.2 批量注入端点 ✅ 已迁移
 
-**需求**: 减少 HTTP 请求次数的批量注入接口。
+LoomGraph 已从 N× `entity/create` + N× `relation/create` 迁移到单次 `insert_custom_kg` 调用。
 
 ```
-POST /insert_custom_kg
+POST /documents/insert_custom_kg
+Header: LIGHTRAG-WORKSPACE: <workspace>
+Body: {"custom_kg": {"entities": [...], "relationships": [...], "chunks": [...]}}
 ```
 
-**说明**: Python SDK 已有 `rag.ainsert_custom_kg()`，但 HTTP API 尚无对应端点。当前 LoomGraph 使用 `batch_create_graph()` 逐个创建（并发 10 连接），性能可接受。
+**性能对比**: insert_custom_kg 1 次调用 ≈ 0.55s vs entity/create × N ≈ 350s（636 倍提速）。
 
-### 5.3 已确认的 FAQ
+**全层写入**: insert_custom_kg 同时写入图层 (graph) + 向量层 (entities_vdb) + KV 层 (chunks)，数据出现在 `/graph/entities/all`、`/graph/relations/all` 以及 `/query` 语义搜索。
+
+### 5.3 按 source 删除端点 ✅ 已使用
+
+Warm Update 使用此端点删除变动文件的旧数据后重新注入：
+
+```
+DELETE /graph/by_source
+Header: LIGHTRAG-WORKSPACE: <workspace>
+Body: {"source_ids": ["src/auth/service.py", "src/auth/utils.py"]}
+```
+
+### 5.4 已确认的 FAQ
 
 | 问题 | 答案 |
 |------|------|
 | `acreate_entity()` 支持传 `embedding` 吗？ | ❌ 不支持，LightRAG 自动生成 |
 | `acreate_relation()` 自定义 `relation_type`？ | ✅ 使用 `keywords` 字段 |
 | 删除 entity 自动删除关联 relation？ | ✅ `adelete_by_entity()` 自动处理 |
-| `insert_custom_kg` 数据进图层吗？ | ❌ 只进文档层，不出现在 `/graphs` 查询 |
+| `insert_custom_kg` 数据进图层吗？ | ✅ 全层写入 (graph + vdb + kv)，2026-02-21 验证通过 |
+| `DELETE /graph/by_source` 跨层删除？ | ✅ 删除 graph + vdb + kv 中匹配 source_id 的数据 |
 
 ---
 
