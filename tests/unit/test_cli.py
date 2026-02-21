@@ -361,7 +361,7 @@ class TestSearchCommand:
         }
 
         result = runner.invoke(
-            main, ["search", "authentication", "--mode", "local", "--limit", "5"]
+            main, ["search", "authentication", "--mode", "local", "--top-k", "5"]
         )
         assert result.exit_code == 0
 

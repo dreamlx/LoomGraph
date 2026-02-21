@@ -699,19 +699,25 @@ async def _async_inject(
 @click.argument("query")
 @click.option(
     "--mode",
-    type=click.Choice(["local", "global", "hybrid", "naive"]),
+    type=click.Choice(["local", "global", "hybrid", "naive", "hybrid-local", "deep"]),
     default="hybrid",
-    help="LightRAG query mode",
+    help="Query mode (hybrid-local: graph BFS + context assembly, deep: multi-round)",
 )
 @click.option("--workspace", "-w", default=None, help="Workspace name (default: current directory name)")
-@click.option("--limit", "-n", default=10, help="Number of results (not yet implemented)")
-def search(query: str, mode: str, workspace: str | None, limit: int) -> None:
+@click.option("--top-k", "-n", default=10, help="Number of entity results")
+@click.option("--depth", "-d", default=1, help="Graph traversal depth for hybrid-local/deep modes")
+def search(query: str, mode: str, workspace: str | None, top_k: int, depth: int) -> None:
     """Search the code index using LightRAG.
 
     QUERY: Natural language query about the code
+
+    Modes:
+        local/global/hybrid/naive — standard LightRAG query modes
+        hybrid-local — entity search + graph BFS expansion + context assembly
+        deep — multi-round iterative retrieval (LLM analyzes gaps)
     """
     try:
-        result = asyncio.run(_async_search(query, mode, workspace))
+        result = asyncio.run(_async_search(query, mode, workspace, top_k, depth))
         output_success(result)
     except Exception as e:
         output_error(
@@ -721,7 +727,10 @@ def search(query: str, mode: str, workspace: str | None, limit: int) -> None:
         )
 
 
-async def _async_search(query: str, mode: str, workspace: str | None = None) -> dict[str, Any]:
+async def _async_search(
+    query: str, mode: str, workspace: str | None = None,
+    top_k: int = 10, depth: int = 1,
+) -> dict[str, Any]:
     """Run async search via LightRAG API."""
     from loomgraph.core.lightrag_client import LightRAGClient
 
@@ -732,8 +741,21 @@ async def _async_search(query: str, mode: str, workspace: str | None = None) -> 
         workspace=get_auto_workspace(workspace),
     )
 
-    result = await client.query(query, mode=mode)
+    if mode == "hybrid-local":
+        from loomgraph.core.retrieval import hybrid_query
+        result = await hybrid_query(client, query, top_k=top_k, depth=depth)
+        return result.to_dict()
 
+    if mode == "deep":
+        from loomgraph.core.retrieval import hybrid_query, iterative_deep_query
+        initial = await hybrid_query(client, query, top_k=top_k, depth=depth)
+        result = await iterative_deep_query(
+            client, query, initial.context, max_rounds=2,
+        )
+        return result.to_dict()
+
+    # Standard LightRAG modes
+    result = await client.query(query, mode=mode)
     return {
         "query": query,
         "mode": mode,
