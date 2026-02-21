@@ -238,60 +238,73 @@ class LightRAGClient:
     async def delete_all(self) -> dict[str, Any]:
         """Delete all data from LightRAG (Cold Rebuild).
 
-        Clears both document layer and graph layer:
-        1. DELETE /documents — clears chunks, embeddings, document cache
-        2. DELETE /graph/clear — clears entities, relations, graph storage
+        Calls DELETE /graph/clear which clears all 11 storage layers
+        (graph, vectors, chunks, etc.) in one request.
 
         Returns:
-            Combined response from both operations
+            Response from the clear operation
 
         Raises:
             LightRAGAPIError: If deletion fails
         """
         async with httpx.AsyncClient(timeout=self.timeout, trust_env=False) as client:
-            headers = self._get_headers()
-            result: dict[str, Any] = {}
-
-            # 1. Clear document layer
             try:
                 resp = await client.delete(
-                    f"{self.base_url}/documents",
-                    headers=headers,
+                    f"{self.base_url}/graph/clear",
+                    headers=self._get_headers(),
                 )
                 data = resp.json() if resp.content else {}
                 if resp.status_code >= 400:
                     detail = data.get("detail", str(data)) if data else f"HTTP {resp.status_code}"
                     raise LightRAGAPIError(
-                        f"Failed to clear documents: {detail}",
+                        f"Failed to clear graph: {detail}",
                         status_code=resp.status_code,
                         detail=detail,
                     )
-                result["documents"] = data
-                logger.info("Cleared document layer")
+                logger.info("Cleared all storage layers via /graph/clear")
+                # Wait for async storage cleanup to complete
+                await asyncio.sleep(3)
+                return {"graph": data}
             except httpx.RequestError as e:
                 raise LightRAGAPIError(f"Connection failed: {e}") from e
 
-            # 2. Clear graph layer
-            try:
-                resp = await client.delete(
-                    f"{self.base_url}/graph/clear",
-                    headers=headers,
-                )
-                data = resp.json() if resp.content else {}
-                if resp.status_code >= 400:
-                    detail = data.get("detail", str(data)) if data else f"HTTP {resp.status_code}"
-                    logger.warning("Graph clear failed (may not be supported): %s", detail)
-                    result["graph"] = {"status": "skipped", "detail": detail}
-                else:
-                    result["graph"] = data
-                    logger.info("Cleared graph layer")
-                    # Wait for async storage cleanup to complete
-                    await asyncio.sleep(3)
-            except httpx.RequestError:
-                logger.warning("Graph clear endpoint not available, skipping")
-                result["graph"] = {"status": "skipped"}
+    async def delete_by_source(self, source_ids: list[str]) -> dict[str, Any]:
+        """Delete all data associated with given source_ids.
 
-            return result
+        Used for warm update: delete old data for changed files before re-injecting.
+
+        Args:
+            source_ids: List of source_id strings (e.g., file paths)
+
+        Returns:
+            Response with deletion counts
+
+        Raises:
+            LightRAGAPIError: If deletion fails
+        """
+        async with httpx.AsyncClient(timeout=self.timeout, trust_env=False) as client:
+            try:
+                response = await client.request(
+                    "DELETE",
+                    f"{self.base_url}/graph/by_source",
+                    headers=self._get_headers(),
+                    json={"source_ids": source_ids},
+                )
+                data = response.json() if response.content else {}
+
+                if response.status_code >= 400:
+                    detail = data.get("detail", str(data)) if data else f"HTTP {response.status_code}"
+                    raise LightRAGAPIError(
+                        f"Failed to delete by source: {detail}",
+                        status_code=response.status_code,
+                        detail=detail,
+                    )
+
+                logger.info(f"Deleted data for {len(source_ids)} source(s)")
+                return data
+
+            except httpx.RequestError as e:
+                raise LightRAGAPIError(f"Connection failed: {e}") from e
 
     async def insert_custom_kg(
         self,

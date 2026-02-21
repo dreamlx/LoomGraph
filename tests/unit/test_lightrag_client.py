@@ -23,7 +23,7 @@ class TestLightRAGClient:
 
 
 class TestDeleteAll:
-    """Tests for delete_all method (clears both document + graph layers)."""
+    """Tests for delete_all method (clears all layers via /graph/clear)."""
 
     @pytest.fixture
     def client(self) -> LightRAGClient:
@@ -42,51 +42,36 @@ class TestDeleteAll:
 
     @pytest.mark.asyncio
     async def test_delete_all_success(self, client: LightRAGClient) -> None:
-        """Should clear both document and graph layers."""
-        doc_resp = self._make_response(200, {"status": "ok", "deleted": 42})
+        """Should clear all layers via single /graph/clear call."""
         graph_resp = self._make_response(200, {"status": "success", "storages_cleared": 11})
 
         with patch("httpx.AsyncClient") as mock_client_class:
             mock_client = AsyncMock()
             mock_client.__aenter__.return_value = mock_client
             mock_client.__aexit__.return_value = None
-            mock_client.delete.side_effect = [doc_resp, graph_resp]
+            mock_client.delete.return_value = graph_resp
             mock_client_class.return_value = mock_client
 
-            result = await client.delete_all()
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                result = await client.delete_all()
 
-            assert result["documents"] == {"status": "ok", "deleted": 42}
             assert result["graph"]["status"] == "success"
-            assert mock_client.delete.call_count == 2
+            assert mock_client.delete.call_count == 1
+            mock_client.delete.assert_called_once_with(
+                "http://localhost:3001/graph/clear",
+                headers={},
+            )
 
     @pytest.mark.asyncio
-    async def test_delete_all_graph_clear_not_supported(self, client: LightRAGClient) -> None:
-        """Should gracefully handle missing /graph/clear endpoint."""
-        doc_resp = self._make_response(200, {"status": "ok"})
-        graph_resp = self._make_response(404, {"detail": "Not Found"})
+    async def test_delete_all_error_raises(self, client: LightRAGClient) -> None:
+        """Should raise LightRAGAPIError when /graph/clear fails."""
+        resp = self._make_response(500, {"detail": "Internal server error"})
 
         with patch("httpx.AsyncClient") as mock_client_class:
             mock_client = AsyncMock()
             mock_client.__aenter__.return_value = mock_client
             mock_client.__aexit__.return_value = None
-            mock_client.delete.side_effect = [doc_resp, graph_resp]
-            mock_client_class.return_value = mock_client
-
-            result = await client.delete_all()
-
-            assert result["documents"] == {"status": "ok"}
-            assert result["graph"]["status"] == "skipped"
-
-    @pytest.mark.asyncio
-    async def test_delete_all_document_error_raises(self, client: LightRAGClient) -> None:
-        """Should raise LightRAGAPIError when document layer fails."""
-        doc_resp = self._make_response(500, {"detail": "Internal server error"})
-
-        with patch("httpx.AsyncClient") as mock_client_class:
-            mock_client = AsyncMock()
-            mock_client.__aenter__.return_value = mock_client
-            mock_client.__aexit__.return_value = None
-            mock_client.delete.return_value = doc_resp
+            mock_client.delete.return_value = resp
             mock_client_class.return_value = mock_client
 
             with pytest.raises(LightRAGAPIError) as exc_info:
@@ -108,6 +93,245 @@ class TestDeleteAll:
                 await client.delete_all()
 
             assert "Connection failed" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_delete_all_with_workspace(self) -> None:
+        """Should send workspace header."""
+        client = LightRAGClient(
+            base_url="http://localhost:3001", timeout=5.0, workspace="my-ws"
+        )
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.content = b"1"
+        resp.json.return_value = {"status": "success"}
+
+        with patch("httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client.delete.return_value = resp
+            mock_client_class.return_value = mock_client
+
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                await client.delete_all()
+
+            mock_client.delete.assert_called_once_with(
+                "http://localhost:3001/graph/clear",
+                headers={"LIGHTRAG-WORKSPACE": "my-ws"},
+            )
+
+
+class TestDeleteBySource:
+    """Tests for delete_by_source method."""
+
+    @pytest.fixture
+    def client(self) -> LightRAGClient:
+        """Create a test client."""
+        return LightRAGClient(base_url="http://localhost:3001", timeout=5.0)
+
+    @pytest.mark.asyncio
+    async def test_delete_by_source_success(self, client: LightRAGClient) -> None:
+        """Should delete data for given source_ids."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.content = b"1"
+        mock_response.json.return_value = {"deleted": 15}
+
+        with patch("httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client.request.return_value = mock_response
+            mock_client_class.return_value = mock_client
+
+            result = await client.delete_by_source(["src/auth/service.py", "src/auth/utils.py"])
+
+            assert result["deleted"] == 15
+            mock_client.request.assert_called_once_with(
+                "DELETE",
+                "http://localhost:3001/graph/by_source",
+                headers={},
+                json={"source_ids": ["src/auth/service.py", "src/auth/utils.py"]},
+            )
+
+    @pytest.mark.asyncio
+    async def test_delete_by_source_api_error(self, client: LightRAGClient) -> None:
+        """Should raise LightRAGAPIError on API failure."""
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        mock_response.content = b"1"
+        mock_response.json.return_value = {"detail": "Internal server error"}
+
+        with patch("httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client.request.return_value = mock_response
+            mock_client_class.return_value = mock_client
+
+            with pytest.raises(LightRAGAPIError) as exc_info:
+                await client.delete_by_source(["src/foo.py"])
+
+            assert exc_info.value.status_code == 500
+
+    @pytest.mark.asyncio
+    async def test_delete_by_source_connection_error(self, client: LightRAGClient) -> None:
+        """Should raise LightRAGAPIError on connection failure."""
+        with patch("httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client.request.side_effect = httpx.RequestError("Connection refused")
+            mock_client_class.return_value = mock_client
+
+            with pytest.raises(LightRAGAPIError) as exc_info:
+                await client.delete_by_source(["src/foo.py"])
+
+            assert "Connection failed" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_delete_by_source_with_workspace(self) -> None:
+        """Should send workspace header."""
+        client = LightRAGClient(
+            base_url="http://localhost:3001", timeout=5.0, workspace="my-ws"
+        )
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.content = b"1"
+        mock_response.json.return_value = {"deleted": 0}
+
+        with patch("httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client.request.return_value = mock_response
+            mock_client_class.return_value = mock_client
+
+            await client.delete_by_source(["src/foo.py"])
+
+            mock_client.request.assert_called_once_with(
+                "DELETE",
+                "http://localhost:3001/graph/by_source",
+                headers={"LIGHTRAG-WORKSPACE": "my-ws"},
+                json={"source_ids": ["src/foo.py"]},
+            )
+
+
+class TestInsertCustomKG:
+    """Tests for insert_custom_kg method."""
+
+    @pytest.fixture
+    def client(self) -> LightRAGClient:
+        """Create a test client."""
+        return LightRAGClient(base_url="http://localhost:3001", timeout=5.0)
+
+    @pytest.mark.asyncio
+    async def test_insert_custom_kg_success(self, client: LightRAGClient) -> None:
+        """Should insert entities, relations, and chunks in one call."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "status": "success",
+            "details": {"entities_count": 3, "relationships_count": 2},
+        }
+
+        with patch("httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client.post.return_value = mock_response
+            mock_client_class.return_value = mock_client
+
+            entities = [{"entity_name": "A", "entity_type": "class"}]
+            relations = [{"src_id": "A", "tgt_id": "B", "keywords": "CALLS"}]
+            chunks = [{"content": "test", "source_id": "test.py"}]
+
+            result = await client.insert_custom_kg(entities, relations, chunks)
+
+            assert result["status"] == "success"
+            assert result["details"]["entities_count"] == 3
+
+            # Verify the payload structure
+            call_args = mock_client.post.call_args
+            assert call_args[1]["json"]["custom_kg"]["entities"] == entities
+            assert call_args[1]["json"]["custom_kg"]["relationships"] == relations
+            assert call_args[1]["json"]["custom_kg"]["chunks"] == chunks
+
+    @pytest.mark.asyncio
+    async def test_insert_custom_kg_without_chunks(self, client: LightRAGClient) -> None:
+        """Should work without chunks."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"status": "success", "details": {}}
+
+        with patch("httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client.post.return_value = mock_response
+            mock_client_class.return_value = mock_client
+
+            result = await client.insert_custom_kg(
+                [{"entity_name": "X"}], [{"src_id": "X", "tgt_id": "Y"}],
+            )
+
+            assert result["status"] == "success"
+            # chunks should not be in payload
+            call_args = mock_client.post.call_args
+            assert "chunks" not in call_args[1]["json"]["custom_kg"]
+
+    @pytest.mark.asyncio
+    async def test_insert_custom_kg_api_error(self, client: LightRAGClient) -> None:
+        """Should raise LightRAGAPIError on API failure."""
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        mock_response.json.return_value = {"detail": "Internal server error"}
+
+        with patch("httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client.post.return_value = mock_response
+            mock_client_class.return_value = mock_client
+
+            with pytest.raises(LightRAGAPIError) as exc_info:
+                await client.insert_custom_kg([{"entity_name": "X"}], [])
+
+            assert exc_info.value.status_code == 500
+
+    @pytest.mark.asyncio
+    async def test_insert_custom_kg_connection_error(self, client: LightRAGClient) -> None:
+        """Should raise LightRAGAPIError on connection failure."""
+        with patch("httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client.post.side_effect = httpx.RequestError("Connection refused")
+            mock_client_class.return_value = mock_client
+
+            with pytest.raises(LightRAGAPIError) as exc_info:
+                await client.insert_custom_kg([{"entity_name": "X"}], [])
+
+            assert "Connection failed" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_insert_custom_kg_uses_extended_timeout(self, client: LightRAGClient) -> None:
+        """Should use 3x timeout for large payloads."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"status": "success", "details": {}}
+
+        with patch("httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client.post.return_value = mock_response
+            mock_client_class.return_value = mock_client
+
+            await client.insert_custom_kg([], [])
+
+            # Verify timeout is 3x the base timeout (5.0 * 3 = 15.0)
+            mock_client_class.assert_called_once_with(timeout=15.0, trust_env=False)
 
 
 class TestCreateEntity:

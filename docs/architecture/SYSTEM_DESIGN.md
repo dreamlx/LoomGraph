@@ -82,14 +82,14 @@
 ┌──────────┐    ┌──────────┐    ┌───────────────┐    ┌──────────────────┐    ┌──────────┐
 │  源代码  │───▶│codeindex │───▶│   LoomGraph   │───▶│  LightRAG API    │───▶│PostgreSQL│
 │  Files   │    │ parse    │    │   mapper +     │    │                  │    │          │
-│          │    │          │    │   injector     │    │  /graph/entity/  │    │ pgvector │
-└──────────┘    └──────────┘    └───────────────┘    │    create        │    │ graph    │
-                     │                │               │  /graph/relation/│    │          │
-                     ▼                ▼               │    create        │    └──────────┘
-               ParseResult      EntityData +          └──────────────────┘
-               • Symbol         RelationData
-               • Call           (batch_create_graph:
-               • Inheritance     entity → stubs → relations)
+│          │    │          │    │   injector     │    │ /documents/      │    │ pgvector │
+└──────────┘    └──────────┘    └───────────────┘    │  insert_custom_kg│    │ graph    │
+                     │                │               │ (全层写入:        │    │          │
+                     ▼                ▼               │  graph+vdb+kv)   │    └──────────┘
+               ParseResult      entities +            └──────────────────┘
+               • Symbol         relations +
+               • Call           chunks
+               • Inheritance    (单次 HTTP 调用)
                • Import
 ```
 
@@ -144,15 +144,17 @@ LoomGraph 与 LightRAG 通信的唯一通道。基于 httpx，通过 HTTP API �
 
 | 方法 | HTTP 端点 | 用途 |
 |------|-----------|------|
-| `create_entity()` | `POST /graph/entity/create` | 创建单个实体 |
-| `create_relation()` | `POST /graph/relation/create` | 创建单个关系 |
-| `batch_create_graph()` | 批量调用上述两个 | 三阶段注入：entity → stubs → relations |
+| `insert_custom_kg()` | `POST /documents/insert_custom_kg` | **主写入路径**: 单次调用写入全层 (graph+vdb+kv) |
+| `delete_by_source()` | `DELETE /graph/by_source` | 按 source_id 删除（Warm Update 用） |
+| `delete_all()` | `DELETE /graph/clear` | 清空 workspace 全部 11 层存储 |
 | `query()` | `POST /query` | 语义查询 |
 | `get_all_entities()` | `GET /graph/entities/all` | 获取 workspace 全部实体 |
 | `get_all_relations()` | `GET /graph/relations/all` | 获取 workspace 全部关系 |
 | `list_workspaces()` | `GET /api/workspaces` | 列出所有 workspace |
-| `delete_all()` | `DELETE /graph/clear` | 清空 workspace |
 | `health_check()` | `GET /health` | 健康检查 |
+| `create_entity()` | `POST /graph/entity/create` | 创建单个实体（已弃用，保留兼容） |
+| `create_relation()` | `POST /graph/relation/create` | 创建单个关系（已弃用，保留兼容） |
+| `batch_create_graph()` | 批量调用上述两个 | 旧注入路径（已弃用，保留兼容） |
 
 Workspace 隔离通过 `LIGHTRAG-WORKSPACE` header 实现，每个 client 实例绑定一个 workspace。
 
@@ -161,7 +163,7 @@ Workspace 隔离通过 `LIGHTRAG-WORKSPACE` header 实现，每个 client 实例
 | 模块 | 文件 | 职责 |
 |------|------|------|
 | **Mapper** | `core/mapper.py` | codeindex ParseResult → EntityData / RelationData |
-| **Injector** | `core/injector.py` | 批量注入到 LightRAG（调用 `batch_create_graph`） |
+| **Injector** | `core/injector.py` | 数据收集 (`collect_kg_data` + `build_chunks` + `create_external_stubs`)，CLI 调用 `insert_custom_kg` 注入 |
 | **Indexer** | `core/indexer.py` | 扫描文件 + 编排 parse → map → inject 流水线 |
 | **Adapter** | `core/adapter.py` | codeindex JSON → LoomGraph ParseResult 适配 |
 
