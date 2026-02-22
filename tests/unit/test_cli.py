@@ -102,9 +102,41 @@ class TestVersionCommand:
         assert "loomgraph" in result.stdout.lower()
 
 
+class TestGetAutoWorkspace:
+    """Tests for get_auto_workspace function."""
+
+    @patch("loomgraph.core.git.is_git_repository", return_value=True)
+    @patch("loomgraph.core.git.get_current_branch", return_value="develop")
+    def test_git_repo_returns_dir_branch(
+        self, mock_branch: MagicMock, mock_is_git: MagicMock,
+    ) -> None:
+        """Should return dir:branch for git repositories."""
+        from loomgraph.cli._common import get_auto_workspace
+
+        result = get_auto_workspace(None)
+        assert ":" in result
+        assert result.endswith(":develop")
+
+    @patch("loomgraph.core.git.is_git_repository", return_value=False)
+    def test_non_git_returns_dir_only(self, mock_is_git: MagicMock) -> None:
+        """Should return dir name only for non-git directories."""
+        from loomgraph.cli._common import get_auto_workspace
+
+        result = get_auto_workspace(None)
+        assert ":" not in result
+
+    def test_explicit_workspace_takes_priority(self) -> None:
+        """Explicit --workspace argument should override auto-detection."""
+        from loomgraph.cli._common import get_auto_workspace
+
+        result = get_auto_workspace("my-custom-ws")
+        assert result == "my-custom-ws"
+
+
 class TestStatusCommand:
     """Tests for the status command."""
 
+    @patch("loomgraph.cli._setup.get_auto_workspace", return_value="testproject:main")
     @patch("loomgraph.cli._setup.check_codeindex")
     @patch("loomgraph.cli._setup.check_lightrag_api")
     @patch("loomgraph.cli._setup.check_embedding")
@@ -113,6 +145,7 @@ class TestStatusCommand:
         mock_embedding: MagicMock,
         mock_lightrag: MagicMock,
         mock_codeindex: MagicMock,
+        mock_workspace: MagicMock,
         runner: CliRunner,
     ) -> None:
         """Test status when all dependencies are available."""
@@ -126,7 +159,10 @@ class TestStatusCommand:
         data = json.loads(result.stdout)
         assert data["success"] is True
         assert "dependencies" in data["data"]
+        assert "workspace" in data["data"]
+        assert data["data"]["workspace"]["name"] == "testproject:main"
 
+    @patch("loomgraph.cli._setup.get_auto_workspace", return_value="testproject:develop")
     @patch("loomgraph.cli._setup.check_codeindex")
     @patch("loomgraph.cli._setup.check_lightrag_api")
     @patch("loomgraph.cli._setup.check_embedding")
@@ -135,6 +171,7 @@ class TestStatusCommand:
         mock_embedding: MagicMock,
         mock_lightrag: MagicMock,
         mock_codeindex: MagicMock,
+        mock_workspace: MagicMock,
         runner: CliRunner,
     ) -> None:
         """Test status when LightRAG API is not available."""
@@ -148,6 +185,7 @@ class TestStatusCommand:
         data = json.loads(result.stdout)
         assert data["success"] is False
         assert data["error"]["code"] == ErrorCode.DEPENDENCIES_MISSING
+        assert "workspace" in data["data"]
 
 
 class TestIndexCommand:
@@ -1387,3 +1425,134 @@ class TestBfsCollect:
 
         result = _bfs_collect("A", {}, depth=1)
         assert result == []
+
+
+class TestTopologyCommand:
+    """Tests for the topology command."""
+
+    @patch("loomgraph.cli._analysis.asyncio.run")
+    def test_topology_basic(self, mock_run: MagicMock, runner: CliRunner) -> None:
+        """Test basic topology command."""
+        mock_run.return_value = {
+            "summary": {
+                "total_entities": 100,
+                "total_relations": 200,
+                "orphan_count": 5,
+                "hub_count": 3,
+                "god_function_count": 2,
+                "placeholder_module_count": 1,
+                "coupling_density": 0.15,
+                "topology_score": 85,
+            },
+            "orphans": [{"entity": "OrphanA", "type": "function", "source_id": "a.py"}],
+            "hubs": [],
+            "god_functions": [],
+            "placeholder_modules": [],
+            "coupling": {"cross_module_relations": 30, "intra_module_relations": 170, "density": 0.15, "most_coupled_pairs": []},
+        }
+
+        result = runner.invoke(main, ["topology"])
+        assert result.exit_code == 0
+
+        data = json.loads(result.stdout)
+        assert data["success"] is True
+        assert data["data"]["summary"]["topology_score"] == 85
+        assert len(data["data"]["orphans"]) == 1
+
+    @patch("loomgraph.cli._analysis.asyncio.run")
+    def test_topology_with_module(self, mock_run: MagicMock, runner: CliRunner) -> None:
+        """Test topology command with --module option."""
+        mock_run.return_value = {
+            "summary": {"total_entities": 10, "total_relations": 15, "orphan_count": 0,
+                        "hub_count": 0, "god_function_count": 0, "placeholder_module_count": 0,
+                        "coupling_density": 0.0, "topology_score": 100},
+            "orphans": [], "hubs": [], "god_functions": [],
+            "placeholder_modules": [],
+            "coupling": {"cross_module_relations": 0, "intra_module_relations": 15, "density": 0.0, "most_coupled_pairs": []},
+        }
+
+        result = runner.invoke(main, ["topology", "--module", "cli"])
+        assert result.exit_code == 0
+
+        data = json.loads(result.stdout)
+        assert data["success"] is True
+
+    @patch("loomgraph.cli._analysis.asyncio.run")
+    def test_topology_error(self, mock_run: MagicMock, runner: CliRunner) -> None:
+        """Test topology command error handling."""
+        mock_run.side_effect = Exception("Connection refused")
+
+        result = runner.invoke(main, ["topology"])
+        assert result.exit_code == 1
+
+        data = json.loads(result.stdout)
+        assert data["success"] is False
+        assert "Connection refused" in data["error"]["message"]
+
+    def test_topology_help(self, runner: CliRunner) -> None:
+        """Test topology command help."""
+        result = runner.invoke(main, ["topology", "--help"])
+        assert result.exit_code == 0
+        assert "--hub-threshold" in result.stdout
+        assert "--god-threshold" in result.stdout
+        assert "--module" in result.stdout
+
+
+class TestCheckCommand:
+    """Tests for the check command."""
+
+    @patch("loomgraph.cli._analysis.asyncio.run")
+    def test_check_basic(self, mock_run: MagicMock, runner: CliRunner) -> None:
+        """Test basic check command."""
+        mock_run.return_value = {
+            "freshness": {
+                "total_source_paths": 10,
+                "valid": 8,
+                "stale": 2,
+                "freshness_ratio": 0.8,
+            },
+            "stale_entries": [
+                {"source_id": "old/file.py:10-20", "file_path": "old/file.py", "reason": "file_not_found", "suggestion": "..."},
+            ],
+            "suggestion": "2 source paths are stale. Run 'loomgraph index --clear .' to rebuild.",
+        }
+
+        result = runner.invoke(main, ["check"])
+        assert result.exit_code == 0
+
+        data = json.loads(result.stdout)
+        assert data["success"] is True
+        assert data["data"]["freshness"]["stale"] == 2
+
+    @patch("loomgraph.cli._analysis.asyncio.run")
+    def test_check_all_fresh(self, mock_run: MagicMock, runner: CliRunner) -> None:
+        """Test check when all entries are fresh."""
+        mock_run.return_value = {
+            "freshness": {"total_source_paths": 5, "valid": 5, "stale": 0, "freshness_ratio": 1.0},
+            "stale_entries": [],
+            "suggestion": "",
+        }
+
+        result = runner.invoke(main, ["check"])
+        assert result.exit_code == 0
+
+        data = json.loads(result.stdout)
+        assert data["success"] is True
+        assert data["data"]["freshness"]["freshness_ratio"] == 1.0
+
+    @patch("loomgraph.cli._analysis.asyncio.run")
+    def test_check_error(self, mock_run: MagicMock, runner: CliRunner) -> None:
+        """Test check command error handling."""
+        mock_run.side_effect = Exception("API error")
+
+        result = runner.invoke(main, ["check"])
+        assert result.exit_code == 1
+
+        data = json.loads(result.stdout)
+        assert data["success"] is False
+
+    def test_check_help(self, runner: CliRunner) -> None:
+        """Test check command help."""
+        result = runner.invoke(main, ["check", "--help"])
+        assert result.exit_code == 0
+        assert "--repo-path" in result.stdout

@@ -7,7 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **`get_auto_workspace()`**: default workspace format changed from `project` to `project:branch` (e.g. `loomgraph:develop`). Non-git directories fallback to directory name only. Explicit `-w` argument unaffected.
+- **`status` command**: now includes `workspace` field with current workspace name and entity/relation counts from LightRAG.
+
 ### Added
+- **`topology` command** (EPIC-009): graph topology debt analysis detecting orphan entities, hub fragility, god functions, placeholder modules, and cross-module coupling density. Supports `--module` prefix filter and configurable thresholds. Dual-mode: server-side (efficient) with automatic client-side fallback.
+- **`check` command** (EPIC-009): index freshness verification — validates entity source_ids against disk files, reports stale ratio and suggests rebuild.
+- `LightRAGClient`: 4 new methods (`get_orphan_entities`, `get_degree_distribution`, `get_graph_stats`, `get_source_ids`) for server-side graph analytics (degradation-ready).
+- **Skill A (debt-radar) enhanced** (EPIC-009): added Step 5 (topology) + Step 6 (check), expanded analysis from 3 to 7 dimensions, enriched report template with topology and freshness sections.
+- 38+ new unit tests for topology analysis, scoring, and CLI commands.
 - **`find` command** (EPIC-008): structured entity discovery with `--type` filter, `--with-relations` for callers/callees in one call, `--depth N` for BFS expansion. Replaces `search`.
 - **`query` command** (EPIC-008): semantic knowledge Q&A via LightRAG RAG engine. Supports `--mode hybrid|local|global|naive`. Includes error handling for LLM unavailability with `find` fallback suggestion.
 - **`graph` source_id enhancement** (EPIC-008): graph results now include `source_id` (file path) for the queried entity and all callers/callees.
