@@ -221,8 +221,8 @@ async def _async_overview(
 
 
 @main.command()
-@click.option("--hub-threshold", default=5, help="Min in-degree to flag as hub")
-@click.option("--god-threshold", default=5, help="Min out-degree to flag as god function")
+@click.option("--hub-threshold", default=8, help="Min in-degree to flag as hub")
+@click.option("--god-threshold", default=10, help="Min out-degree to flag as god function")
 @click.option("--module", default=None, help="Module prefix filter (e.g. 'cli')")
 @click.option("--workspace", "-w", default=None, help="Workspace name (default: current directory name)")
 def topology(hub_threshold: int, god_threshold: int, module: str | None, workspace: str | None) -> None:

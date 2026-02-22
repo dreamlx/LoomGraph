@@ -11,8 +11,10 @@ from loomgraph.core.topology import (
     TopologyAnalyzer,
     TopologyResult,
     _common_source_prefix,
+    _compute_coupled_pairs,
     _compute_score,
     _is_noise,
+    _normalize_type_field,
     _strip_line_range,
 )
 
@@ -196,6 +198,25 @@ class TestTopologyAnalyzerFromData:
         god_names = [g["entity"] for g in result.god_functions]
         assert "MyFunc" not in god_names
 
+    def test_god_function_excludes_module_type(self) -> None:
+        """Module-type entities should not be flagged as god functions."""
+        entities = [
+            self._make_entity("core.__init__", "src/core/__init__.py", "module"),
+            *[
+                self._make_entity(f"Callee{i}", f"src/core/c{i}.py")
+                for i in range(12)
+            ],
+        ]
+        relations = [
+            self._make_relation("core.__init__", f"Callee{i}") for i in range(12)
+        ]
+
+        analyzer = TopologyAnalyzer(client=None, god_threshold=5)
+        result = analyzer.analyze_from_data(entities, relations)
+
+        god_names = [g["entity"] for g in result.god_functions]
+        assert "core.__init__" not in god_names
+
     def test_coupling_density(self) -> None:
         """Coupling density = cross-module / total counted relations."""
         entities = [
@@ -351,20 +372,42 @@ class TestComputeScore:
         assert _compute_score(result) == 90
 
     def test_god_function_penalty_severe(self) -> None:
-        """God function with out >= 20 → -5 per entity."""
+        """God function with out >= 25 → -5 per entity."""
         result = TopologyResult(
             total_entities=100,
-            god_functions=[{"entity": "A", "out_degree": 20}],
+            god_functions=[{"entity": "A", "out_degree": 25}],
         )
         assert _compute_score(result) == 95
 
     def test_god_function_penalty_moderate(self) -> None:
-        """God function with out 10-19 → -3 per entity."""
+        """God function with out 15-24 → -3 per entity."""
         result = TopologyResult(
             total_entities=100,
-            god_functions=[{"entity": "A", "out_degree": 12}],
+            god_functions=[{"entity": "A", "out_degree": 18}],
         )
         assert _compute_score(result) == 97
+
+    def test_god_function_penalty_capped(self) -> None:
+        """God function penalty should be capped at -25."""
+        result = TopologyResult(
+            total_entities=100,
+            god_functions=[
+                {"entity": f"g{i}", "out_degree": 30} for i in range(10)
+            ],
+        )
+        # 10 × -5 = -50, but capped at -25
+        assert _compute_score(result) == 75
+
+    def test_hub_penalty_capped(self) -> None:
+        """Hub penalty should be capped at -20."""
+        result = TopologyResult(
+            total_entities=100,
+            hubs=[
+                {"entity": f"h{i}", "in_degree": 20} for i in range(10)
+            ],
+        )
+        # 10 × -5 = -50, but capped at -20
+        assert _compute_score(result) == 80
 
     def test_placeholder_penalty(self) -> None:
         """Placeholder modules → -5 per module."""
@@ -383,16 +426,18 @@ class TestComputeScore:
         assert _compute_score(result) == 90
 
     def test_score_floor_at_zero(self) -> None:
-        """Score should never go below 0."""
+        """Score should never go below 0 even with extreme penalties."""
         result = TopologyResult(
             total_entities=10,
             orphans=[{"entity": f"o{i}"} for i in range(5)],
             hubs=[{"entity": f"h{i}", "in_degree": 20} for i in range(10)],
-            god_functions=[{"entity": f"g{i}", "out_degree": 25} for i in range(10)],
-            placeholder_modules=[{"module": f"m{i}"} for i in range(5)],
+            god_functions=[{"entity": f"g{i}", "out_degree": 30} for i in range(10)],
+            placeholder_modules=[{"module": f"m{i}"} for i in range(10)],
             coupling=CouplingMetrics(density=0.8),
         )
-        assert _compute_score(result) == 0
+        # 100 - 25(orphan) - 20(hub cap) - 25(god cap) - 15(placeholder cap) - 10(coupling) = 5
+        # With 10 placeholder modules: capped at -15
+        assert _compute_score(result) == 5
 
 
 class TestTopologyAnalyzerAsync:
@@ -511,6 +556,14 @@ class TestServerSideCoupling:
             "intra_module_relations": 15,
             "coupling_density": 0.25,
         }
+        # Needed for _compute_coupled_pairs (cross_module > 0)
+        mock_client.get_all_entities.return_value = [
+            {"entity_name": "A", "source_id": "src/cli/a.py", "entity_type": "function"},
+            {"entity_name": "B", "source_id": "src/core/b.py", "entity_type": "function"},
+        ]
+        mock_client.get_all_relations.return_value = [
+            {"src_id": "A", "tgt_id": "B"},
+        ]
 
         analyzer = TopologyAnalyzer(client=mock_client)
         result = await analyzer.analyze()
@@ -523,6 +576,7 @@ class TestServerSideCoupling:
         )
         assert result.coupling.density == 0.25
         assert result.coupling.cross_module == 5
+        assert len(result.coupling.most_coupled_pairs) > 0
 
     @pytest.mark.asyncio
     async def test_explicit_source_prefix(self, mock_client: AsyncMock) -> None:
@@ -536,6 +590,8 @@ class TestServerSideCoupling:
             "intra_module_relations": 8,
             "coupling_density": 0.2,
         }
+        mock_client.get_all_entities.return_value = []
+        mock_client.get_all_relations.return_value = []
 
         analyzer = TopologyAnalyzer(client=mock_client, source_prefix="app/")
         result = await analyzer.analyze()
@@ -579,6 +635,109 @@ class TestServerSideCoupling:
             module_depth=2,
         )
         assert isinstance(result, TopologyResult)
+
+    @pytest.mark.asyncio
+    async def test_server_side_normalizes_entity_type(self, mock_client: AsyncMock) -> None:
+        """Server-side orphans should have entity_type renamed to type."""
+        mock_client.get_source_ids.return_value = ["src/core/a.py"]
+        mock_client.get_orphan_entities.return_value = [
+            {"entity": "Orphan", "entity_type": "class", "source_id": "src/core/a.py"},
+        ]
+        mock_client.get_degree_distribution.return_value = []
+        mock_client.get_graph_stats.return_value = {
+            "entity_count": 1,
+            "relation_count": 0,
+            "cross_module_relations": 0,
+            "intra_module_relations": 0,
+            "coupling_density": 0.0,
+        }
+
+        analyzer = TopologyAnalyzer(client=mock_client)
+        result = await analyzer.analyze()
+
+        assert len(result.orphans) == 1
+        assert result.orphans[0]["type"] == "class"
+        assert "entity_type" not in result.orphans[0]
+
+
+class TestNormalizeTypeField:
+    """Tests for _normalize_type_field helper."""
+
+    def test_renames_entity_type_to_type(self) -> None:
+        items = [
+            {"entity": "Foo", "entity_type": "class", "source_id": "a.py"},
+            {"entity": "Bar", "entity_type": "function", "source_id": "b.py"},
+        ]
+        _normalize_type_field(items)
+        assert items[0]["type"] == "class"
+        assert "entity_type" not in items[0]
+        assert items[1]["type"] == "function"
+
+    def test_skips_if_type_already_present(self) -> None:
+        items = [{"entity": "Foo", "type": "class", "entity_type": "method"}]
+        _normalize_type_field(items)
+        assert items[0]["type"] == "class"  # unchanged
+
+    def test_no_op_without_entity_type(self) -> None:
+        items = [{"entity": "Foo", "source_id": "a.py"}]
+        _normalize_type_field(items)
+        assert "type" not in items[0]
+
+
+class TestComputeCoupledPairs:
+    """Tests for _compute_coupled_pairs helper."""
+
+    def test_basic_cross_module(self) -> None:
+        entities = [
+            {"entity_name": "A", "source_id": "src/cli/a.py", "entity_type": "function"},
+            {"entity_name": "B", "source_id": "src/core/b.py", "entity_type": "function"},
+            {"entity_name": "C", "source_id": "src/core/c.py", "entity_type": "function"},
+        ]
+        relations = [
+            {"src_id": "A", "tgt_id": "B"},
+            {"src_id": "A", "tgt_id": "C"},  # same pair: cli → core
+            {"src_id": "B", "tgt_id": "C"},  # intra-module, not counted
+        ]
+        pairs = _compute_coupled_pairs(entities, relations)
+        assert len(pairs) == 1
+        assert pairs[0]["count"] == 2
+        assert pairs[0]["from"] == "src/cli"
+        assert pairs[0]["to"] == "src/core"
+
+    def test_excludes_noise_and_external(self) -> None:
+        entities = [
+            {"entity_name": "A", "source_id": "src/cli/a.py", "entity_type": "function"},
+            {"entity_name": "len", "source_id": "src/core/b.py", "entity_type": "function"},
+            {"entity_name": "Ext", "source_id": "external", "entity_type": "external"},
+        ]
+        relations = [
+            {"src_id": "A", "tgt_id": "len"},
+            {"src_id": "A", "tgt_id": "Ext"},
+        ]
+        pairs = _compute_coupled_pairs(entities, relations)
+        assert len(pairs) == 0
+
+    def test_empty_relations(self) -> None:
+        entities = [
+            {"entity_name": "A", "source_id": "src/cli/a.py", "entity_type": "function"},
+        ]
+        pairs = _compute_coupled_pairs(entities, [])
+        assert pairs == []
+
+    def test_top_n_limit(self) -> None:
+        """Should return only top N pairs."""
+        entities = []
+        relations = []
+        # Create 8 cross-module pairs with different counts
+        for i in range(8):
+            src_name = f"Src{i}"
+            tgt_name = f"Tgt{i}"
+            entities.append({"entity_name": src_name, "source_id": f"mod{i}/a.py", "entity_type": "function"})
+            entities.append({"entity_name": tgt_name, "source_id": f"mod{i + 10}/b.py", "entity_type": "function"})
+            relations.append({"src_id": src_name, "tgt_id": tgt_name})
+
+        pairs = _compute_coupled_pairs(entities, relations, top_n=3)
+        assert len(pairs) == 3
 
 
 class TestCouplingMetrics:
