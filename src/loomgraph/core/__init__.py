@@ -1,7 +1,13 @@
 """Core module: configuration, mapping, injection, and indexing."""
 
 from loomgraph.core.config import Settings, get_settings
-from loomgraph.core.git import GitError, get_changed_files, get_current_commit, is_git_repository
+from loomgraph.core.git import (
+    GitError,
+    get_changed_files,
+    get_current_branch,
+    get_current_commit,
+    is_git_repository,
+)
 from loomgraph.core.indexer import index_file, index_repository, scan_code_files
 from loomgraph.core.injector import inject_parse_result, inject_parse_results_batch
 from loomgraph.core.lightrag_client import LightRAGAPIError, LightRAGClient
@@ -32,6 +38,7 @@ __all__ = [
     "GitError",
     "is_git_repository",
     "get_changed_files",
+    "get_current_branch",
     "get_current_commit",
     # Models
     "Symbol",

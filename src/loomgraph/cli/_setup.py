@@ -10,7 +10,13 @@ from typing import Any
 import click
 
 from loomgraph import __version__
-from loomgraph.cli._common import ErrorCode, output_error, output_partial_error, output_success
+from loomgraph.cli._common import (
+    ErrorCode,
+    get_auto_workspace,
+    output_error,
+    output_partial_error,
+    output_success,
+)
 from loomgraph.cli._deps_check import check_codeindex, check_embedding, check_lightrag_api
 from loomgraph.cli.main import main
 from loomgraph.core.config import get_settings
@@ -47,8 +53,32 @@ def status() -> None:
     if not embedding_status.get("connected"):
         suggestions.append("Embedding service not reachable (may be managed by LightRAG)")
 
-    data = {
+    # Workspace context
+    current_ws = get_auto_workspace(None)
+    ws_context: dict[str, Any] = {"name": current_ws}
+
+    if lightrag_status.get("connected"):
+        try:
+            import httpx
+
+            with httpx.Client(timeout=5.0, trust_env=False) as http:
+                headers: dict[str, str] = {}
+                if current_ws:
+                    headers["LIGHTRAG-WORKSPACE"] = current_ws
+                resp = http.get(
+                    f"{settings.lightrag.api_url}/graph/stats",
+                    headers=headers,
+                )
+                if resp.status_code == 200:
+                    stats = resp.json()
+                    ws_context["entities"] = stats.get("entity_count", 0)
+                    ws_context["relations"] = stats.get("relation_count", 0)
+        except Exception:
+            ws_context["entities"] = "unknown"
+
+    data: dict[str, Any] = {
         "version": __version__,
+        "workspace": ws_context,
         "config": {
             "lightrag_url": settings.lightrag.api_url,
             "embedding_url": settings.embedding.base_url,

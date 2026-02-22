@@ -256,6 +256,9 @@ embedding:
 | `loomgraph find "<query>" --with-relations` | 实体 + callers/callees 一次返回 |
 | `loomgraph query "<question>"` | 语义知识问答（RAG 引擎，LLM 驱动） |
 | `loomgraph graph "<entity>"` | 查询调用关系 |
+| `loomgraph topology` | 图谱拓扑债务分析（orphans/hubs/god/coupling） |
+| `loomgraph topology --module cli` | 模块级拓扑分析 |
+| `loomgraph check` | 索引新鲜度检查（source_id vs 磁盘文件） |
 | `loomgraph impact [TARGET]` | 分析代码变更影响 |
 | `loomgraph workspace list` | 列出所有 workspace |
 | `loomgraph workspace info [NAME]` | 查看 workspace 详情（默认自动检测） |
@@ -267,6 +270,12 @@ embedding:
 | `/loomgraph-evolution --entity X` | 代码演化趋势分析（Claude Code Skill） |
 
 详细用法见 [docs/api/CLI_DESIGN.md](docs/api/CLI_DESIGN.md)。
+
+### 开始工作前
+
+每次新开 Claude Code 窗口，先运行 `loomgraph status` 确认知识图谱状态：
+- `workspace.name`: 当前读取的 workspace（格式 `项目:分支`，如 `loomgraph:develop`）
+- `workspace.entities`: 实体数（0 = 需要先 `loomgraph index .`）
 
 ## 开发命令
 
