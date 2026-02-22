@@ -1,14 +1,14 @@
 # LoomGraph 开发路线图
 
 **版本**: 0.7.0
-**更新日期**: 2026-02-21
+**更新日期**: 2026-02-22
 
 ---
 
-## 📍 当前状态: Phase 3 前三阶段已完成
+## 📍 当前状态: Phase 3 全部完成 ✅
 
-**已完成**: MVP 核心 + LightRAG 集成 + CLI + 双通道发布 + deps/overview (EPIC-004) + Workspace 管理 (EPIC-005) + 跨 Workspace 对比 (EPIC-006) + 研发熵减 Skills (EPIC-007) + insert_custom_kg 迁移 (636x 提速) + 搜索体系重构 (EPIC-008)
-**下一个**: 图谱拓扑债务分析 (EPIC-009, v0.7.1) — topology / check / Skill A 增强
+**已完成**: MVP 核心 + LightRAG 集成 + CLI + 双通道发布 + deps/overview (EPIC-004) + Workspace 管理 (EPIC-005) + 跨 Workspace 对比 (EPIC-006) + 研发熵减 Skills (EPIC-007) + insert_custom_kg 迁移 (636x 提速) + 搜索体系重构 (EPIC-008) + 图谱拓扑分析 (EPIC-009) + 增量更新策略 (EPIC-003)
+**下一个**: IDE 集成 (MCP Server, v0.8.0)
 
 ---
 
@@ -131,18 +131,32 @@
 
 详见 [EPIC-008](epics/EPIC-008-search-architecture-redesign.md)
 
-### 第四阶段b: 图谱拓扑债务分析 — v0.7.1
+### 第四阶段b: 图谱拓扑债务分析 — v0.7.0 ✅
 
 > **背景**: codeindex 看文件级结构（显微镜），知识图谱看关系网络（望远镜），两者互补
 > **价值**: 让 Skill A (debt-radar) 从 "文件医生" 升级为 "系统架构师"
 
 | EPIC | Feature | 描述 | 状态 |
 |------|---------|------|------|
-| EPIC-009 | `topology` | 图谱拓扑分析（orphans/hubs/god/coupling） | 📋 |
-| EPIC-009 | `check` | 索引新鲜度检查（source_id vs 磁盘文件） | 📋 |
-| EPIC-009 | Skill A 增强 | debt-radar 报告新增拓扑 + 新鲜度维度 | 📋 |
+| EPIC-009 | `topology` | 图谱拓扑分析（orphans/hubs/god/coupling） | ✅ |
+| EPIC-009 | `check` | 索引新鲜度检查（source_id vs 磁盘文件） | ✅ |
+| EPIC-009 | Skill A 增强 | debt-radar 报告新增拓扑 + 新鲜度维度 | ✅ |
 
 详见 [EPIC-009](epics/EPIC-009-graph-topology-debt-analysis.md)
+
+### 第四阶段c: 增量更新策略 — v0.7.0 ✅
+
+> **背景**: 知识图谱需要与代码同步更新，手动更新成本高
+> **价值**: CI/CD 自动更新 + Git Hook 本地自动更新，客户零配置开箱即用
+
+| EPIC | Feature | 描述 | 状态 |
+|------|---------|------|------|
+| EPIC-003 | GitHub Action | 可复用 workflow，CI/CD 自动更新 | ✅ |
+| EPIC-003 | Post-commit Hook | 4 种模式（auto/sync/async/disabled） | ✅ |
+| EPIC-003 | `update` 增强 | --files, --use-affected 参数 | ✅ |
+| EPIC-003 | 客户快速上手 | quickstart.sh + upgrade.sh 一键安装/升级 | ✅ |
+
+详见 [EPIC-003](epics/EPIC-003-update-strategy.md)
 
 ### 第五阶段: IDE 集成 — v0.8.0
 
