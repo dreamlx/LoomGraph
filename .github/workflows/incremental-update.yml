@@ -1,0 +1,71 @@
+name: Incremental Update (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      lightrag_endpoint:
+        required: true
+        type: string
+        description: "LightRAG API endpoint URL"
+      embedding_endpoint:
+        required: true
+        type: string
+        description: "Embedding API endpoint URL"
+      working_directory:
+        required: false
+        type: string
+        default: '.'
+        description: "Working directory for the repository"
+      since:
+        required: false
+        type: string
+        default: 'HEAD~1'
+        description: "Git reference to compare from (default: HEAD~1)"
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2  # Need HEAD~1 to detect changes
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ai-codeindex loomgraph
+
+      - name: Detect changed files
+        id: changes
+        run: |
+          cd ${{ inputs.working_directory }}
+          codeindex affected --json --since ${{ inputs.since }} > changed.json
+
+          # Check if any files changed
+          CHANGED_COUNT=$(cat changed.json | jq -r '.affected_files | length')
+          echo "changed_count=$CHANGED_COUNT" >> $GITHUB_OUTPUT
+
+          if [ "$CHANGED_COUNT" -gt 0 ]; then
+            FILES=$(cat changed.json | jq -r '.affected_files[]' | tr '\n' ',' | sed 's/,$//')
+            echo "files=$FILES" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Incremental update
+        if: steps.changes.outputs.changed_count > 0
+        run: |
+          cd ${{ inputs.working_directory }}
+          loomgraph update \
+            --files "${{ steps.changes.outputs.files }}" \
+            --lightrag-url "${{ inputs.lightrag_endpoint }}" \
+            --embedding-url "${{ inputs.embedding_endpoint }}"
+
+      - name: No changes
+        if: steps.changes.outputs.changed_count == 0
+        run: |
+          echo "No code files changed. Skipping update."
