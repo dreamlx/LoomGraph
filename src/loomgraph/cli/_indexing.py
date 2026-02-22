@@ -466,7 +466,16 @@ async def _async_inject(
 @main.command()
 @click.option("--since", default="HEAD~1", help="Git ref to compare from (default: HEAD~1)")
 @click.option("--workspace", "-w", default=None, help="Workspace name (default: current directory name)")
-def update(since: str, workspace: str | None) -> None:
+@click.option("--files", default=None, help="Comma-separated list of files to update (skips git detection)")
+@click.option("--lightrag-url", default=None, help="Override LightRAG API URL from config")
+@click.option("--embedding-url", default=None, help="Override embedding API URL from config")
+def update(
+    since: str,
+    workspace: str | None,
+    files: str | None,
+    lightrag_url: str | None,
+    embedding_url: str | None,
+) -> None:
     """Warm update: index only changed files since last commit.
 
     Detects git changes and incrementally adds new entities/relations
@@ -477,6 +486,7 @@ def update(since: str, workspace: str | None) -> None:
         loomgraph update --since HEAD~3  # Changes in last 3 commits
         loomgraph update --since main    # Changes since branching from main
         loomgraph update --workspace erp # Update in specific workspace
+        loomgraph update --files src/foo.py,src/bar.py  # Specific files (CI/CD)
     """
     import time
 
@@ -490,40 +500,56 @@ def update(since: str, workspace: str | None) -> None:
 
     start_time = time.time()
     repo_path = Path(".")
+    current_commit = None
 
-    # Check if in git repo
-    if not is_git_repository(repo_path):
-        output_error(
-            code=ErrorCode.GIT_ERROR,
-            message="Not a git repository",
-            suggestion="Run this command from within a git repository",
-        )
-        return
+    # If --files provided, parse and use directly (skip git detection)
+    if files:
+        changed_files = [Path(f.strip()) for f in files.split(",")]
+        # Validate files exist
+        for file_path in changed_files:
+            full_path = repo_path / file_path
+            if not full_path.exists():
+                output_error(
+                    code=ErrorCode.INVALID_INPUT,
+                    message=f"File not found: {file_path}",
+                    suggestion="Check file paths and ensure they exist",
+                )
+                return
+    else:
+        # Git-based detection (original flow)
+        # Check if in git repo
+        if not is_git_repository(repo_path):
+            output_error(
+                code=ErrorCode.GIT_ERROR,
+                message="Not a git repository",
+                suggestion="Run this command from within a git repository or use --files",
+            )
+            return
 
-    # Get current commit for reference
-    try:
-        current_commit = get_current_commit(repo_path)
-    except GitError as e:
-        output_error(
-            code=ErrorCode.GIT_ERROR,
-            message=str(e),
-        )
-        return
+        # Get current commit for reference
+        try:
+            current_commit = get_current_commit(repo_path)
+        except GitError as e:
+            output_error(
+                code=ErrorCode.GIT_ERROR,
+                message=str(e),
+            )
+            return
 
-    # Get changed files
-    try:
-        changed_files = get_changed_files(
-            since=since,
-            repo_path=repo_path,
-            extensions=CODE_EXTENSIONS,
-        )
-    except GitError as e:
-        output_error(
-            code=ErrorCode.GIT_ERROR,
-            message=str(e),
-            suggestion="Check if the git reference exists: git log --oneline",
-        )
-        return
+        # Get changed files
+        try:
+            changed_files = get_changed_files(
+                since=since,
+                repo_path=repo_path,
+                extensions=CODE_EXTENSIONS,
+            )
+        except GitError as e:
+            output_error(
+                code=ErrorCode.GIT_ERROR,
+                message=str(e),
+                suggestion="Check if the git reference exists: git log --oneline",
+            )
+            return
 
     if not changed_files:
         output_success({
@@ -547,7 +573,15 @@ def update(since: str, workspace: str | None) -> None:
 
     # Run warm update pipeline
     try:
-        result = asyncio.run(_async_warm_update(changed_files, repo_path, workspace))
+        result = asyncio.run(
+            _async_warm_update(
+                changed_files,
+                repo_path,
+                workspace,
+                lightrag_url=lightrag_url,
+                embedding_url=embedding_url,
+            )
+        )
     except Exception as e:
         output_error(
             code=ErrorCode.LIGHTRAG_ERROR,
@@ -557,8 +591,9 @@ def update(since: str, workspace: str | None) -> None:
 
     duration = time.time() - start_time
     result["duration_seconds"] = round(duration, 2)
-    result["since"] = since
-    result["current_commit"] = current_commit
+    if not files:  # Only add git info if git-based
+        result["since"] = since
+        result["current_commit"] = current_commit
 
     output_success(result)
 
@@ -567,6 +602,8 @@ async def _async_warm_update(
     changed_files: list[Path],
     repo_path: Path,
     workspace: str | None,
+    lightrag_url: str | None = None,
+    embedding_url: str | None = None,
 ) -> dict[str, Any]:
     """Run async warm update pipeline via delete_by_source + insert_custom_kg.
 
@@ -586,8 +623,10 @@ async def _async_warm_update(
     )
 
     settings = get_settings()
+    # Use provided URLs or fall back to config
+    api_url = lightrag_url if lightrag_url else settings.lightrag.api_url
     client = LightRAGClient(
-        base_url=settings.lightrag.api_url,
+        base_url=api_url,
         timeout=settings.lightrag.api_timeout,
         workspace=get_auto_workspace(workspace),
     )
