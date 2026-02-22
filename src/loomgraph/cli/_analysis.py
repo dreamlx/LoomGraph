@@ -1,8 +1,9 @@
-"""CLI commands for impact analysis, deps, and overview."""
+"""CLI commands for impact analysis, deps, overview, topology, and check."""
 
 from __future__ import annotations
 
 import asyncio
+import re
 from pathlib import Path
 from typing import Any
 
@@ -217,3 +218,147 @@ async def _async_overview(
     analyzer = OverviewAnalyzer(client=client, depth=depth)
     result = await analyzer.analyze(no_summary=no_summary)
     return result.to_dict()
+
+
+@main.command()
+@click.option("--hub-threshold", default=5, help="Min in-degree to flag as hub")
+@click.option("--god-threshold", default=5, help="Min out-degree to flag as god function")
+@click.option("--module", default=None, help="Module prefix filter (e.g. 'cli')")
+@click.option("--workspace", "-w", default=None, help="Workspace name (default: current directory name)")
+def topology(hub_threshold: int, god_threshold: int, module: str | None, workspace: str | None) -> None:
+    """Analyze knowledge graph topology for structural code smells.
+
+    Detects orphan entities, hub fragility, god functions,
+    placeholder modules, and cross-module coupling.
+    """
+    try:
+        result = asyncio.run(
+            _async_topology(hub_threshold, god_threshold, module, workspace)
+        )
+        output_success(result)
+    except Exception as e:
+        output_error(
+            code=ErrorCode.LIGHTRAG_ERROR,
+            message=f"Topology analysis failed: {e}",
+            suggestion="Check LightRAG status with: loomgraph status",
+        )
+
+
+async def _async_topology(
+    hub_threshold: int,
+    god_threshold: int,
+    module: str | None = None,
+    workspace: str | None = None,
+) -> dict[str, Any]:
+    """Run async topology analysis."""
+    from loomgraph.core.lightrag_client import LightRAGClient
+    from loomgraph.core.topology import TopologyAnalyzer
+
+    settings = get_settings()
+    client = LightRAGClient(
+        base_url=settings.lightrag.api_url,
+        timeout=settings.lightrag.api_timeout,
+        workspace=get_auto_workspace(workspace),
+    )
+
+    analyzer = TopologyAnalyzer(
+        client=client,
+        hub_threshold=hub_threshold,
+        god_threshold=god_threshold,
+        module=module,
+    )
+    result = await analyzer.analyze()
+    return result.to_dict()
+
+
+@main.command()
+@click.option(
+    "--repo-path",
+    type=click.Path(exists=True),
+    default=".",
+    help="Base path for source_id file verification",
+)
+@click.option("--workspace", "-w", default=None, help="Workspace name (default: current directory name)")
+def check(repo_path: str, workspace: str | None) -> None:
+    """Check index freshness by verifying source_id file paths.
+
+    Validates that entity source_ids reference files that still exist on disk.
+    """
+    try:
+        result = asyncio.run(_async_check(repo_path, workspace))
+        output_success(result)
+    except Exception as e:
+        output_error(
+            code=ErrorCode.LIGHTRAG_ERROR,
+            message=f"Check failed: {e}",
+            suggestion="Check LightRAG status with: loomgraph status",
+        )
+
+
+async def _async_check(
+    repo_path: str,
+    workspace: str | None = None,
+) -> dict[str, Any]:
+    """Run async index freshness check."""
+    from loomgraph.core.lightrag_client import LightRAGClient
+
+    settings = get_settings()
+    client = LightRAGClient(
+        base_url=settings.lightrag.api_url,
+        timeout=settings.lightrag.api_timeout,
+        workspace=get_auto_workspace(workspace),
+    )
+
+    # Try server-side get_source_ids first, fallback to get_all_entities
+    try:
+        source_ids = await client.get_source_ids()
+    except Exception:
+        entities = await client.get_all_entities()
+        source_ids = list({e.get("source_id", "") for e in entities if e.get("source_id")})
+
+    base = Path(repo_path)
+    valid = 0
+    stale = 0
+    stale_entries: list[dict[str, Any]] = []
+    seen_files: set[str] = set()
+
+    for sid in source_ids:
+        if not sid or sid == "external":
+            continue
+        # Strip line number suffix like ":10-20"
+        file_path = re.sub(r":\d+(-\d+)?$", "", sid)
+        if file_path in seen_files:
+            continue
+        seen_files.add(file_path)
+
+        if (base / file_path).exists():
+            valid += 1
+        else:
+            stale += 1
+            stale_entries.append({
+                "source_id": sid,
+                "file_path": file_path,
+                "reason": "file_not_found",
+                "suggestion": "Run 'loomgraph update' or 'loomgraph index --clear .'",
+            })
+
+    total = valid + stale
+    freshness_ratio = valid / total if total > 0 else 1.0
+
+    suggestion = ""
+    if stale > 0:
+        suggestion = (
+            f"{stale} source paths are stale. "
+            "Run 'loomgraph index --clear .' to rebuild."
+        )
+
+    return {
+        "freshness": {
+            "total_source_paths": total,
+            "valid": valid,
+            "stale": stale,
+            "freshness_ratio": round(freshness_ratio, 3),
+        },
+        "stale_entries": stale_entries,
+        "suggestion": suggestion,
+    }
