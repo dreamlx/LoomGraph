@@ -358,6 +358,117 @@ loomgraph graph <entity_name> [options]
 
 ---
 
+### 5.5. `loomgraph topology` - 图谱拓扑分析
+
+**用途**: 分析知识图谱拓扑结构，检测结构级代码坏味道
+
+```bash
+loomgraph topology [options]
+```
+
+**参数**:
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--hub-threshold` | Hub 实体的最小 in-degree | `5` |
+| `--god-threshold` | God Function 的最小 out-degree | `5` |
+| `--module` | 模块前缀过滤（source_id 前缀匹配） | 全部 |
+| `--workspace/-w` | Workspace 名称 | 当前目录名 |
+
+**成功输出**:
+```json
+{
+  "success": true,
+  "data": {
+    "summary": {
+      "total_entities": 586,
+      "total_relations": 952,
+      "orphan_count": 46,
+      "hub_count": 28,
+      "god_function_count": 72,
+      "placeholder_module_count": 3,
+      "coupling_density": 0.35,
+      "topology_score": 62
+    },
+    "orphans": [
+      {"entity": "ChangedFile", "type": "class", "source_id": "core/impact/models.py:10-15"}
+    ],
+    "hubs": [
+      {"entity": "output_success", "type": "function", "source_id": "cli/_common.py:88-93",
+       "in_degree": 18, "callers_sample": ["index", "update", "find", "graph", "deps"]}
+    ],
+    "god_functions": [
+      {"entity": "_async_index_pipeline", "type": "function", "source_id": "cli/_indexing.py:...",
+       "out_degree": 28, "callees_sample": ["collect_kg_data", "LightRAGClient.__init__"]}
+    ],
+    "placeholder_modules": [
+      {"module": "chunking", "entities": ["chunking.__init__"], "status": "empty"}
+    ],
+    "coupling": {
+      "cross_module_relations": 21,
+      "intra_module_relations": 931,
+      "density": 0.35,
+      "most_coupled_pairs": [{"from": "cli", "to": "core", "count": 19}]
+    }
+  }
+}
+```
+
+**检测项**:
+- **Orphans**: 0 in-degree + 0 out-degree（排除 module 类型和 external）
+- **Hubs**: 高 in-degree 实体（修改会产生广泛涟漪）
+- **God Functions**: 高 out-degree 实体（职责过重）
+- **Placeholder Modules**: 仅含 `__init__` 的模块
+- **Coupling Density**: cross_module_relations / total_relations
+
+**拓扑分数 (topology_score, 0-100)**:
+- orphan_ratio > 20% → -25, > 10% → -15
+- hub (in >= 15) → -5 per entity
+- god_function (out >= 20) → -5 per, (out >= 10) → -3 per
+- placeholder_modules → -5 per module
+- coupling_density > 0.5 → -10, > 0.3 → -5
+
+---
+
+### 5.6. `loomgraph check` - 索引新鲜度检查
+
+**用途**: 验证知识图谱中的 source_id 是否仍指向磁盘上存在的文件
+
+```bash
+loomgraph check [options]
+```
+
+**参数**:
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--repo-path` | 项目根目录（用于验证文件路径） | `.` |
+| `--workspace/-w` | Workspace 名称 | 当前目录名 |
+
+**成功输出**:
+```json
+{
+  "success": true,
+  "data": {
+    "freshness": {
+      "total_source_paths": 150,
+      "valid": 116,
+      "stale": 34,
+      "freshness_ratio": 0.773
+    },
+    "stale_entries": [
+      {
+        "source_id": "cli/main.py:66-81",
+        "file_path": "cli/main.py",
+        "reason": "file_not_found",
+        "suggestion": "Run 'loomgraph update' or 'loomgraph index --clear .'"
+      }
+    ],
+    "suggestion": "34 source paths are stale. Run 'loomgraph index --clear .' to rebuild."
+  }
+}
+```
+
+---
+
 ### 6. `loomgraph status` - 系统状态
 
 **用途**: 检查依赖和服务状态
