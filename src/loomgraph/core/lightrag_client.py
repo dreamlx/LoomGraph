@@ -744,14 +744,19 @@ class LightRAGClient:
     async def get_graph_stats(
         self,
         source_prefix: str | None = None,
+        module_depth: int = 2,
     ) -> dict[str, Any]:
         """Get graph statistics (entity/relation counts, coupling).
 
         Args:
-            source_prefix: Filter by source_id prefix
+            source_prefix: Filter by source_id prefix. Also stripped from
+                source_ids before module extraction for coupling analysis.
+            module_depth: Directory depth for module extraction in coupling
+                analysis (default: 2). e.g. depth=2: "src/core/config.py" → "src/core"
 
         Returns:
-            Dict with graph statistics
+            Dict with entity_count, relation_count, cross_module_relations,
+            intra_module_relations, coupling_density.
 
         Raises:
             LightRAGAPIError: If endpoint is not available or request fails
@@ -759,6 +764,8 @@ class LightRAGClient:
         params: dict[str, Any] = {}
         if source_prefix:
             params["source_prefix"] = source_prefix
+        if module_depth != 2:
+            params["module_depth"] = module_depth
 
         async with httpx.AsyncClient(timeout=self.timeout, trust_env=False) as client:
             try:
