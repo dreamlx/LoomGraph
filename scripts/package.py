@@ -136,6 +136,31 @@ def build_wheel() -> Path | None:
             print(f"  Built: {newest.name}")
             return newest
         return None
+
+
+def find_codeindex_wheel() -> Path | None:
+    """Find codeindex wheel from ../codeindex/dist/ directory.
+
+    Returns:
+        Path to codeindex wheel, or None if not found
+    """
+    # Look for codeindex in sibling directory
+    codeindex_project = PROJECT_ROOT.parent / "codeindex"
+    codeindex_dist = codeindex_project / "dist"
+
+    if not codeindex_dist.exists():
+        print(f"  Warning: codeindex dist directory not found: {codeindex_dist}")
+        return None
+
+    # Find newest codeindex wheel
+    wheels = list(codeindex_dist.glob("ai_codeindex-*.whl"))
+    if wheels:
+        newest = max(wheels, key=lambda p: p.stat().st_mtime)
+        print(f"  Found codeindex wheel: {newest.name}")
+        return newest
+
+    print(f"  Warning: No codeindex wheel found in {codeindex_dist}")
+    return None
     except FileNotFoundError:
         print("  Warning: 'build' module not found. Install with: pip install build")
         return None
@@ -191,11 +216,17 @@ def package_customer(customer: str, customers_config: dict, mode: str = "demo") 
         shutil.copy(CHANGELOG_FILE, temp_dir / "CHANGELOG.md")
         print(f"  - CHANGELOG.md")
 
-    # Build and include wheel
+    # Build and include LoomGraph wheel
     wheel_path = build_wheel()
     if wheel_path:
         shutil.copy(wheel_path, temp_dir / wheel_path.name)
         print(f"  - {wheel_path.name}")
+
+    # Include codeindex wheel (required dependency)
+    codeindex_wheel = find_codeindex_wheel()
+    if codeindex_wheel:
+        shutil.copy(codeindex_wheel, temp_dir / codeindex_wheel.name)
+        print(f"  - {codeindex_wheel.name}")
 
     # Patterns to exclude
     def ignore_patterns(directory, files):
