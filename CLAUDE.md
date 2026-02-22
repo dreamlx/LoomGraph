@@ -48,6 +48,314 @@ codeindex (解析) → LoomGraph (映射) → LightRAG API → PostgreSQL
 - **docker-compose.yml**: 为 LightRAG 提供 PG 实例，LoomGraph 不直接连接
 - **LoomGraph 无自有表**: `storage/` 目录预留，当前为空
 
+## 自动更新与 Claude Code 感知
+
+### 增量更新机制（EPIC-003）
+
+LoomGraph 提供 **2 种自动更新方式**，确保代码变更后知识图谱保持最新：
+
+#### 1. Git Post-commit Hook（推荐用于本地开发）
+
+**安装**：
+```bash
+# 安装 post-commit hook
+loomgraph hooks install
+
+# 检查状态
+loomgraph hooks status
+```
+
+**4 种工作模式**（通过环境变量配置）：
+
+| 模式 | 触发条件 | 行为 | 用例 |
+|------|---------|------|------|
+| `auto`（默认） | ≤3 个文件变更 | 同步更新（阻塞提交） | 小改动，立即可用 |
+| | >3 个文件变更 | 后台异步更新 | 大改动，不阻塞 |
+| `sync` | 任意变更 | 同步更新 | 开发调试，需要立即验证 |
+| `async` | 任意变更 | 后台异步更新 | 大规模重构 |
+| `disabled` | — | 不执行更新 | 临时禁用 |
+
+**配置示例**（添加到 `~/.zshrc` 或 `~/.bashrc`）：
+```bash
+# 自定义模式
+export LOOMGRAPH_HOOK_MODE=auto            # auto | sync | async | disabled
+
+# 自定义同步阈值（默认 3）
+export LOOMGRAPH_MAX_FILES_SYNC=5          # ≤5 文件同步，>5 异步
+
+# 自定义日志路径
+export LOOMGRAPH_HOOK_LOG=~/.loomgraph/hooks/post-commit.log
+```
+
+#### 2. GitHub Actions（推荐用于 CI/CD）
+
+**集成方法**（在 `.github/workflows/ci.yml` 中）：
+
+```yaml
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+
+jobs:
+  # 其他 CI 任务（lint、test 等）...
+
+  update-knowledge-graph:
+    needs: test  # 测试通过后再更新
+    uses: dreamlx/LoomGraph/.github/workflows/incremental-update.yml@main
+    with:
+      lightrag_endpoint: "http://117.131.45.179:3001"
+      embedding_endpoint: "http://117.131.45.179:3002"
+    secrets: inherit
+```
+
+**特性**：
+- ✅ 使用 `codeindex affected --json` 智能检测变更（过滤非代码文件、考虑业务影响）
+- ✅ 自动跳过无代码变更的提交（如纯文档/配置修改）
+- ✅ 并行处理（如果有多个文件）
+- ✅ 失败不阻塞主流程（`continue-on-error: true`）
+
+详细配置：[docs/guides/github-action-integration.md](docs/guides/github-action-integration.md)
+
+### Claude Code 如何感知更新？
+
+**数据流转路径**：
+
+```
+┌───────────────┐
+│ 开发者提交代码  │
+└───────┬───────┘
+        │
+        ├─────────────┬──────────────┐
+        │             │              │
+   Git Hook    GitHub Action    手动命令
+  (本地开发)     (CI/CD)      (loomgraph update)
+        │             │              │
+        └─────────────┴──────────────┘
+                      │
+          ┌───────────▼────────────┐
+          │  loomgraph update       │
+          │  ├─ git diff / affected │  智能变更检测
+          │  ├─ codeindex parse     │  AST 解析
+          │  ├─ embed (Jina)        │  向量化
+          │  └─ inject (LightRAG)   │  写入图谱
+          └───────────┬─────────────┘
+                      │
+          ┌───────────▼─────────────┐
+          │ LightRAG PostgreSQL     │  知识图谱存储
+          │ ├─ entities (实体表)     │
+          │ ├─ relations (关系表)    │
+          │ └─ embeddings (向量表)   │
+          └───────────┬─────────────┘
+                      │
+                      │ HTTP API
+                      │
+          ┌───────────▼─────────────┐
+          │ Claude Code (AI Agent)  │
+          │                         │
+          │ 通过 MCP Skills 读取：    │
+          │ ├─ /mo:arch "架构"       │  → find + query
+          │ ├─ /mo:index <path>     │  → 重新索引
+          │ └─ loomgraph find/query │  → 直接查询
+          └─────────────────────────┘
+```
+
+**关键点**：
+
+1. **更新是透明的**：无论是 Hook、Action 还是手动更新，数据最终都写入同一个 LightRAG 数据库
+2. **Claude Code 无感知延迟**：
+   - 同步模式（≤3 文件）：提交完成即可查询最新数据
+   - 异步模式（>3 文件）：后台更新，Claude Code 可能查到旧数据（通常 1-2 分钟后更新完成）
+3. **查询方式**：
+   - **MCP Skill `/mo:arch`**：最常用，语义查询 + 结构化搜索
+   - **CLI `loomgraph find/query`**：直接命令行查询
+   - **编程式**：通过 LoomGraph SDK/API（未来支持）
+
+### 验证更新生效
+
+```bash
+# 提交代码后验证
+git commit -m "feat: add new feature"
+
+# 检查 workspace 状态（实体数应增加）
+loomgraph status
+
+# 搜索新增的符号
+loomgraph find "NewClassName"
+
+# 或在 Claude Code 中运行
+/mo:arch "where is NewClassName implemented"
+```
+
+### 初始化与升级场景
+
+#### 场景 1：新项目初始化（客户第一次使用）
+
+**完整流程**：
+
+```bash
+# Step 1: 安装 codeindex（AST 解析器）
+pip install codeindex
+
+# Step 2: 初始化 codeindex 配置
+cd /path/to/your/project
+codeindex init
+
+# Step 3: 生成项目文档索引（供 Claude Code 阅读）
+codeindex scan-all
+
+# Step 4: 安装 LoomGraph（知识图谱引擎）
+pip install loomgraph
+
+# Step 5: 配置 LightRAG 服务地址
+cat > .loomgraph.yaml <<EOF
+lightrag:
+  api_url: "http://117.131.45.179:3001"
+embedding:
+  base_url: "http://117.131.45.179:3002"
+EOF
+
+# Step 6: 首次索引代码库到知识图谱
+loomgraph index .
+
+# Step 7: 安装自动更新 Hook（可选）
+loomgraph hooks install
+
+# Step 8: 验证 Claude Code 可以感知
+loomgraph status   # 确认 entities > 0
+```
+
+**Claude Code 感知时间轴**：
+
+| 时间点 | 可用功能 | 数据来源 |
+|--------|---------|---------|
+| **Step 3 完成后** | ✅ 架构理解、代码导航 | `README_AI.md` 文件（静态文档） |
+| **Step 6 完成前** | ❌ 语义搜索、调用关系 | 知识图谱未建立 |
+| **Step 6 完成后** | ✅ 语义搜索、调用关系、依赖分析 | LightRAG 知识图谱（动态查询） |
+| **Step 7 完成后** | ✅ 自动增量更新 | 每次 commit 自动同步 |
+
+**关键理解**：
+- **codeindex** 生成的 `README_AI.md` 是**静态文档**，Claude Code 直接读取文件
+- **LoomGraph** 构建的知识图谱是**动态数据库**，Claude Code 通过 MCP Skills（如 `/mo:arch`）查询 LightRAG API
+
+#### 场景 2：版本升级（从旧版本升级）
+
+**升级检查清单**：
+
+```bash
+# Step 1: 升级工具（推荐使用虚拟环境）
+pip install --upgrade codeindex loomgraph
+
+# Step 2: 检查配置兼容性
+codeindex config check      # 检查 .codeindex.yaml
+loomgraph status            # 检查 LightRAG 连接
+
+# Step 3: 判断是否需要重建索引
+# 如果是小版本升级（v0.5.x → v0.5.y）：
+loomgraph update            # 增量更新即可
+
+# 如果是大版本升级（v0.5.x → v0.6.0）或数据格式变更：
+loomgraph index --clear .   # Cold Rebuild（清空重建）
+
+# Step 4: 验证升级成功
+loomgraph version           # 确认版本号
+loomgraph find "SomeClass"  # 测试查询功能
+```
+
+**版本兼容性**：
+
+| 升级类型 | 配置文件 | 知识图谱 | Claude Code 影响 |
+|---------|---------|---------|----------------|
+| **Patch 升级**（v0.5.0 → v0.5.1） | 兼容 | 无需重建 | 无影响，透明升级 |
+| **Minor 升级**（v0.5.x → v0.6.0） | 可能新增字段 | 建议重建（可选） | 新增 Skills 可用 |
+| **Major 升级**（v0.x → v1.0） | **需要迁移** | **必须重建** | 查看迁移指南 |
+
+**升级后 Claude Code 感知**：
+
+```bash
+# Claude Code 在升级后的首次查询
+/mo:arch "show me the architecture"
+
+# LoomGraph MCP Server 自动处理：
+# 1. 连接新版本的 LightRAG API
+# 2. 使用新的查询格式（如果有）
+# 3. 返回结果给 Claude Code
+
+# 用户无需额外操作，除非：
+# - 配置文件格式变更（需要手动更新 .loomgraph.yaml）
+# - 数据格式不兼容（需要 loomgraph index --clear .）
+```
+
+#### 场景 3：Claude Code 如何"发现"新版本功能？
+
+**MCP Skills 自动更新机制**：
+
+```
+┌─────────────────────────────────────┐
+│ 用户升级 LoomGraph                   │
+│ pip install --upgrade loomgraph     │
+└──────────────┬──────────────────────┘
+               │
+               ▼
+┌─────────────────────────────────────┐
+│ Claude Code 启动时自动加载 MCP       │
+│ ~/.claude/mcp.json 指向的 server     │
+└──────────────┬──────────────────────┘
+               │
+               ▼
+┌─────────────────────────────────────┐
+│ LoomGraph MCP Server 初始化          │
+│ ├─ 读取新版本的 tool definitions     │
+│ ├─ 注册新增的 Skills（如有）         │
+│ └─ 连接 LightRAG API                │
+└──────────────┬──────────────────────┘
+               │
+               ▼
+┌─────────────────────────────────────┐
+│ Claude Code 自动感知新功能           │
+│ ├─ 新增 Skills 出现在 /help 中       │
+│ ├─ 旧 Skills 保持兼容                │
+│ └─ 用户直接使用，无需配置             │
+└─────────────────────────────────────┘
+```
+
+**实际示例**：
+
+```bash
+# 假设 v0.6.0 新增了 /mo:refactor Skill
+
+# 升级前（v0.5.0）
+$ claude code
+> /mo:arch "architecture"  # ✅ 可用
+> /mo:refactor "suggest"   # ❌ Unknown skill
+
+# 升级后（v0.6.0）- 重启 Claude Code
+$ pip install --upgrade loomgraph
+$ claude code  # 重新启动
+> /mo:arch "architecture"  # ✅ 仍可用（向后兼容）
+> /mo:refactor "suggest"   # ✅ 新增功能自动可用
+
+# Claude Code 自动感知机制：
+# - MCP Server 重新加载时注册新 tools
+# - Claude 的 tool registry 自动更新
+# - 用户无需手动配置
+```
+
+**关键点**：
+1. **无需手动更新 MCP 配置**：`~/.claude/mcp.json` 只需配置一次，指向 `loomgraph mcp` 命令
+2. **重启 Claude Code 生效**：升级后需要重启 Claude Code 窗口，让 MCP Server 重新初始化
+3. **配置文件向后兼容**：旧的 `.loomgraph.yaml` 在新版本中仍然有效（除非有 Breaking Changes）
+
+### 故障排查
+
+| 问题 | 检查方法 | 解决方案 |
+|------|---------|---------|
+| Hook 未执行 | `loomgraph hooks status` | `loomgraph hooks install --force` |
+| 异步更新未完成 | `tail -f ~/.loomgraph/hooks/post-commit.log` | 等待后台任务完成或手动 `loomgraph update` |
+| Claude Code 查不到新代码 | `loomgraph find "<NewSymbol>"` | 确认 Hook/Action 成功执行 + workspace 正确 |
+| GitHub Action 失败 | 查看 Actions 日志 | 检查 LightRAG/Embedding 服务可达性 |
+
 ## 技术栈
 
 | 组件 | 技术选型 | 说明 |
@@ -83,7 +391,7 @@ loomgraph/
 │   │   ├── _common.py           # ErrorCode, output helpers, workspace auto-detect
 │   │   ├── _deps_check.py       # check_codeindex/lightrag_api/embedding
 │   │   ├── _indexing.py         # index, embed, inject, update
-│   │   ├── _search.py           # search, graph
+│   │   ├── _search.py           # find, query, graph
 │   │   ├── _analysis.py         # impact, deps, overview
 │   │   ├── _workspace.py        # workspace group + compare/similar
 │   │   └── _setup.py            # status, install-skills, setup-config, version
@@ -252,8 +560,13 @@ embedding:
 | `loomgraph index <path>` | 一键索引代码库 |
 | `loomgraph index --clear <path>` | Cold Rebuild（清空重建） |
 | `loomgraph update [--since REF]` | Warm Update（增量索引 git 变更） |
-| `loomgraph search "<query>"` | 语义搜索代码 |
+| `loomgraph find "<query>"` | 结构化实体发现（名字匹配 + 类型过滤） |
+| `loomgraph find "<query>" --with-relations` | 实体 + callers/callees 一次返回 |
+| `loomgraph query "<question>"` | 语义知识问答（RAG 引擎，LLM 驱动） |
 | `loomgraph graph "<entity>"` | 查询调用关系 |
+| `loomgraph topology` | 图谱拓扑债务分析（orphans/hubs/god/coupling） |
+| `loomgraph topology --module cli` | 模块级拓扑分析 |
+| `loomgraph check` | 索引新鲜度检查（source_id vs 磁盘文件） |
 | `loomgraph impact [TARGET]` | 分析代码变更影响 |
 | `loomgraph workspace list` | 列出所有 workspace |
 | `loomgraph workspace info [NAME]` | 查看 workspace 详情（默认自动检测） |
@@ -265,6 +578,12 @@ embedding:
 | `/loomgraph-evolution --entity X` | 代码演化趋势分析（Claude Code Skill） |
 
 详细用法见 [docs/api/CLI_DESIGN.md](docs/api/CLI_DESIGN.md)。
+
+### 开始工作前
+
+每次新开 Claude Code 窗口，先运行 `loomgraph status` 确认知识图谱状态：
+- `workspace.name`: 当前读取的 workspace（格式 `项目:分支`，如 `loomgraph:develop`）
+- `workspace.entities`: 实体数（0 = 需要先 `loomgraph index .`）
 
 ## 开发命令
 

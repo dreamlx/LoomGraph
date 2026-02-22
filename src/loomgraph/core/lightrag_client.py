@@ -644,3 +644,188 @@ class LightRAGClient:
 
             except httpx.RequestError as e:
                 raise LightRAGAPIError(f"Connection failed: {e}") from e
+
+    async def get_orphan_entities(
+        self,
+        exclude_types: list[str] | None = None,
+        source_prefix: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Get orphan entities (0 in-degree + 0 out-degree).
+
+        Calls server-side endpoint if available. Raises on failure
+        so TopologyAnalyzer can fall back to client-side computation.
+
+        Args:
+            exclude_types: Entity types to exclude (e.g. ["module"])
+            source_prefix: Filter by source_id prefix
+
+        Returns:
+            List of orphan entity dicts
+
+        Raises:
+            LightRAGAPIError: If endpoint is not available or request fails
+        """
+        params: dict[str, Any] = {}
+        if exclude_types:
+            params["exclude_types"] = ",".join(exclude_types)
+        if source_prefix:
+            params["source_prefix"] = source_prefix
+
+        async with httpx.AsyncClient(timeout=self.timeout, trust_env=False) as client:
+            try:
+                response = await client.get(
+                    f"{self.base_url}/graph/orphans",
+                    headers=self._get_headers(),
+                    params=params,
+                )
+                data = response.json()
+
+                if response.status_code >= 400:
+                    detail = data.get("detail", str(data))
+                    raise LightRAGAPIError(
+                        f"Get orphan entities failed: {detail}",
+                        status_code=response.status_code,
+                        detail=detail,
+                    )
+
+                return data if isinstance(data, list) else data.get("entities", [])
+
+            except httpx.RequestError as e:
+                raise LightRAGAPIError(f"Connection failed: {e}") from e
+
+    async def get_degree_distribution(
+        self,
+        direction: str = "in",
+        min_degree: int = 5,
+        source_prefix: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Get entities exceeding a degree threshold.
+
+        Args:
+            direction: "in" for callers or "out" for callees
+            min_degree: Minimum degree to include
+            source_prefix: Filter by source_id prefix
+
+        Returns:
+            List of entity dicts with degree info
+
+        Raises:
+            LightRAGAPIError: If endpoint is not available or request fails
+        """
+        params: dict[str, Any] = {
+            "direction": direction,
+            "min_degree": min_degree,
+        }
+        if source_prefix:
+            params["source_prefix"] = source_prefix
+
+        async with httpx.AsyncClient(timeout=self.timeout, trust_env=False) as client:
+            try:
+                response = await client.get(
+                    f"{self.base_url}/graph/degree",
+                    headers=self._get_headers(),
+                    params=params,
+                )
+                data = response.json()
+
+                if response.status_code >= 400:
+                    detail = data.get("detail", str(data))
+                    raise LightRAGAPIError(
+                        f"Get degree distribution failed: {detail}",
+                        status_code=response.status_code,
+                        detail=detail,
+                    )
+
+                return data if isinstance(data, list) else data.get("entities", [])
+
+            except httpx.RequestError as e:
+                raise LightRAGAPIError(f"Connection failed: {e}") from e
+
+    async def get_graph_stats(
+        self,
+        source_prefix: str | None = None,
+        module_depth: int = 2,
+    ) -> dict[str, Any]:
+        """Get graph statistics (entity/relation counts, coupling).
+
+        Args:
+            source_prefix: Filter by source_id prefix. Also stripped from
+                source_ids before module extraction for coupling analysis.
+            module_depth: Directory depth for module extraction in coupling
+                analysis (default: 2). e.g. depth=2: "src/core/config.py" → "src/core"
+
+        Returns:
+            Dict with entity_count, relation_count, cross_module_relations,
+            intra_module_relations, coupling_density.
+
+        Raises:
+            LightRAGAPIError: If endpoint is not available or request fails
+        """
+        params: dict[str, Any] = {}
+        if source_prefix:
+            params["source_prefix"] = source_prefix
+        if module_depth != 2:
+            params["module_depth"] = module_depth
+
+        async with httpx.AsyncClient(timeout=self.timeout, trust_env=False) as client:
+            try:
+                response = await client.get(
+                    f"{self.base_url}/graph/stats",
+                    headers=self._get_headers(),
+                    params=params,
+                )
+                data = response.json()
+
+                if response.status_code >= 400:
+                    detail = data.get("detail", str(data))
+                    raise LightRAGAPIError(
+                        f"Get graph stats failed: {detail}",
+                        status_code=response.status_code,
+                        detail=detail,
+                    )
+
+                return data
+
+            except httpx.RequestError as e:
+                raise LightRAGAPIError(f"Connection failed: {e}") from e
+
+    async def get_source_ids(
+        self,
+        source_prefix: str | None = None,
+    ) -> list[str]:
+        """Get deduplicated list of source_ids from entities.
+
+        Args:
+            source_prefix: Filter by source_id prefix
+
+        Returns:
+            List of unique source_id strings
+
+        Raises:
+            LightRAGAPIError: If endpoint is not available or request fails
+        """
+        params: dict[str, Any] = {}
+        if source_prefix:
+            params["source_prefix"] = source_prefix
+
+        async with httpx.AsyncClient(timeout=self.timeout, trust_env=False) as client:
+            try:
+                response = await client.get(
+                    f"{self.base_url}/graph/source_ids",
+                    headers=self._get_headers(),
+                    params=params,
+                )
+                data = response.json()
+
+                if response.status_code >= 400:
+                    detail = data.get("detail", str(data))
+                    raise LightRAGAPIError(
+                        f"Get source IDs failed: {detail}",
+                        status_code=response.status_code,
+                        detail=detail,
+                    )
+
+                return data if isinstance(data, list) else data.get("source_ids", [])
+
+            except httpx.RequestError as e:
+                raise LightRAGAPIError(f"Connection failed: {e}") from e

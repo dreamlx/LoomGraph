@@ -4,6 +4,110 @@
 
 ---
 
+## [0.7.0] - 2026-02-22
+
+### 🎉 重大更新：自动化增量更新
+
+**核心价值**：知识图谱自动与代码保持同步，零人工干预。
+
+#### 新增功能
+
+**1. GitHub Action 自动更新**（CI/CD 集成）
+- 代码推送后自动更新知识图谱
+- 智能检测变更（仅更新修改的文件）
+- 适用场景：团队协作、自动化部署
+
+**2. Git Post-commit Hook**（本地开发）
+- 提交代码后自动更新
+- 4 种模式可选：
+  - `auto`（默认）：≤3 文件同步更新，>3 文件后台更新
+  - `sync`：总是同步更新（适合调试）
+  - `async`：总是后台更新（适合大改动）
+  - `disabled`：关闭自动更新
+
+**3. 一键安装/升级**
+- `quickstart.sh`：新客户一键安装（包含全部依赖）
+- `upgrade.sh`：老客户一键升级（自动备份配置）
+
+**4. 搜索体系增强**
+- `loomgraph find "<实体名>"` - 结构化实体发现，替代原 `search` 命令
+- `loomgraph query "<问题>"` - 语义知识问答（例："认证流程怎么工作的？"）
+- `loomgraph graph` 结果新增 `source_id` 字段（显示文件路径）
+
+**5. 技术债务分析增强**
+- `loomgraph topology` - 图谱拓扑分析（孤立实体、Hub 脆弱性、God 函数、耦合密度）
+- `loomgraph check` - 索引新鲜度检查（验证图谱是否过期）
+- `/loomgraph-debt-radar` Skill 升级到 7 维度分析
+
+#### 升级方式
+
+**首次安装客户**（收到 demo 包）：
+```bash
+tar xzf loomgraph-demo-{customer}-v0.7.0.tar.gz
+cd loomgraph-demo-{customer}-v0.7.0
+./quickstart.sh
+
+# 然后在 Claude Code 中执行：
+# /loomgraph-setup
+# loomgraph index .
+```
+
+**已有客户**（收到 upgrade 包）：
+```bash
+tar xzf loomgraph-upgrade-{customer}-v0.7.0.tar.gz
+cd loomgraph-upgrade-{customer}-v0.7.0
+./upgrade.sh
+
+# 重启 Claude Code 后新功能自动可用
+```
+
+**手动升级**（在线安装）：
+```bash
+source ~/.loomgraph-venv/bin/activate
+pip install --upgrade loomgraph
+loomgraph install-skills
+loomgraph version  # 应显示 0.7.0
+```
+
+#### 使用示例
+
+**安装 Git Hook（本地开发推荐）**：
+```bash
+loomgraph hooks install
+# 之后每次 git commit 会自动更新知识图谱
+```
+
+**语义搜索**：
+```bash
+# 结构化搜索
+loomgraph find "UserService" --with-relations
+
+# 语义问答
+loomgraph query "用户认证的流程是什么？"
+```
+
+**技术债务分析**：
+```bash
+# 拓扑分析
+loomgraph topology
+
+# 索引新鲜度检查
+loomgraph check
+```
+
+#### 版本对比
+
+| 功能 | v0.6.1 | v0.7.0 |
+|------|--------|--------|
+| 手动更新 | ✅ | ✅ |
+| GitHub Action 自动更新 | ❌ | ✅ |
+| Git Hook 自动更新 | ❌ | ✅ |
+| 一键安装/升级 | ❌ | ✅ |
+| 语义问答 | ❌ | ✅ |
+| 拓扑分析 | ❌ | ✅ |
+
+---
+
 ## [0.6.1] - 2026-02-21
 
 ### 改进

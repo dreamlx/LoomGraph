@@ -9,6 +9,7 @@ import pytest
 from loomgraph.core.git import (
     GitError,
     get_changed_files,
+    get_current_branch,
     get_current_commit,
     get_staged_files,
     is_git_repository,
@@ -146,6 +147,54 @@ class TestGetCurrentCommit:
 
         assert len(commit) == 7  # Short SHA
         assert commit.isalnum()
+
+
+class TestGetCurrentBranch:
+    """Tests for get_current_branch function."""
+
+    def test_returns_branch_name(self, tmp_path: Path) -> None:
+        """Should return the current branch name."""
+        subprocess.run(["git", "init", "-b", "main"], cwd=tmp_path, capture_output=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@test.com"],
+            cwd=tmp_path, capture_output=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "Test"],
+            cwd=tmp_path, capture_output=True,
+        )
+        (tmp_path / "file.txt").write_text("content")
+        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_path, capture_output=True)
+
+        branch = get_current_branch(tmp_path)
+        assert branch == "main"
+
+    def test_detached_head_raises_error(self, tmp_path: Path) -> None:
+        """Should raise GitError on detached HEAD."""
+        subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@test.com"],
+            cwd=tmp_path, capture_output=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "Test"],
+            cwd=tmp_path, capture_output=True,
+        )
+        (tmp_path / "file.txt").write_text("content")
+        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_path, capture_output=True)
+
+        # Detach HEAD
+        subprocess.run(["git", "checkout", "--detach"], cwd=tmp_path, capture_output=True)
+
+        with pytest.raises(GitError, match="Detached HEAD"):
+            get_current_branch(tmp_path)
+
+    def test_non_git_repo_raises_error(self, tmp_path: Path) -> None:
+        """Should raise GitError for non-git directory."""
+        with pytest.raises(GitError):
+            get_current_branch(tmp_path)
 
 
 class TestGetStagedFiles:

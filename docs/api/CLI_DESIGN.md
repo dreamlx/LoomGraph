@@ -27,8 +27,9 @@ loomgraph
 ├── index      # 一键索引 (调用 codeindex → embed → inject)
 ├── embed      # 生成向量 (从 ParseResult JSON)
 ├── inject     # 注入图谱 (ParseResult + Embeddings → LightRAG)
-├── search     # 语义搜索
-├── graph      # 图谱查询 (callers/callees)
+├── find       # 结构化实体发现 (名字匹配 + 可选关系)
+├── query      # 语义知识问答 (RAG 引擎, LLM 驱动)
+├── graph      # 精确关系遍历 (callers/callees + source_id)
 ├── status     # 检查系统状态
 └── version    # 版本信息
 ```
@@ -190,57 +191,119 @@ loomgraph inject <parse_json> <embeddings_json> [options]
 
 ---
 
-### 4. `loomgraph search` - 语义搜索
+### 4. `loomgraph find` - 结构化实体发现
 
-**用途**: 搜索代码实体
+**用途**: 按名字匹配实体，可选带关系上下文
 
 ```bash
-loomgraph search <query> [options]
+loomgraph find <query> [options]
 ```
 
 **参数**:
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
-| `<query>` | 搜索查询 | 必填 |
-| `--mode` | 搜索模式 | `hybrid` |
-| `--limit` | 结果数量 | `10` |
+| `<query>` | 名字匹配关键词 | 必填 |
+| `--type/-t` | 实体类型过滤 (class/function/module) | 全部 |
+| `--limit/-n` | 结果数量 | `20` |
+| `--with-relations` | 附带 callers/callees | 否 |
+| `--depth` | BFS 扩展层数（需 `--with-relations`） | `1` |
+| `--workspace/-w` | Workspace 名称 | 当前目录名 |
 
-**搜索模式**:
-- `keyword` - 关键词匹配
-- `semantic` - 向量相似度
-- `graph` - 图遍历
-- `hybrid` - 混合 (默认)
+**基础输出**:
+```json
+{
+  "success": true,
+  "data": {
+    "query": "auth",
+    "total_entities": 1250,
+    "matches_count": 3,
+    "matches": [
+      {
+        "entity": "AuthService",
+        "type": "class",
+        "source_id": "src/auth/service.py",
+        "description": "Python class | src/auth/service.py",
+        "score": 0.95
+      }
+    ]
+  }
+}
+```
+
+**`--with-relations` 输出**:
+```json
+{
+  "success": true,
+  "data": {
+    "query": "auth",
+    "matches_count": 1,
+    "matches": [
+      {
+        "entity": "AuthService",
+        "type": "class",
+        "source_id": "src/auth/service.py",
+        "score": 0.95,
+        "callers": [
+          {"entity": "LoginController", "relation": "CALLS"},
+          {"entity": "ApiFilter", "relation": "CALLS"}
+        ],
+        "callees": [
+          {"entity": "UserRepository", "relation": "CALLS"},
+          {"entity": "JwtProvider", "relation": "CALLS"}
+        ]
+      }
+    ]
+  }
+}
+```
+
+> **向后兼容**: `loomgraph search` 作为隐藏别名保留一个版本，会输出 deprecation warning。
+
+---
+
+### 4.5. `loomgraph query` - 语义知识问答
+
+**用途**: 用自然语言提问，RAG 引擎从知识图谱生成回答
+
+```bash
+loomgraph query <question> [options]
+```
+
+**参数**:
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `<question>` | 自然语言问题 | 必填 |
+| `--mode` | 查询模式 | `hybrid` |
+| `--workspace/-w` | Workspace 名称 | 当前目录名 |
+
+**查询模式**:
+| 模式 | 行为 | 适用场景 |
+|------|------|---------|
+| `hybrid`（默认） | 图谱 + 向量 + LLM | 通用问题 |
+| `local` | 以实体为中心展开 | 特定组件深入 |
+| `global` | 全局主题提取 | 架构级问题 |
+| `naive` | 纯向量搜索 + LLM | 代码内容搜索 |
 
 **成功输出**:
 ```json
 {
   "success": true,
   "data": {
-    "query": "用户登录验证",
+    "query": "How does the authentication flow work?",
     "mode": "hybrid",
-    "results": [
-      {
-        "entity_name": "UserService.login",
-        "entity_type": "method",
-        "file_path": "src/auth/service.py",
-        "line_start": 12,
-        "line_end": 25,
-        "signature": "def login(self, username: str, password: str) -> bool",
-        "description": "Authenticate user with credentials",
-        "score": 0.92
-      }
-    ],
-    "total": 15,
-    "returned": 10
+    "response": "The authentication flow follows a layered architecture...",
+    "workspace": "my-project"
   }
 }
 ```
 
+> **注意**: `query` 依赖 H200 上的 LLM 服务。LLM 不可用时会返回错误并建议使用 `find` 作为 fallback。
+
 ---
 
-### 5. `loomgraph graph` - 图谱查询
+### 5. `loomgraph graph` - 精确关系遍历
 
-**用途**: 查询实体的调用关系
+**用途**: 查询实体的调用关系（含 source_id 文件路径）
 
 ```bash
 loomgraph graph <entity_name> [options]
@@ -249,10 +312,11 @@ loomgraph graph <entity_name> [options]
 **参数**:
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
-| `<entity_name>` | 实体名称 | 必填 |
+| `<entity_name>` | 实体名称（精确匹配） | 必填 |
 | `--direction` | 查询方向 | `both` |
 | `--depth` | 遍历深度 | `1` |
 | `--relation-type` | 关系类型 | `all` |
+| `--workspace/-w` | Workspace 名称 | 当前目录名 |
 
 **方向**:
 - `callers` - 谁调用了这个实体
@@ -271,22 +335,134 @@ loomgraph graph <entity_name> [options]
   "success": true,
   "data": {
     "entity": "UserService.login",
+    "source_id": "src/auth/service.py",
     "callers": [
       {
-        "entity_name": "AuthController.handle_login",
-        "relation_type": "CALLS",
-        "file_path": "src/api/auth.py",
-        "line_number": 45
+        "entity": "AuthController.handle_login",
+        "relation": "CALLS",
+        "source_id": "src/api/auth.py"
       }
     ],
     "callees": [
       {
-        "entity_name": "db.find_user",
-        "relation_type": "CALLS",
-        "file_path": "src/auth/service.py",
-        "line_number": 15
+        "entity": "db.find_user",
+        "relation": "CALLS",
+        "source_id": "src/db/query.py"
       }
-    ]
+    ],
+    "callers_count": 1,
+    "callees_count": 1
+  }
+}
+```
+
+---
+
+### 5.5. `loomgraph topology` - 图谱拓扑分析
+
+**用途**: 分析知识图谱拓扑结构，检测结构级代码坏味道
+
+```bash
+loomgraph topology [options]
+```
+
+**参数**:
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--hub-threshold` | Hub 实体的最小 in-degree | `5` |
+| `--god-threshold` | God Function 的最小 out-degree | `5` |
+| `--module` | 模块前缀过滤（source_id 前缀匹配） | 全部 |
+| `--workspace/-w` | Workspace 名称 | 当前目录名 |
+
+**成功输出**:
+```json
+{
+  "success": true,
+  "data": {
+    "summary": {
+      "total_entities": 586,
+      "total_relations": 952,
+      "orphan_count": 46,
+      "hub_count": 28,
+      "god_function_count": 72,
+      "placeholder_module_count": 3,
+      "coupling_density": 0.35,
+      "topology_score": 62
+    },
+    "orphans": [
+      {"entity": "ChangedFile", "type": "class", "source_id": "core/impact/models.py:10-15"}
+    ],
+    "hubs": [
+      {"entity": "output_success", "type": "function", "source_id": "cli/_common.py:88-93",
+       "in_degree": 18, "callers_sample": ["index", "update", "find", "graph", "deps"]}
+    ],
+    "god_functions": [
+      {"entity": "_async_index_pipeline", "type": "function", "source_id": "cli/_indexing.py:...",
+       "out_degree": 28, "callees_sample": ["collect_kg_data", "LightRAGClient.__init__"]}
+    ],
+    "placeholder_modules": [
+      {"module": "chunking", "entities": ["chunking.__init__"], "status": "empty"}
+    ],
+    "coupling": {
+      "cross_module_relations": 21,
+      "intra_module_relations": 931,
+      "density": 0.35,
+      "most_coupled_pairs": [{"from": "cli", "to": "core", "count": 19}]
+    }
+  }
+}
+```
+
+**检测项**:
+- **Orphans**: 0 in-degree + 0 out-degree（排除 module 类型和 external）
+- **Hubs**: 高 in-degree 实体（修改会产生广泛涟漪）
+- **God Functions**: 高 out-degree 实体（职责过重）
+- **Placeholder Modules**: 仅含 `__init__` 的模块
+- **Coupling Density**: cross_module_relations / total_relations
+
+**拓扑分数 (topology_score, 0-100)**:
+- orphan_ratio > 20% → -25, > 10% → -15
+- hub (in >= 15) → -5 per entity
+- god_function (out >= 20) → -5 per, (out >= 10) → -3 per
+- placeholder_modules → -5 per module
+- coupling_density > 0.5 → -10, > 0.3 → -5
+
+---
+
+### 5.6. `loomgraph check` - 索引新鲜度检查
+
+**用途**: 验证知识图谱中的 source_id 是否仍指向磁盘上存在的文件
+
+```bash
+loomgraph check [options]
+```
+
+**参数**:
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--repo-path` | 项目根目录（用于验证文件路径） | `.` |
+| `--workspace/-w` | Workspace 名称 | 当前目录名 |
+
+**成功输出**:
+```json
+{
+  "success": true,
+  "data": {
+    "freshness": {
+      "total_source_paths": 150,
+      "valid": 116,
+      "stale": 34,
+      "freshness_ratio": 0.773
+    },
+    "stale_entries": [
+      {
+        "source_id": "cli/main.py:66-81",
+        "file_path": "cli/main.py",
+        "reason": "file_not_found",
+        "suggestion": "Run 'loomgraph update' or 'loomgraph index --clear .'"
+      }
+    ],
+    "suggestion": "34 source paths are stale. Run 'loomgraph index --clear .' to rebuild."
   }
 }
 ```
@@ -381,8 +557,11 @@ loomgraph embed parse_results.json --output embeddings.json
 # Step 4: 注入图谱
 loomgraph inject parse_results.json embeddings.json
 
-# Step 5: 搜索
-loomgraph search "用户认证逻辑"
+# Step 5: 查找实体
+loomgraph find "用户认证" --with-relations
+
+# Step 6: 语义问答
+loomgraph query "用户认证逻辑是怎样的？"
 ```
 
 ### AI Agent 一键执行

@@ -1,6 +1,6 @@
 # EPIC-008: 搜索体系重构 — find / query / graph 三分
 
-**状态**: 📋 规划中
+**状态**: ✅ 已完成
 **优先级**: P1
 **版本**: v0.7.0
 **ADR**: [ADR-010](../adr/ADR-010-search-architecture-redesign.md)
