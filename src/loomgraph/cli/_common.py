@@ -36,7 +36,7 @@ def get_auto_workspace(workspace: str | None) -> str | None:
 
     Priority:
     1. Explicit --workspace argument
-    2. cwd.name:branch (git repository)
+    2. cwd.name-branch (git repository, hyphen separator)
     3. cwd.name (non-git fallback)
 
     Returns:
@@ -54,7 +54,7 @@ def get_auto_workspace(workspace: str | None) -> str | None:
 
         if is_git_repository(cwd):
             branch = get_current_branch(cwd)
-            ws_name = f"{ws_name}:{branch}"
+            ws_name = f"{ws_name}-{branch}"
     except Exception:
         pass  # fallback to dir name only
 
