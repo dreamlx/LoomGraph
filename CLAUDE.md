@@ -274,7 +274,7 @@ embedding:
 ### 开始工作前
 
 每次新开 Claude Code 窗口，先运行 `loomgraph status` 确认知识图谱状态：
-- `workspace.name`: 当前读取的 workspace（格式 `项目:分支`，如 `loomgraph:develop`）
+- `workspace.name`: 当前读取的 workspace（格式 `项目-分支`，如 `loomgraph-develop`）
 - `workspace.entities`: 实体数（0 = 需要先 `loomgraph index .`）
 
 ## 开发命令
