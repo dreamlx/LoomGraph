@@ -136,6 +136,9 @@ def build_wheel() -> Path | None:
             print(f"  Built: {newest.name}")
             return newest
         return None
+    except Exception as e:
+        print(f"  Error building wheel: {e}")
+        return None
 
 
 def find_codeindex_wheel() -> Path | None:
@@ -161,12 +164,6 @@ def find_codeindex_wheel() -> Path | None:
 
     print(f"  Warning: No codeindex wheel found in {codeindex_dist}")
     return None
-    except FileNotFoundError:
-        print("  Warning: 'build' module not found. Install with: pip install build")
-        return None
-    except subprocess.TimeoutExpired:
-        print("  Warning: wheel build timed out")
-        return None
 
 
 def package_customer(customer: str, customers_config: dict, mode: str = "demo") -> Path:

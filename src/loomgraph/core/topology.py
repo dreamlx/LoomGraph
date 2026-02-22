@@ -61,6 +61,50 @@ def _is_external(entity: dict[str, Any]) -> bool:
 
 
 
+def _normalize_type_field(items: list[dict[str, Any]]) -> None:
+    """Normalize server-side 'entity_type' to client-side 'type' key."""
+    for item in items:
+        if "entity_type" in item and "type" not in item:
+            item["type"] = item.pop("entity_type")
+
+
+def _compute_coupled_pairs(
+    entities: list[dict[str, Any]],
+    relations: list[dict[str, Any]],
+    top_n: int = 5,
+) -> list[dict[str, Any]]:
+    """Compute top N most-coupled module pairs from entities and relations.
+
+    Builds entity→module mapping from source_id, then counts cross-module
+    relation pairs. Returns sorted list of {from, to, count}.
+    """
+    # Build entity name → module mapping
+    entity_module: dict[str, str] = {}
+    for entity in entities:
+        name = _entity_name(entity)
+        if not name or _is_external(entity) or _is_noise(name):
+            continue
+        source_id = entity.get("source_id", "")
+        if source_id:
+            entity_module[name] = extract_module(source_id, depth=2)
+
+    # Count cross-module pairs
+    pair_count: dict[tuple[str, str], int] = {}
+    for rel in relations:
+        src = rel.get("src_id", "") or rel.get("source", "")
+        tgt = rel.get("tgt_id", "") or rel.get("target", "")
+        if not src or not tgt:
+            continue
+        src_mod = entity_module.get(src)
+        tgt_mod = entity_module.get(tgt)
+        if src_mod and tgt_mod and src_mod != tgt_mod:
+            pair = (src_mod, tgt_mod)
+            pair_count[pair] = pair_count.get(pair, 0) + 1
+
+    sorted_pairs = sorted(pair_count.items(), key=lambda x: x[1], reverse=True)[:top_n]
+    return [{"from": p[0], "to": p[1], "count": c} for (p, c) in sorted_pairs]
+
+
 def _strip_line_range(source_id: str) -> str:
     """Strip line range suffix from source_id (e.g. 'src/a.py:1-50' → 'src/a.py')."""
     colon_idx = source_id.rfind(":")
@@ -179,8 +223,8 @@ class TopologyAnalyzer:
     """
 
     client: Any  # LightRAGClient
-    hub_threshold: int = 5
-    god_threshold: int = 5
+    hub_threshold: int = 8
+    god_threshold: int = 10
     module: str | None = None
     source_prefix: str | None = None
 
@@ -250,9 +294,15 @@ class TopologyAnalyzer:
 
         orphans = [o for o in orphans if _keep(o)]
         hubs = [h for h in hubs if _keep(h)]
-        gods = [g for g in gods if _keep(g)]
+        gods = [
+            g for g in gods
+            if _keep(g) and g.get("entity_type") != "module"
+        ]
 
-        # Normalize hub/god entries to match client-side format
+        # Normalize field names to match client-side format
+        _normalize_type_field(orphans)
+        _normalize_type_field(hubs)
+        _normalize_type_field(gods)
         for h in hubs:
             if "degree" in h and "in_degree" not in h:
                 h["in_degree"] = h.pop("degree")
@@ -264,6 +314,13 @@ class TopologyAnalyzer:
         total_entities = stats.get("total_entities") or stats.get("entity_count", 0)
         total_relations = stats.get("total_relations") or stats.get("relation_count", 0)
 
+        # Compute coupled pairs client-side (server doesn't return pair detail)
+        coupled_pairs: list[dict[str, Any]] = []
+        if stats.get("cross_module_relations", 0) > 0:
+            all_entities = await self.client.get_all_entities()
+            all_relations = await self.client.get_all_relations()
+            coupled_pairs = _compute_coupled_pairs(all_entities, all_relations)
+
         result = TopologyResult(
             total_entities=total_entities,
             total_relations=total_relations,
@@ -274,6 +331,7 @@ class TopologyAnalyzer:
                 cross_module=stats.get("cross_module_relations", 0),
                 intra_module=stats.get("intra_module_relations", 0),
                 density=stats.get("coupling_density", 0.0),
+                most_coupled_pairs=coupled_pairs,
             ),
         )
         result.topology_score = _compute_score(result)
@@ -393,13 +451,15 @@ class TopologyAnalyzer:
                     "callers_sample": callers[:5],
                 })
 
-        # Detect god functions (high out-degree)
+        # Detect god functions (high out-degree, exclude modules)
         god_functions = []
         for name, callees in sorted(
             out_degree.items(), key=lambda x: len(x[1]), reverse=True
         ):
             if len(callees) >= self.god_threshold and name in entity_map:
                 entity = entity_map[name]
+                if entity.get("entity_type", "") == "module":
+                    continue
                 god_functions.append({
                     "entity": name,
                     "type": entity.get("entity_type", "unknown"),
@@ -441,13 +501,13 @@ class TopologyAnalyzer:
 def _compute_score(result: TopologyResult) -> int:
     """Compute topology health score (0-100, higher is healthier).
 
-    Penalty rules from EPIC-009:
+    Penalty rules (per-category capped to prevent runaway deductions):
       - orphan_ratio > 20% → -25
       - orphan_ratio > 10% → -15
-      - hub (in_degree >= 15) → -5 per entity
-      - god_function (out >= 20) → -5 per entity
-      - god_function (out >= 10) → -3 per entity
-      - placeholder_modules > 0 → -5 per module
+      - hub (in_degree >= 15) → -5 per entity (cap -20)
+      - god_function (out >= 25) → -5 per entity (cap -25)
+      - god_function (out >= 15) → -3 per entity (cap -25)
+      - placeholder_modules > 0 → -5 per module (cap -15)
       - coupling_density > 0.5 → -10
       - coupling_density > 0.3 → -5
     """
@@ -461,21 +521,25 @@ def _compute_score(result: TopologyResult) -> int:
         elif orphan_ratio > 0.10:
             score -= 15
 
-    # Hub penalty (severe hubs with in_degree >= 15)
+    # Hub penalty (severe hubs with in_degree >= 15, cap -20)
+    hub_penalty = 0
     for hub in result.hubs:
         if hub.get("in_degree", 0) >= 15:
-            score -= 5
+            hub_penalty += 5
+    score -= min(hub_penalty, 20)
 
-    # God function penalty
+    # God function penalty (cap -25)
+    god_penalty = 0
     for gf in result.god_functions:
         out = gf.get("out_degree", 0)
-        if out >= 20:
-            score -= 5
-        elif out >= 10:
-            score -= 3
+        if out >= 25:
+            god_penalty += 5
+        elif out >= 15:
+            god_penalty += 3
+    score -= min(god_penalty, 25)
 
-    # Placeholder module penalty
-    score -= 5 * len(result.placeholder_modules)
+    # Placeholder module penalty (cap -15)
+    score -= min(5 * len(result.placeholder_modules), 15)
 
     # Coupling density penalty
     if result.coupling.density > 0.5:
