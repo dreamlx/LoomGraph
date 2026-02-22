@@ -136,20 +136,43 @@ def build_wheel() -> Path | None:
             print(f"  Built: {newest.name}")
             return newest
         return None
-    except FileNotFoundError:
-        print("  Warning: 'build' module not found. Install with: pip install build")
-        return None
-    except subprocess.TimeoutExpired:
-        print("  Warning: wheel build timed out")
+    except Exception as e:
+        print(f"  Error building wheel: {e}")
         return None
 
 
-def package_customer(customer: str, customers_config: dict) -> Path:
+def find_codeindex_wheel() -> Path | None:
+    """Find codeindex wheel from ../codeindex/dist/ directory.
+
+    Returns:
+        Path to codeindex wheel, or None if not found
+    """
+    # Look for codeindex in sibling directory
+    codeindex_project = PROJECT_ROOT.parent / "codeindex"
+    codeindex_dist = codeindex_project / "dist"
+
+    if not codeindex_dist.exists():
+        print(f"  Warning: codeindex dist directory not found: {codeindex_dist}")
+        return None
+
+    # Find newest codeindex wheel
+    wheels = list(codeindex_dist.glob("ai_codeindex-*.whl"))
+    if wheels:
+        newest = max(wheels, key=lambda p: p.stat().st_mtime)
+        print(f"  Found codeindex wheel: {newest.name}")
+        return newest
+
+    print(f"  Warning: No codeindex wheel found in {codeindex_dist}")
+    return None
+
+
+def package_customer(customer: str, customers_config: dict, mode: str = "demo") -> Path:
     """Package LoomGraph for a specific customer.
 
     Args:
         customer: Customer name (e.g., "customer", "customer")
         customers_config: Full customers.yaml config
+        mode: Package mode - "demo" (first install) or "upgrade" (version update)
 
     Returns:
         Path to the created tarball
@@ -160,7 +183,7 @@ def package_customer(customer: str, customers_config: dict) -> Path:
         sys.exit(1)
 
     version = get_version()
-    package_name = f"loomgraph-{customer}-v{version}"
+    package_name = f"loomgraph-{mode}-{customer}-v{version}"
 
     # Create temp directory for packaging
     temp_dir = DIST_DIR / package_name
@@ -190,11 +213,17 @@ def package_customer(customer: str, customers_config: dict) -> Path:
         shutil.copy(CHANGELOG_FILE, temp_dir / "CHANGELOG.md")
         print(f"  - CHANGELOG.md")
 
-    # Build and include wheel
+    # Build and include LoomGraph wheel
     wheel_path = build_wheel()
     if wheel_path:
         shutil.copy(wheel_path, temp_dir / wheel_path.name)
         print(f"  - {wheel_path.name}")
+
+    # Include codeindex wheel (required dependency)
+    codeindex_wheel = find_codeindex_wheel()
+    if codeindex_wheel:
+        shutil.copy(codeindex_wheel, temp_dir / codeindex_wheel.name)
+        print(f"  - {codeindex_wheel.name}")
 
     # Patterns to exclude
     def ignore_patterns(directory, files):
@@ -222,6 +251,51 @@ def package_customer(customer: str, customers_config: dict) -> Path:
         if src_file.exists():
             shutil.copy(src_file, temp_dir / file_name)
             print(f"  - {file_name}")
+
+    # Copy mode-specific files
+    if mode == "demo":
+        # Demo mode: first-time installation
+        # Copy quickstart.sh
+        quickstart_script = PROJECT_ROOT / "scripts" / "quickstart.sh"
+        if quickstart_script.exists():
+            shutil.copy(quickstart_script, temp_dir / "quickstart.sh")
+            print(f"  - quickstart.sh (demo mode)")
+
+        # Copy customer config.yaml (pre-configured service URLs)
+        customer_config_file = customer_dir / "config.yaml"
+        if customer_config_file.exists():
+            shutil.copy(customer_config_file, temp_dir / "config.yaml")
+            print(f"  - config.yaml (customer-specific)")
+
+        # Copy VERSION file
+        if VERSION_FILE.exists():
+            shutil.copy(VERSION_FILE, temp_dir / "VERSION")
+            print(f"  - VERSION")
+
+    elif mode == "upgrade":
+        # Upgrade mode: version update
+        # Copy upgrade.sh
+        upgrade_script = PROJECT_ROOT / "scripts" / "upgrade.sh"
+        if upgrade_script.exists():
+            shutil.copy(upgrade_script, temp_dir / "upgrade.sh")
+            print(f"  - upgrade.sh (upgrade mode)")
+
+        # Copy VERSION file
+        if VERSION_FILE.exists():
+            shutil.copy(VERSION_FILE, temp_dir / "VERSION")
+            print(f"  - VERSION")
+
+        # Copy UPGRADE_NOTES.md if exists
+        upgrade_notes = PROJECT_ROOT / "UPGRADE_NOTES.md"
+        if upgrade_notes.exists():
+            shutil.copy(upgrade_notes, temp_dir / "UPGRADE_NOTES.md")
+            print(f"  - UPGRADE_NOTES.md")
+
+        # Copy config.yaml.new if config format changed
+        customer_config_new = customer_dir / "config.yaml.new"
+        if customer_config_new.exists():
+            shutil.copy(customer_config_new, temp_dir / "config.yaml.new")
+            print(f"  - config.yaml.new (config migration)")
 
     # Create tarball
     tarball = DIST_DIR / f"{package_name}.tar.gz"
@@ -286,6 +360,12 @@ def main():
         action="store_true",
         help="Sync customers/VERSION with pyproject.toml"
     )
+    parser.add_argument(
+        "--mode", "-m",
+        choices=["demo", "upgrade"],
+        default="demo",
+        help="Package mode: demo (first install) or upgrade (version update)"
+    )
 
     args = parser.parse_args()
 
@@ -312,16 +392,16 @@ def main():
             print("No customers found")
             sys.exit(1)
 
-        print(f"Packaging for {len(customers)} customers...\n")
+        print(f"Packaging for {len(customers)} customers (mode: {args.mode})...\n")
         for customer in customers:
-            package_customer(customer, customers_config)
+            package_customer(customer, customers_config, mode=args.mode)
             print()
 
         print(f"\nAll packages created in {DIST_DIR}/")
         return
 
     if args.customer:
-        package_customer(args.customer, customers_config)
+        package_customer(args.customer, customers_config, mode=args.mode)
         return
 
     parser.print_help()

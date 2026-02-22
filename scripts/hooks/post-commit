@@ -1,0 +1,87 @@
+#!/bin/bash
+# loomgraph-managed hook
+# Post-commit hook for automatic incremental knowledge graph updates
+
+# Colors
+CYAN='\033[0;36m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+NC='\033[0m'
+
+# Get loomgraph config mode (default: auto)
+MODE="${LOOMGRAPH_HOOK_MODE:-auto}"
+
+if [ "$MODE" == "disabled" ]; then
+    exit 0
+fi
+
+# Set up working directory
+REPO_ROOT=$(git rev-parse --show-toplevel)
+cd "$REPO_ROOT"
+
+# Try to activate virtual environment
+if [ -f "$REPO_ROOT/.venv/bin/activate" ]; then
+    source "$REPO_ROOT/.venv/bin/activate"
+elif [ -f "$REPO_ROOT/venv/bin/activate" ]; then
+    source "$REPO_ROOT/venv/bin/activate"
+fi
+
+echo -e "\n${CYAN}📊 Post-commit: Knowledge graph update${NC}"
+
+# Check if loomgraph is available
+if ! command -v loomgraph &> /dev/null; then
+    echo -e "${YELLOW}⚠ loomgraph not found, skipping update${NC}"
+    exit 0
+fi
+
+# Detect changed files
+CHANGED_FILES=$(git diff-tree --no-commit-id --name-only -r HEAD | wc -l | tr -d ' ')
+
+if [ "$CHANGED_FILES" -eq 0 ]; then
+    echo -e "${GREEN}✓ No files changed${NC}"
+    exit 0
+fi
+
+echo -e "   Changed files: ${CHANGED_FILES}"
+
+# Determine mode (auto: <=3 files = sync, >3 = async)
+MAX_FILES_SYNC="${LOOMGRAPH_MAX_FILES_SYNC:-3}"
+
+if [ "$MODE" == "auto" ]; then
+    if [ "$CHANGED_FILES" -le "$MAX_FILES_SYNC" ]; then
+        RUN_MODE="sync"
+    else
+        RUN_MODE="async"
+    fi
+elif [ "$MODE" == "sync" ]; then
+    RUN_MODE="sync"
+elif [ "$MODE" == "async" ]; then
+    RUN_MODE="async"
+else
+    echo -e "${YELLOW}⚠ Invalid mode: $MODE${NC}"
+    exit 0
+fi
+
+echo -e "   Update mode: ${YELLOW}${RUN_MODE}${NC}"
+
+# Run update
+LOG_FILE="${LOOMGRAPH_HOOK_LOG:-$HOME/.loomgraph/hooks/post-commit.log}"
+mkdir -p "$(dirname "$LOG_FILE")"
+
+if [ "$RUN_MODE" == "sync" ]; then
+    echo -e "   ${CYAN}→ Running incremental update...${NC}"
+    loomgraph update 2>&1 | tee -a "$LOG_FILE"
+    EXIT_CODE=$?
+
+    if [ $EXIT_CODE -eq 0 ]; then
+        echo -e "${GREEN}✓ Knowledge graph updated${NC}\n"
+    else
+        echo -e "${YELLOW}⚠ Update failed (exit code: $EXIT_CODE)${NC}\n"
+    fi
+else
+    echo -e "   ${CYAN}→ Running update in background...${NC}"
+    nohup loomgraph update >> "$LOG_FILE" 2>&1 &
+    echo -e "${GREEN}✓ Update started (check log: $LOG_FILE)${NC}\n"
+fi
+
+exit 0

@@ -191,3 +191,39 @@ def get_current_commit(repo_path: Path | str = ".") -> str:
         raise GitError("git rev-parse timed out")
     except FileNotFoundError:
         raise GitError("git command not found")
+
+
+def get_current_branch(repo_path: Path | str = ".") -> str:
+    """Get the current git branch name.
+
+    Args:
+        repo_path: Repository path
+
+    Returns:
+        Branch name (e.g. 'main', 'develop')
+
+    Raises:
+        GitError: If git command fails or HEAD is detached
+    """
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=str(repo_path),
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+
+        if result.returncode != 0:
+            raise GitError(f"git rev-parse failed: {result.stderr}")
+
+        branch = result.stdout.strip()
+        if branch == "HEAD":
+            raise GitError("Detached HEAD state: no branch name available")
+
+        return branch
+
+    except subprocess.TimeoutExpired as err:
+        raise GitError("git rev-parse timed out") from err
+    except FileNotFoundError as err:
+        raise GitError("git command not found") from err

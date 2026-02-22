@@ -36,7 +36,8 @@ def get_auto_workspace(workspace: str | None) -> str | None:
 
     Priority:
     1. Explicit --workspace argument
-    2. Current directory name (auto-detect)
+    2. cwd.name:branch (git repository)
+    3. cwd.name (non-git fallback)
 
     Returns:
         Workspace name or None for default
@@ -46,7 +47,18 @@ def get_auto_workspace(workspace: str | None) -> str | None:
 
     # Auto-detect from current directory name (lowercase for LightRAG compatibility)
     cwd = Path.cwd()
-    return cwd.name.lower()
+    ws_name = cwd.name.lower()
+
+    try:
+        from loomgraph.core.git import get_current_branch, is_git_repository
+
+        if is_git_repository(cwd):
+            branch = get_current_branch(cwd)
+            ws_name = f"{ws_name}:{branch}"
+    except Exception:
+        pass  # fallback to dir name only
+
+    return ws_name
 
 
 # ============================================
