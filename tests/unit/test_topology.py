@@ -10,8 +10,10 @@ from loomgraph.core.topology import (
     CouplingMetrics,
     TopologyAnalyzer,
     TopologyResult,
+    _common_source_prefix,
     _compute_score,
     _is_noise,
+    _strip_line_range,
 )
 
 
@@ -438,6 +440,145 @@ class TestTopologyAnalyzerAsync:
 
         assert result.total_entities == 1
         assert len(result.orphans) == 1
+
+
+class TestStripLineRange:
+    """Tests for _strip_line_range helper."""
+
+    def test_with_range(self) -> None:
+        assert _strip_line_range("src/core/a.py:1-50") == "src/core/a.py"
+
+    def test_with_single_line(self) -> None:
+        assert _strip_line_range("src/a.py:42") == "src/a.py"
+
+    def test_without_range(self) -> None:
+        assert _strip_line_range("src/core/a.py") == "src/core/a.py"
+
+    def test_empty(self) -> None:
+        assert _strip_line_range("") == ""
+
+
+class TestCommonSourcePrefix:
+    """Tests for _common_source_prefix helper."""
+
+    def test_common_prefix(self) -> None:
+        source_ids = [
+            "src/loomgraph/cli/main.py:1-50",
+            "src/loomgraph/core/config.py:10-30",
+            "src/loomgraph/embedding/client.py",
+        ]
+        assert _common_source_prefix(source_ids) == "src/loomgraph/"
+
+    def test_partial_prefix(self) -> None:
+        source_ids = ["src/cli/a.py", "src/core/b.py"]
+        assert _common_source_prefix(source_ids) == "src/"
+
+    def test_no_common_prefix(self) -> None:
+        source_ids = ["lib/a.py", "src/b.py"]
+        assert _common_source_prefix(source_ids) == ""
+
+    def test_empty_list(self) -> None:
+        assert _common_source_prefix([]) == ""
+
+    def test_single_entry(self) -> None:
+        assert _common_source_prefix(["src/core/a.py:1-10"]) == "src/core/"
+
+    def test_root_files(self) -> None:
+        """Files at root should return empty prefix."""
+        assert _common_source_prefix(["a.py", "b.py"]) == ""
+
+
+class TestServerSideCoupling:
+    """Tests for server-side coupling via _analyze_server_side."""
+
+    @pytest.fixture
+    def mock_client(self) -> AsyncMock:
+        return AsyncMock()
+
+    @pytest.mark.asyncio
+    async def test_auto_detects_source_prefix(self, mock_client: AsyncMock) -> None:
+        """Should auto-detect source_prefix from source_ids."""
+        mock_client.get_source_ids.return_value = [
+            "src/loomgraph/cli/main.py:1-50",
+            "src/loomgraph/core/config.py:10-30",
+        ]
+        mock_client.get_orphan_entities.return_value = []
+        mock_client.get_degree_distribution.return_value = []
+        mock_client.get_graph_stats.return_value = {
+            "entity_count": 10,
+            "relation_count": 20,
+            "cross_module_relations": 5,
+            "intra_module_relations": 15,
+            "coupling_density": 0.25,
+        }
+
+        analyzer = TopologyAnalyzer(client=mock_client)
+        result = await analyzer.analyze()
+
+        # Verify source_prefix was auto-detected and passed to get_graph_stats
+        mock_client.get_source_ids.assert_called_once()
+        mock_client.get_graph_stats.assert_called_once_with(
+            source_prefix="src/loomgraph/",
+            module_depth=2,
+        )
+        assert result.coupling.density == 0.25
+        assert result.coupling.cross_module == 5
+
+    @pytest.mark.asyncio
+    async def test_explicit_source_prefix(self, mock_client: AsyncMock) -> None:
+        """Should use explicit source_prefix without auto-detection."""
+        mock_client.get_orphan_entities.return_value = []
+        mock_client.get_degree_distribution.return_value = []
+        mock_client.get_graph_stats.return_value = {
+            "entity_count": 5,
+            "relation_count": 10,
+            "cross_module_relations": 2,
+            "intra_module_relations": 8,
+            "coupling_density": 0.2,
+        }
+
+        analyzer = TopologyAnalyzer(client=mock_client, source_prefix="app/")
+        result = await analyzer.analyze()
+
+        # Should NOT call get_source_ids when prefix is explicit
+        mock_client.get_source_ids.assert_not_called()
+        mock_client.get_graph_stats.assert_called_once_with(
+            source_prefix="app/",
+            module_depth=2,
+        )
+        assert result.coupling.density == 0.2
+
+    @pytest.mark.asyncio
+    async def test_module_filter_with_prefix(self, mock_client: AsyncMock) -> None:
+        """Module filter should combine with source_prefix for filtering."""
+        mock_client.get_orphan_entities.return_value = []
+        mock_client.get_degree_distribution.return_value = []
+        mock_client.get_graph_stats.return_value = {
+            "entity_count": 3,
+            "relation_count": 5,
+            "cross_module_relations": 0,
+            "intra_module_relations": 5,
+            "coupling_density": 0.0,
+        }
+
+        analyzer = TopologyAnalyzer(
+            client=mock_client,
+            source_prefix="src/loomgraph/",
+            module="cli",
+        )
+        result = await analyzer.analyze()
+
+        # Orphans/degree should get combined filter prefix
+        mock_client.get_orphan_entities.assert_called_once()
+        call_args = mock_client.get_orphan_entities.call_args
+        assert call_args.kwargs["source_prefix"] == "src/loomgraph/cli/"
+
+        # Stats gets just the source_prefix (for module extraction)
+        mock_client.get_graph_stats.assert_called_once_with(
+            source_prefix="src/loomgraph/",
+            module_depth=2,
+        )
+        assert isinstance(result, TopologyResult)
 
 
 class TestCouplingMetrics:

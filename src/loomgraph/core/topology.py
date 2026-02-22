@@ -60,6 +60,58 @@ def _is_external(entity: dict[str, Any]) -> bool:
     )
 
 
+
+def _strip_line_range(source_id: str) -> str:
+    """Strip line range suffix from source_id (e.g. 'src/a.py:1-50' → 'src/a.py')."""
+    colon_idx = source_id.rfind(":")
+    if colon_idx > 0:
+        suffix = source_id[colon_idx + 1:]
+        if suffix and (suffix[0].isdigit() or suffix[0] == "-"):
+            return source_id[:colon_idx]
+    return source_id
+
+
+def _common_source_prefix(source_ids: list[str]) -> str:
+    """Compute common directory prefix from source_ids.
+
+    Strips line ranges, extracts directory parts, and finds the longest
+    common directory prefix. Returns empty string if no common prefix.
+
+    Examples:
+        >>> _common_source_prefix(["src/core/a.py:1-10", "src/core/b.py:1-5"])
+        'src/core/'
+        >>> _common_source_prefix(["src/cli/a.py", "src/core/b.py"])
+        'src/'
+    """
+    if not source_ids:
+        return ""
+
+    # Extract directory paths
+    dirs: list[list[str]] = []
+    for sid in source_ids:
+        clean = _strip_line_range(sid)
+        parts = clean.split("/")
+        # Drop filename (last element)
+        dir_parts = parts[:-1] if len(parts) > 1 else []
+        dirs.append(dir_parts)
+
+    if not dirs or not dirs[0]:
+        return ""
+
+    # Find common prefix
+    prefix_parts: list[str] = []
+    for i, part in enumerate(dirs[0]):
+        if all(len(d) > i and d[i] == part for d in dirs):
+            prefix_parts.append(part)
+        else:
+            break
+
+    if not prefix_parts:
+        return ""
+
+    return "/".join(prefix_parts) + "/"
+
+
 @dataclass
 class CouplingMetrics:
     """Cross-module coupling metrics."""
@@ -122,12 +174,15 @@ class TopologyAnalyzer:
         hub_threshold: Minimum in-degree to flag as hub
         god_threshold: Minimum out-degree to flag as god function
         module: Optional module prefix filter (e.g. "cli" filters source_id)
+        source_prefix: Common prefix to strip from source_ids for module
+            extraction. Auto-detected from source_ids if None.
     """
 
     client: Any  # LightRAGClient
     hub_threshold: int = 5
     god_threshold: int = 5
     module: str | None = None
+    source_prefix: str | None = None
 
     async def analyze(self) -> TopologyResult:
         """Run topology analysis with server-side fallback.
@@ -147,23 +202,37 @@ class TopologyAnalyzer:
         """Server-side topology analysis using dedicated endpoints."""
         import asyncio
 
-        source_prefix = (self.module + "/") if self.module else None
+        # Auto-detect source_prefix for correct module extraction in coupling
+        effective_prefix = self.source_prefix
+        if effective_prefix is None:
+            source_ids = await self.client.get_source_ids()
+            effective_prefix = _common_source_prefix(source_ids)
+            logger.debug("Auto-detected source_prefix: %r", effective_prefix)
+
+        # For filtering endpoints (orphans/degree), combine prefix + module
+        filter_prefix = effective_prefix or ""
+        if self.module:
+            filter_prefix = filter_prefix + self.module + "/"
+        filter_prefix = filter_prefix or None
 
         orphans, hubs, gods, stats = await asyncio.gather(
             self.client.get_orphan_entities(
-                exclude_types=["module"], source_prefix=source_prefix
+                exclude_types=["module"], source_prefix=filter_prefix
             ),
             self.client.get_degree_distribution(
                 direction="in",
                 min_degree=self.hub_threshold,
-                source_prefix=source_prefix,
+                source_prefix=filter_prefix,
             ),
             self.client.get_degree_distribution(
                 direction="out",
                 min_degree=self.god_threshold,
-                source_prefix=source_prefix,
+                source_prefix=filter_prefix,
             ),
-            self.client.get_graph_stats(source_prefix=source_prefix),
+            self.client.get_graph_stats(
+                source_prefix=effective_prefix or None,
+                module_depth=2,
+            ),
         )
 
         # Filter noise and external entities from server results
