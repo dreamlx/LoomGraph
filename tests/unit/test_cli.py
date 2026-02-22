@@ -110,11 +110,12 @@ class TestGetAutoWorkspace:
     def test_git_repo_returns_dir_branch(
         self, mock_branch: MagicMock, mock_is_git: MagicMock,
     ) -> None:
-        """Should return dir-branch for git repositories."""
+        """Should return dir:branch for git repositories."""
         from loomgraph.cli._common import get_auto_workspace
 
         result = get_auto_workspace(None)
-        assert result.endswith("-develop")
+        assert ":" in result
+        assert result.endswith(":develop")
 
     @patch("loomgraph.core.git.is_git_repository", return_value=False)
     def test_non_git_returns_dir_only(self, mock_is_git: MagicMock) -> None:
@@ -122,8 +123,7 @@ class TestGetAutoWorkspace:
         from loomgraph.cli._common import get_auto_workspace
 
         result = get_auto_workspace(None)
-        # Non-git: no branch suffix appended
-        assert not result.endswith("-develop")
+        assert ":" not in result
 
     def test_explicit_workspace_takes_priority(self) -> None:
         """Explicit --workspace argument should override auto-detection."""
@@ -136,7 +136,7 @@ class TestGetAutoWorkspace:
 class TestStatusCommand:
     """Tests for the status command."""
 
-    @patch("loomgraph.cli._setup.get_auto_workspace", return_value="testproject-main")
+    @patch("loomgraph.cli._setup.get_auto_workspace", return_value="testproject:main")
     @patch("loomgraph.cli._setup.check_codeindex")
     @patch("loomgraph.cli._setup.check_lightrag_api")
     @patch("loomgraph.cli._setup.check_embedding")
@@ -160,9 +160,9 @@ class TestStatusCommand:
         assert data["success"] is True
         assert "dependencies" in data["data"]
         assert "workspace" in data["data"]
-        assert data["data"]["workspace"]["name"] == "testproject-main"
+        assert data["data"]["workspace"]["name"] == "testproject:main"
 
-    @patch("loomgraph.cli._setup.get_auto_workspace", return_value="testproject-develop")
+    @patch("loomgraph.cli._setup.get_auto_workspace", return_value="testproject:develop")
     @patch("loomgraph.cli._setup.check_codeindex")
     @patch("loomgraph.cli._setup.check_lightrag_api")
     @patch("loomgraph.cli._setup.check_embedding")

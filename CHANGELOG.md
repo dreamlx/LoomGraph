@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
-- **`get_auto_workspace()`**: default workspace format changed from `project` to `project-branch` (e.g. `loomgraph-develop`). Non-git directories fallback to directory name only. Explicit `-w` argument unaffected.
+- **`get_auto_workspace()`**: default workspace format changed from `project` to `project:branch` (e.g. `loomgraph:develop`). Non-git directories fallback to directory name only. Explicit `-w` argument unaffected.
 - **`status` command**: now includes `workspace` field with current workspace name and entity/relation counts from LightRAG.
 - **Server-side coupling**: `TopologyAnalyzer` now auto-detects `source_prefix` from source_ids and passes it to `/graph/stats` for correct module extraction. `get_graph_stats()` supports `module_depth` parameter.
 
