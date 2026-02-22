@@ -469,12 +469,14 @@ async def _async_inject(
 @click.option("--files", default=None, help="Comma-separated list of files to update (skips git detection)")
 @click.option("--lightrag-url", default=None, help="Override LightRAG API URL from config")
 @click.option("--embedding-url", default=None, help="Override embedding API URL from config")
+@click.option("--use-affected", is_flag=True, help="Use 'codeindex affected' instead of 'git diff' (smarter detection)")
 def update(
     since: str,
     workspace: str | None,
     files: str | None,
     lightrag_url: str | None,
     embedding_url: str | None,
+    use_affected: bool,
 ) -> None:
     """Warm update: index only changed files since last commit.
 
@@ -537,19 +539,52 @@ def update(
             return
 
         # Get changed files
-        try:
-            changed_files = get_changed_files(
-                since=since,
-                repo_path=repo_path,
-                extensions=CODE_EXTENSIONS,
-            )
-        except GitError as e:
-            output_error(
-                code=ErrorCode.GIT_ERROR,
-                message=str(e),
-                suggestion="Check if the git reference exists: git log --oneline",
-            )
-            return
+        if use_affected:
+            # Use codeindex affected for smarter detection
+            import json
+            import subprocess
+
+            try:
+                result = subprocess.run(
+                    ["codeindex", "affected", "--json", "--since", since],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                )
+
+                if result.returncode != 0:
+                    output_error(
+                        code=ErrorCode.CODEINDEX_FAILED,
+                        message="codeindex affected failed",
+                        suggestion="Check if codeindex is installed: pip install ai-codeindex",
+                    )
+                    return
+
+                affected_data = json.loads(result.stdout)
+                changed_files = [Path(f) for f in affected_data.get("affected_files", [])]
+
+            except (subprocess.TimeoutExpired, json.JSONDecodeError, FileNotFoundError) as e:
+                output_error(
+                    code=ErrorCode.CODEINDEX_FAILED,
+                    message=f"Failed to run codeindex affected: {e}",
+                    suggestion="Try without --use-affected flag",
+                )
+                return
+        else:
+            # Use git diff (faster, simpler)
+            try:
+                changed_files = get_changed_files(
+                    since=since,
+                    repo_path=repo_path,
+                    extensions=CODE_EXTENSIONS,
+                )
+            except GitError as e:
+                output_error(
+                    code=ErrorCode.GIT_ERROR,
+                    message=str(e),
+                    suggestion="Check if the git reference exists: git log --oneline",
+                )
+                return
 
     if not changed_files:
         output_success({
