@@ -133,6 +133,191 @@ class TestGetAutoWorkspace:
         assert result == "my-custom-ws"
 
 
+class TestResolveWorkspaceWithFallback:
+    """Tests for resolve_workspace_with_fallback function."""
+
+    @pytest.mark.asyncio
+    async def test_existing_workspace_no_fallback(self) -> None:
+        """Should return target workspace if it has data."""
+        from unittest.mock import AsyncMock
+        from loomgraph.cli._common import resolve_workspace_with_fallback
+
+        mock_client = AsyncMock()
+        mock_client.get_graph_stats.return_value = {"entity_count": 100}
+
+        result = await resolve_workspace_with_fallback(
+            "myproject:feature", mock_client, allow_fallback=True
+        )
+
+        assert result == "myproject:feature"
+        mock_client.get_graph_stats.assert_called_once_with(workspace="myproject:feature")
+
+    @pytest.mark.asyncio
+    async def test_fallback_to_main(self) -> None:
+        """Should fallback to main branch if feature branch is empty."""
+        from unittest.mock import AsyncMock
+        from loomgraph.cli._common import resolve_workspace_with_fallback
+
+        mock_client = AsyncMock()
+        mock_client.get_graph_stats.side_effect = [
+            {"entity_count": 0},  # feature branch empty
+            {"entity_count": 200},  # main branch has data
+        ]
+
+        result = await resolve_workspace_with_fallback(
+            "myproject:feature", mock_client, allow_fallback=True
+        )
+
+        assert result == "myproject:main"
+        assert mock_client.get_graph_stats.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_fallback_to_develop(self) -> None:
+        """Should try develop if main is also empty."""
+        from unittest.mock import AsyncMock
+        from loomgraph.cli._common import resolve_workspace_with_fallback
+
+        mock_client = AsyncMock()
+        mock_client.get_graph_stats.side_effect = [
+            {"entity_count": 0},  # feature branch empty
+            {"entity_count": 0},  # main empty
+            {"entity_count": 150},  # develop has data
+        ]
+
+        result = await resolve_workspace_with_fallback(
+            "myproject:feature", mock_client, allow_fallback=True
+        )
+
+        assert result == "myproject:develop"
+        assert mock_client.get_graph_stats.call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_fallback_to_master(self) -> None:
+        """Should try master if main and develop are empty."""
+        from unittest.mock import AsyncMock
+        from loomgraph.cli._common import resolve_workspace_with_fallback
+
+        mock_client = AsyncMock()
+        mock_client.get_graph_stats.side_effect = [
+            {"entity_count": 0},  # feature branch empty
+            {"entity_count": 0},  # main empty
+            {"entity_count": 0},  # develop empty
+            {"entity_count": 300},  # master has data
+        ]
+
+        result = await resolve_workspace_with_fallback(
+            "myproject:feature", mock_client, allow_fallback=True
+        )
+
+        assert result == "myproject:master"
+        assert mock_client.get_graph_stats.call_count == 4
+
+    @pytest.mark.asyncio
+    async def test_no_valid_workspace_raises_error(self) -> None:
+        """Should raise error if no workspace has data."""
+        from unittest.mock import AsyncMock
+        import click
+        from loomgraph.cli._common import resolve_workspace_with_fallback
+
+        mock_client = AsyncMock()
+        mock_client.get_graph_stats.return_value = {"entity_count": 0}
+
+        with pytest.raises(click.ClickException) as exc_info:
+            await resolve_workspace_with_fallback(
+                "myproject:feature", mock_client, allow_fallback=True
+            )
+
+        assert "No workspace found" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_allow_fallback_false_raises_immediately(self) -> None:
+        """Should not fallback when allow_fallback=False."""
+        from unittest.mock import AsyncMock
+        import click
+        from loomgraph.cli._common import resolve_workspace_with_fallback
+
+        mock_client = AsyncMock()
+        mock_client.get_graph_stats.return_value = {"entity_count": 0}
+
+        with pytest.raises(click.ClickException) as exc_info:
+            await resolve_workspace_with_fallback(
+                "myproject:feature", mock_client, allow_fallback=False
+            )
+
+        assert "is empty or not found" in str(exc_info.value)
+        mock_client.get_graph_stats.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_skip_same_branch_in_fallback(self) -> None:
+        """Should skip target branch in fallback chain if it's main/develop/master."""
+        from unittest.mock import AsyncMock
+        from loomgraph.cli._common import resolve_workspace_with_fallback
+
+        mock_client = AsyncMock()
+        mock_client.get_graph_stats.side_effect = [
+            {"entity_count": 0},  # main empty (target)
+            {"entity_count": 150},  # develop has data
+        ]
+
+        result = await resolve_workspace_with_fallback(
+            "myproject:main", mock_client, allow_fallback=True
+        )
+
+        assert result == "myproject:develop"
+        # Should skip main in fallback since it's the target
+        assert mock_client.get_graph_stats.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_handles_total_entities_field(self) -> None:
+        """Should handle both entity_count and total_entities fields."""
+        from unittest.mock import AsyncMock
+        from loomgraph.cli._common import resolve_workspace_with_fallback
+
+        mock_client = AsyncMock()
+        mock_client.get_graph_stats.return_value = {"total_entities": 50}
+
+        result = await resolve_workspace_with_fallback(
+            "myproject:feature", mock_client, allow_fallback=True
+        )
+
+        assert result == "myproject:feature"
+
+    @pytest.mark.asyncio
+    async def test_handles_api_error_as_empty(self) -> None:
+        """Should treat API error as empty workspace and try fallback."""
+        from unittest.mock import AsyncMock
+        from loomgraph.cli._common import resolve_workspace_with_fallback
+
+        mock_client = AsyncMock()
+        mock_client.get_graph_stats.side_effect = [
+            Exception("API error"),  # feature branch error
+            {"entity_count": 100},  # main has data
+        ]
+
+        result = await resolve_workspace_with_fallback(
+            "myproject:feature", mock_client, allow_fallback=True
+        )
+
+        assert result == "myproject:main"
+
+    @pytest.mark.asyncio
+    async def test_non_colon_workspace_no_fallback(self) -> None:
+        """Should raise error for non-colon workspace (no branch info)."""
+        from unittest.mock import AsyncMock
+        import click
+        from loomgraph.cli._common import resolve_workspace_with_fallback
+
+        mock_client = AsyncMock()
+        mock_client.get_graph_stats.return_value = {"entity_count": 0}
+
+        with pytest.raises(click.ClickException) as exc_info:
+            await resolve_workspace_with_fallback(
+                "simple-workspace", mock_client, allow_fallback=True
+            )
+
+        assert "No workspace found" in str(exc_info.value)
+
+
 class TestStatusCommand:
     """Tests for the status command."""
 
@@ -493,12 +678,14 @@ class TestQueryCommand:
 class TestAsyncQuery:
     """Tests for _async_query."""
 
+    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_graph_stats")
     @patch("loomgraph.cli._search.get_settings")
     @patch("loomgraph.core.lightrag_client.LightRAGClient.query")
     async def test_async_query_hybrid(
-        self, mock_query: MagicMock, mock_settings: MagicMock,
+        self, mock_query: MagicMock, mock_settings: MagicMock, mock_stats: MagicMock,
     ) -> None:
         mock_query.return_value = {"response": "Auth uses JWT tokens."}
+        mock_stats.return_value = {"entity_count": 10}
         mock_settings.return_value = MagicMock(
             lightrag=MagicMock(api_url="http://test:3001", api_timeout=5.0)
         )
@@ -510,12 +697,14 @@ class TestAsyncQuery:
         assert result["mode"] == "hybrid"
         assert "JWT" in result["response"]
 
+    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_graph_stats")
     @patch("loomgraph.cli._search.get_settings")
     @patch("loomgraph.core.lightrag_client.LightRAGClient.query")
     async def test_async_query_empty_response(
-        self, mock_query: MagicMock, mock_settings: MagicMock,
+        self, mock_query: MagicMock, mock_settings: MagicMock, mock_stats: MagicMock,
     ) -> None:
         mock_query.return_value = {"response": ""}
+        mock_stats.return_value = {"entity_count": 10}
         mock_settings.return_value = MagicMock(
             lightrag=MagicMock(api_url="http://test:3001", api_timeout=5.0)
         )
@@ -525,12 +714,14 @@ class TestAsyncQuery:
 
         assert "No relevant information" in result["response"]
 
+    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_graph_stats")
     @patch("loomgraph.cli._search.get_settings")
     @patch("loomgraph.core.lightrag_client.LightRAGClient.query")
     async def test_async_query_mode_passed(
-        self, mock_query: MagicMock, mock_settings: MagicMock,
+        self, mock_query: MagicMock, mock_settings: MagicMock, mock_stats: MagicMock,
     ) -> None:
         mock_query.return_value = {"response": "Global patterns found."}
+        mock_stats.return_value = {"entity_count": 10}
         mock_settings.return_value = MagicMock(
             lightrag=MagicMock(api_url="http://test:3001", api_timeout=5.0)
         )
@@ -1066,15 +1257,17 @@ class TestAsyncGraphQuery:
             {"entity_name": "handler", "entity_type": "function", "source_id": "src/handler.py"},
         ]
 
+    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_graph_stats")
     @patch("loomgraph.cli._search.get_settings")
     @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_entities")
     @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_relations")
     async def test_both_directions(
-        self, mock_rels: MagicMock, mock_ents: MagicMock, mock_settings: MagicMock,
+        self, mock_rels: MagicMock, mock_ents: MagicMock, mock_settings: MagicMock, mock_stats: MagicMock,
         mock_relations: list, mock_entities_for_graph: list,
     ) -> None:
         mock_rels.return_value = mock_relations
         mock_ents.return_value = mock_entities_for_graph
+        mock_stats.return_value = {"entity_count": 10}
         mock_settings.return_value = MagicMock(
             lightrag=MagicMock(api_url="http://test:3001", api_timeout=5.0)
         )
@@ -1090,15 +1283,17 @@ class TestAsyncGraphQuery:
         for caller in result["callers"]:
             assert "source_id" in caller
 
+    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_graph_stats")
     @patch("loomgraph.cli._search.get_settings")
     @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_entities")
     @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_relations")
     async def test_relation_type_filter(
-        self, mock_rels: MagicMock, mock_ents: MagicMock, mock_settings: MagicMock,
+        self, mock_rels: MagicMock, mock_ents: MagicMock, mock_settings: MagicMock, mock_stats: MagicMock,
         mock_relations: list, mock_entities_for_graph: list,
     ) -> None:
         mock_rels.return_value = mock_relations
         mock_ents.return_value = mock_entities_for_graph
+        mock_stats.return_value = {"entity_count": 10}
         mock_settings.return_value = MagicMock(
             lightrag=MagicMock(api_url="http://test:3001", api_timeout=5.0)
         )
@@ -1111,16 +1306,18 @@ class TestAsyncGraphQuery:
         assert result["callees"][0]["entity"] == "BaseService"
         assert result["callees"][0]["source_id"] == "src/base.py"
 
+    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_graph_stats")
     @patch("loomgraph.cli._search.get_settings")
     @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_entities")
     @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_relations")
     async def test_no_matches(
-        self, mock_rels: MagicMock, mock_ents: MagicMock, mock_settings: MagicMock
+        self, mock_rels: MagicMock, mock_ents: MagicMock, mock_settings: MagicMock, mock_stats: MagicMock
     ) -> None:
         mock_rels.return_value = [
             {"src_id": "a", "tgt_id": "b", "keywords": "CALLS"},
         ]
         mock_ents.return_value = []
+        mock_stats.return_value = {"entity_count": 10}
         mock_settings.return_value = MagicMock(
             lightrag=MagicMock(api_url="http://test:3001", api_timeout=5.0)
         )
@@ -1132,15 +1329,17 @@ class TestAsyncGraphQuery:
         assert result["callees"] == []
         assert result["source_id"] == ""
 
+    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_graph_stats")
     @patch("loomgraph.cli._search.get_settings")
     @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_entities")
     @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_relations")
     async def test_callers_sorted(
-        self, mock_rels: MagicMock, mock_ents: MagicMock, mock_settings: MagicMock,
+        self, mock_rels: MagicMock, mock_ents: MagicMock, mock_settings: MagicMock, mock_stats: MagicMock,
         mock_relations: list, mock_entities_for_graph: list,
     ) -> None:
         mock_rels.return_value = mock_relations
         mock_ents.return_value = mock_entities_for_graph
+        mock_stats.return_value = {"entity_count": 10}
         mock_settings.return_value = MagicMock(
             lightrag=MagicMock(api_url="http://test:3001", api_timeout=5.0)
         )
@@ -1166,11 +1365,13 @@ class TestAsyncFind:
         ]
 
     @patch("loomgraph.cli._search.get_settings")
+    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_graph_stats")
     @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_entities")
     async def test_exact_match(
-        self, mock_ents: MagicMock, mock_settings: MagicMock, mock_entities: list
+        self, mock_ents: MagicMock, mock_stats: MagicMock, mock_settings: MagicMock, mock_entities: list
     ) -> None:
         mock_ents.return_value = mock_entities
+        mock_stats.return_value = {"entity_count": 4}
         mock_settings.return_value = MagicMock(
             lightrag=MagicMock(api_url="http://test:3001", api_timeout=5.0)
         )
@@ -1183,11 +1384,13 @@ class TestAsyncFind:
         assert result["matches"][0]["score"] == 1.0
 
     @patch("loomgraph.cli._search.get_settings")
+    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_graph_stats")
     @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_entities")
     async def test_substring_match(
-        self, mock_ents: MagicMock, mock_settings: MagicMock, mock_entities: list
+        self, mock_ents: MagicMock, mock_stats: MagicMock, mock_settings: MagicMock, mock_entities: list
     ) -> None:
         mock_ents.return_value = mock_entities
+        mock_stats.return_value = {"entity_count": 4}
         mock_settings.return_value = MagicMock(
             lightrag=MagicMock(api_url="http://test:3001", api_timeout=5.0)
         )
@@ -1200,12 +1403,14 @@ class TestAsyncFind:
         assert "AuthService" in names
         assert "authenticate" in names
 
+    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_graph_stats")
     @patch("loomgraph.cli._search.get_settings")
     @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_entities")
     async def test_type_filter(
-        self, mock_ents: MagicMock, mock_settings: MagicMock, mock_entities: list
+        self, mock_ents: MagicMock, mock_settings: MagicMock, mock_stats: MagicMock, mock_entities: list
     ) -> None:
         mock_ents.return_value = mock_entities
+        mock_stats.return_value = {"entity_count": 10}
         mock_settings.return_value = MagicMock(
             lightrag=MagicMock(api_url="http://test:3001", api_timeout=5.0)
         )
@@ -1216,12 +1421,14 @@ class TestAsyncFind:
         for m in result["matches"]:
             assert m["type"] == "class"
 
+    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_graph_stats")
     @patch("loomgraph.cli._search.get_settings")
     @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_entities")
     async def test_limit(
-        self, mock_ents: MagicMock, mock_settings: MagicMock, mock_entities: list
+        self, mock_ents: MagicMock, mock_settings: MagicMock, mock_stats: MagicMock, mock_entities: list
     ) -> None:
         mock_ents.return_value = mock_entities
+        mock_stats.return_value = {"entity_count": 10}
         mock_settings.return_value = MagicMock(
             lightrag=MagicMock(api_url="http://test:3001", api_timeout=5.0)
         )
@@ -1231,12 +1438,14 @@ class TestAsyncFind:
 
         assert result["matches_count"] <= 2
 
+    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_graph_stats")
     @patch("loomgraph.cli._search.get_settings")
     @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_entities")
     async def test_no_match(
-        self, mock_ents: MagicMock, mock_settings: MagicMock, mock_entities: list
+        self, mock_ents: MagicMock, mock_settings: MagicMock, mock_stats: MagicMock, mock_entities: list
     ) -> None:
         mock_ents.return_value = mock_entities
+        mock_stats.return_value = {"entity_count": 10}
         mock_settings.return_value = MagicMock(
             lightrag=MagicMock(api_url="http://test:3001", api_timeout=5.0)
         )
@@ -1246,12 +1455,14 @@ class TestAsyncFind:
 
         assert result["matches_count"] == 0
 
+    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_graph_stats")
     @patch("loomgraph.cli._search.get_settings")
     @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_entities")
     async def test_scores_descending(
-        self, mock_ents: MagicMock, mock_settings: MagicMock, mock_entities: list
+        self, mock_ents: MagicMock, mock_settings: MagicMock, mock_stats: MagicMock, mock_entities: list
     ) -> None:
         mock_ents.return_value = mock_entities
+        mock_stats.return_value = {"entity_count": 10}
         mock_settings.return_value = MagicMock(
             lightrag=MagicMock(api_url="http://test:3001", api_timeout=5.0)
         )
@@ -1286,15 +1497,17 @@ class TestFindWithRelations:
             {"src_id": "UserRepository", "tgt_id": "db_connect", "keywords": "CALLS"},
         ]
 
+    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_graph_stats")
     @patch("loomgraph.cli._search.get_settings")
     @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_relations")
     @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_entities")
     async def test_with_relations_basic(
-        self, mock_ents: MagicMock, mock_rels: MagicMock, mock_settings: MagicMock,
+        self, mock_ents: MagicMock, mock_rels: MagicMock, mock_settings: MagicMock, mock_stats: MagicMock,
         mock_entities: list, mock_relations: list,
     ) -> None:
         mock_ents.return_value = mock_entities
         mock_rels.return_value = mock_relations
+        mock_stats.return_value = {"entity_count": 10}
         mock_settings.return_value = MagicMock(
             lightrag=MagicMock(api_url="http://test:3001", api_timeout=5.0)
         )
@@ -1315,16 +1528,18 @@ class TestFindWithRelations:
         assert "JwtProvider" in callee_names
         assert "BaseService" in callee_names
 
+    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_graph_stats")
     @patch("loomgraph.cli._search.get_settings")
     @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_relations")
     @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_entities")
     async def test_with_relations_depth2(
-        self, mock_ents: MagicMock, mock_rels: MagicMock, mock_settings: MagicMock,
+        self, mock_ents: MagicMock, mock_rels: MagicMock, mock_settings: MagicMock, mock_stats: MagicMock,
         mock_entities: list, mock_relations: list,
     ) -> None:
         """BFS depth=2 should reach 2-hop neighbors."""
         mock_ents.return_value = mock_entities
         mock_rels.return_value = mock_relations
+        mock_stats.return_value = {"entity_count": 10}
         mock_settings.return_value = MagicMock(
             lightrag=MagicMock(api_url="http://test:3001", api_timeout=5.0)
         )
@@ -1338,16 +1553,18 @@ class TestFindWithRelations:
         assert "UserRepository" in callee_names
         assert "db_connect" in callee_names  # 2-hop reachable
 
+    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_graph_stats")
     @patch("loomgraph.cli._search.get_settings")
     @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_relations")
     @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_entities")
     async def test_without_relations_no_callers(
-        self, mock_ents: MagicMock, mock_rels: MagicMock, mock_settings: MagicMock,
+        self, mock_ents: MagicMock, mock_rels: MagicMock, mock_settings: MagicMock, mock_stats: MagicMock,
         mock_entities: list, mock_relations: list,
     ) -> None:
         """Without --with-relations, matches should not have callers/callees."""
         mock_ents.return_value = mock_entities
         mock_rels.return_value = mock_relations
+        mock_stats.return_value = {"entity_count": 10}
         mock_settings.return_value = MagicMock(
             lightrag=MagicMock(api_url="http://test:3001", api_timeout=5.0)
         )

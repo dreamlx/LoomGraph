@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Workspace fallback**: Query commands (`find`, `query`, `graph`, `topology`, `check`, `impact`, `deps`, `overview`) now automatically fallback to `main`/`develop`/`master` branches when target workspace is empty. Multi-workspace comparison commands (`workspace compare`, `workspace similar`) require explicit workspace specification. See Issue #20.
+- **`resolve_workspace_with_fallback()`**: new core function in `cli/_common.py` that transparently resolves workspace with fallback to main branches, controlled by `allow_fallback` parameter.
+
 ## [0.7.0] - 2026-02-22
 
 ### Added - EPIC-003: Incremental Update Strategy

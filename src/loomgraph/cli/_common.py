@@ -61,6 +61,80 @@ def get_auto_workspace(workspace: str | None) -> str | None:
     return ws_name
 
 
+async def resolve_workspace_with_fallback(
+    workspace: str,
+    client: Any,  # LightRAGClient
+    allow_fallback: bool = True,
+) -> str:
+    """Resolve workspace with fallback to main branches.
+
+    Workflow:
+    1. Check if target workspace exists (entity_count > 0)
+    2. If not and allow_fallback=True, try main/develop/master
+    3. Raise error if no valid workspace found
+
+    Args:
+        workspace: Target workspace (e.g. "myproject:feature-A")
+        client: LightRAG client instance
+        allow_fallback: Enable fallback to default branches (default: True)
+
+    Returns:
+        Resolved workspace name (may be different from input if fallback occurred)
+
+    Raises:
+        click.ClickException: No valid workspace found
+
+    Example:
+        >>> ws = await resolve_workspace_with_fallback("myproject:feature-A", client)
+        ℹ️  Workspace 'myproject:feature-A' not found, using 'myproject:main'
+        >>> ws
+        'myproject:main'
+    """
+    # Check if target workspace has data
+    try:
+        stats = await client.get_graph_stats(workspace=workspace)
+        entity_count = stats.get("entity_count") or stats.get("total_entities", 0)
+
+        if entity_count > 0:
+            return workspace
+    except Exception:
+        # API error - treat as empty workspace
+        pass
+
+    # No fallback - raise error immediately
+    if not allow_fallback:
+        raise click.ClickException(
+            f"Workspace '{workspace}' is empty or not found. "
+            f"Create it with: loomgraph index ."
+        )
+
+    # Try fallback to main branches
+    if ":" in workspace:
+        project = workspace.split(":")[0]
+        for branch in ["main", "develop", "master"]:
+            fallback = f"{project}:{branch}"
+            if fallback == workspace:
+                continue  # skip if already tried
+
+            try:
+                stats = await client.get_graph_stats(workspace=fallback)
+                entity_count = stats.get("entity_count") or stats.get("total_entities", 0)
+                if entity_count > 0:
+                    click.echo(
+                        f"ℹ️  Workspace '{workspace}' not found, using '{fallback}'",
+                        err=True,
+                    )
+                    return fallback
+            except Exception:
+                continue
+
+    # No valid workspace found
+    raise click.ClickException(
+        f"No workspace found for project. "
+        f"Index the codebase first: loomgraph index ."
+    )
+
+
 # ============================================
 # Error Codes (from CLI_DESIGN.md)
 # ============================================
