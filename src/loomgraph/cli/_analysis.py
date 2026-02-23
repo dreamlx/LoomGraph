@@ -9,7 +9,13 @@ from typing import Any
 
 import click
 
-from loomgraph.cli._common import ErrorCode, get_auto_workspace, output_error, output_success
+from loomgraph.cli._common import (
+    ErrorCode,
+    get_auto_workspace,
+    output_error,
+    output_success,
+    resolve_workspace_with_fallback,
+)
 from loomgraph.cli.main import main
 from loomgraph.core.config import get_settings
 
@@ -117,11 +123,16 @@ async def _async_impact(
     from loomgraph.core.lightrag_client import LightRAGClient
 
     settings = get_settings()
+    ws = get_auto_workspace(workspace)
     client = LightRAGClient(
         base_url=settings.lightrag.api_url,
         timeout=settings.lightrag.api_timeout,
-        workspace=get_auto_workspace(workspace),
+        workspace=ws,
     )
+
+    # Resolve workspace with fallback to main branches
+    ws = await resolve_workspace_with_fallback(ws, client, allow_fallback=True)
+    client.workspace = ws
 
     analyzer = ImpactAnalyzer(
         lightrag_client=client,
@@ -169,11 +180,16 @@ async def _async_deps(depth: int, workspace: str | None = None) -> dict[str, Any
     from loomgraph.core.lightrag_client import LightRAGClient
 
     settings = get_settings()
+    ws = get_auto_workspace(workspace)
     client = LightRAGClient(
         base_url=settings.lightrag.api_url,
         timeout=settings.lightrag.api_timeout,
-        workspace=get_auto_workspace(workspace),
+        workspace=ws,
     )
+
+    # Resolve workspace with fallback to main branches
+    ws = await resolve_workspace_with_fallback(ws, client, allow_fallback=True)
+    client.workspace = ws
 
     analyzer = DepsAnalyzer(client=client, depth=depth)
     result = await analyzer.analyze()
@@ -209,11 +225,16 @@ async def _async_overview(
     from loomgraph.core.overview import OverviewAnalyzer
 
     settings = get_settings()
+    ws = get_auto_workspace(workspace)
     client = LightRAGClient(
         base_url=settings.lightrag.api_url,
         timeout=settings.lightrag.api_timeout,
-        workspace=get_auto_workspace(workspace),
+        workspace=ws,
     )
+
+    # Resolve workspace with fallback to main branches
+    ws = await resolve_workspace_with_fallback(ws, client, allow_fallback=True)
+    client.workspace = ws
 
     analyzer = OverviewAnalyzer(client=client, depth=depth)
     result = await analyzer.analyze(no_summary=no_summary)
@@ -255,11 +276,16 @@ async def _async_topology(
     from loomgraph.core.topology import TopologyAnalyzer
 
     settings = get_settings()
+    ws = get_auto_workspace(workspace)
     client = LightRAGClient(
         base_url=settings.lightrag.api_url,
         timeout=settings.lightrag.api_timeout,
-        workspace=get_auto_workspace(workspace),
+        workspace=ws,
     )
+
+    # Resolve workspace with fallback to main branches
+    ws = await resolve_workspace_with_fallback(ws, client, allow_fallback=True)
+    client.workspace = ws
 
     analyzer = TopologyAnalyzer(
         client=client,
@@ -303,11 +329,16 @@ async def _async_check(
     from loomgraph.core.lightrag_client import LightRAGClient
 
     settings = get_settings()
+    ws = get_auto_workspace(workspace)
     client = LightRAGClient(
         base_url=settings.lightrag.api_url,
         timeout=settings.lightrag.api_timeout,
-        workspace=get_auto_workspace(workspace),
+        workspace=ws,
     )
+
+    # Resolve workspace with fallback to main branches
+    ws = await resolve_workspace_with_fallback(ws, client, allow_fallback=True)
+    client.workspace = ws
 
     # Try server-side get_source_ids first, fallback to get_all_entities
     try:

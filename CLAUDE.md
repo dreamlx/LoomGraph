@@ -585,6 +585,32 @@ embedding:
 - `workspace.name`: 当前读取的 workspace（格式 `项目:分支`，如 `loomgraph:develop`）
 - `workspace.entities`: 实体数（0 = 需要先 `loomgraph index .`）
 
+### Workspace 自动降级
+
+查询命令（`find`、`query`、`graph`、`topology`、`check`、`impact`、`deps`、`overview`）在目标 workspace 为空时，**自动降级到主分支**：
+
+**降级链**: 当前分支 → main → develop → master
+
+**示例**：
+```bash
+# 场景：在 feature-A 分支，但未索引
+loomgraph find "UserService"
+# ℹ️  Workspace 'myproject:feature-A' not found, using 'myproject:main'
+# → 自动使用 main 分支的知识图谱
+```
+
+**多 workspace 比较命令**（`workspace compare`、`workspace similar`）**不降级**，必须显式指定两个 workspace：
+```bash
+# 必须两个 workspace 都存在
+loomgraph compare --ws1 myproject:main --ws2 myproject:feature-A
+```
+
+**禁用降级**（仅在特殊情况下使用）：
+```bash
+# 如果需要强制检查特定 workspace 是否存在，可在代码中设置 allow_fallback=False
+# 正常用户使用无需关注此选项
+```
+
 ## 开发命令
 
 ```bash
