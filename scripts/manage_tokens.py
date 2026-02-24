@@ -208,7 +208,7 @@ class TokenManager:
 
         # 测试 GitHub API
         try:
-            with httpx.Client(timeout=10.0) as client:
+            with httpx.Client(timeout=10.0, trust_env=False) as client:
                 response = client.get(
                     "https://api.github.com/repos/dreamlx/LoomGraph",
                     headers={"Authorization": f"Bearer {token}"},
