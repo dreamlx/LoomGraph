@@ -15,13 +15,13 @@
 **安装命令**（pip）:
 ```bash
 export LOOMGRAPH_TOKEN="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"
-pip install "loomgraph @ git+https://${LOOMGRAPH_TOKEN}@github.com/dreamlx/LoomGraph.git@v0.7.0"
+pip install "loomgraph @ git+https://${LOOMGRAPH_TOKEN}@github.com/dreamlx/LoomGraph.git@v0.8.0"
 ```
 
 **安装命令**（pipx）:
 ```bash
 export LOOMGRAPH_TOKEN="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"
-pipx install "loomgraph @ git+https://${LOOMGRAPH_TOKEN}@github.com/dreamlx/LoomGraph.git@v0.7.0"
+pipx install "loomgraph @ git+https://${LOOMGRAPH_TOKEN}@github.com/dreamlx/LoomGraph.git@v0.8.0"
 ```
 
 **配置信息**:
@@ -40,13 +40,13 @@ pipx install "loomgraph @ git+https://${LOOMGRAPH_TOKEN}@github.com/dreamlx/Loom
 **安装命令**（pip）:
 ```bash
 export LOOMGRAPH_TOKEN="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"
-pip install "loomgraph @ git+https://${LOOMGRAPH_TOKEN}@github.com/dreamlx/LoomGraph.git@v0.7.0"
+pip install "loomgraph @ git+https://${LOOMGRAPH_TOKEN}@github.com/dreamlx/LoomGraph.git@v0.8.0"
 ```
 
 **安装命令**（pipx）:
 ```bash
 export LOOMGRAPH_TOKEN="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"
-pipx install "loomgraph @ git+https://${LOOMGRAPH_TOKEN}@github.com/dreamlx/LoomGraph.git@v0.7.0"
+pipx install "loomgraph @ git+https://${LOOMGRAPH_TOKEN}@github.com/dreamlx/LoomGraph.git@v0.8.0"
 ```
 
 **配置信息**:
@@ -65,13 +65,13 @@ pipx install "loomgraph @ git+https://${LOOMGRAPH_TOKEN}@github.com/dreamlx/Loom
 **安装命令**（pip）:
 ```bash
 export LOOMGRAPH_TOKEN="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"
-pip install "loomgraph @ git+https://${LOOMGRAPH_TOKEN}@github.com/dreamlx/LoomGraph.git@v0.7.0"
+pip install "loomgraph @ git+https://${LOOMGRAPH_TOKEN}@github.com/dreamlx/LoomGraph.git@v0.8.0"
 ```
 
 **安装命令**（pipx）:
 ```bash
 export LOOMGRAPH_TOKEN="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"
-pipx install "loomgraph @ git+https://${LOOMGRAPH_TOKEN}@github.com/dreamlx/LoomGraph.git@v0.7.0"
+pipx install "loomgraph @ git+https://${LOOMGRAPH_TOKEN}@github.com/dreamlx/LoomGraph.git@v0.8.0"
 ```
 
 **配置信息**:

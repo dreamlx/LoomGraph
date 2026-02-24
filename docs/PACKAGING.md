@@ -94,8 +94,13 @@ git tag v0.2.5
 # 3. Push（触发 CI: test → build → GitHub Release）
 git push origin develop --tags
 
-# 4. 通知客户升级
-#    pip install --upgrade "loomgraph @ git+https://TOKEN@github.com/dreamlx/LoomGraph.git@v0.2.5"
+# 4. 生成交付总结（发布成功后）
+python scripts/generate_delivery_summary.py
+# 输出: /tmp/customer_delivery_summary.txt
+
+# 5. 通知客户升级
+#    复制 /tmp/customer_delivery_summary.txt 中的对应命令发送给客户
+#    或直接发送 customers/{customer}/INSTALL.md 文件
 ```
 
 ### 客户 Token 管理
@@ -134,6 +139,57 @@ python scripts/manage_tokens.py --verify zcyl --token github_pat_xxxxx
 |----------|----------|------|
 | `test.yml` | PR to develop/main | lint → unit tests |
 | `release.yml` | tag push `v*` | lint → test → build wheel → GitHub Release |
+
+### 交付总结生成器
+
+每次 release 发布后，使用 `generate_delivery_summary.py` 生成格式化的客户交付总结：
+
+```bash
+# 生成当前版本的交付总结（自动读取 pyproject.toml）
+python scripts/generate_delivery_summary.py
+
+# 生成指定版本的交付总结
+python scripts/generate_delivery_summary.py --version v0.8.0
+
+# 自定义输出路径
+python scripts/generate_delivery_summary.py --output ~/Desktop/delivery.txt
+
+# 直接打印到终端
+python scripts/generate_delivery_summary.py --print
+```
+
+**生成内容包括**：
+- ✅ 每个客户的 pip/pipx 安装命令（含 Token）
+- ✅ 服务配置信息（LightRAG URL、语言）
+- ✅ Token 过期日期及剩余天数
+- ✅ 从 CHANGELOG.md 自动提取的版本亮点
+- ✅ 交付方式建议（企业微信/加密邮件）
+- ✅ 快速访问链接（GitHub Release、文档）
+
+**输出示例**：
+```
+═══════════════════════════════════════════════════════════════
+  LoomGraph v0.8.0 客户交付包 - 就绪
+═══════════════════════════════════════════════════════════════
+
+📦 3 个客户安装包已准备完毕，每个包含：
+   ✅ INSTALL.md - 完整安装说明（含 Token）
+   ✅ config.yaml - 服务配置文件
+
+───────────────────────────────────────────────────────────────
+1️⃣  智采云链（zcyl）
+───────────────────────────────────────────────────────────────
+
+📋 安装命令（复制发送给客户）:
+export LOOMGRAPH_TOKEN="github_pat_..."
+pip install "loomgraph @ git+https://${LOOMGRAPH_TOKEN}@github.com/..."
+...
+```
+
+**使用场景**：
+1. **发布后通知客户**：生成总结，复制对应客户的命令发送
+2. **批量交付**：一次性生成所有客户的安装信息
+3. **版本追溯**：指定旧版本重新生成交付文档
 
 ## 离线发布流程
 

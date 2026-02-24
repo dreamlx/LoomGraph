@@ -43,8 +43,8 @@
 
 **首次安装客户**（收到 demo 包）：
 ```bash
-tar xzf loomgraph-demo-{customer}-v0.7.0.tar.gz
-cd loomgraph-demo-{customer}-v0.7.0
+tar xzf loomgraph-demo-{customer}-v0.8.0.tar.gz
+cd loomgraph-demo-{customer}-v0.8.0
 ./quickstart.sh
 
 # 然后在 Claude Code 中执行：
@@ -54,8 +54,8 @@ cd loomgraph-demo-{customer}-v0.7.0
 
 **已有客户**（收到 upgrade 包）：
 ```bash
-tar xzf loomgraph-upgrade-{customer}-v0.7.0.tar.gz
-cd loomgraph-upgrade-{customer}-v0.7.0
+tar xzf loomgraph-upgrade-{customer}-v0.8.0.tar.gz
+cd loomgraph-upgrade-{customer}-v0.8.0
 ./upgrade.sh
 
 # 重启 Claude Code 后新功能自动可用
@@ -97,7 +97,7 @@ loomgraph check
 
 #### 版本对比
 
-| 功能 | v0.6.1 | v0.7.0 |
+| 功能 | v0.6.1 | v0.8.0 |
 |------|--------|--------|
 | 手动更新 | ✅ | ✅ |
 | GitHub Action 自动更新 | ❌ | ✅ |
