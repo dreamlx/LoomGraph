@@ -100,9 +100,33 @@ git push origin develop --tags
 
 ### 客户 Token 管理
 
-- 创建 GitHub Personal Access Token (PAT)，仅限 `contents:read` 权限
-- 每个客户使用独立 token，方便单独撤销
-- Token 通过安全渠道（加密邮件/即时通讯）交付
+**重要**: GitHub Token 管理是企业项目的安全核心，详见专门文档：
+
+📖 **[TOKEN_MANAGEMENT.md](guides/TOKEN_MANAGEMENT.md)**（完整指南）
+
+**快速要点**：
+- ✅ 使用 **Fine-grained Personal Access Token**（推荐，仓库级权限）
+- ✅ 每个客户使用**独立 token**（方便单独撤销）
+- ✅ 设置**过期时间**（90 天，提前 30 天预警）
+- ✅ 最小权限原则：仅 `Contents: Read-only`
+- ✅ 在 `customers.yaml` 中记录元数据（名称、创建日期、过期日期）
+- ✅ 使用密码管理器（1Password / Bitwarden）存储实际 token
+- ✅ 通过加密渠道交付（ProtonMail / 企业微信密聊）
+
+**管理工具**：
+```bash
+# 检查即将过期的 token
+python scripts/manage_tokens.py --check-expiry
+
+# 生成安装命令
+python scripts/manage_tokens.py --generate-install zcyl --version v0.8.0
+
+# 列出所有客户 token 状态
+python scripts/manage_tokens.py --list
+
+# 验证 token 是否有效
+python scripts/manage_tokens.py --verify zcyl --token github_pat_xxxxx
+```
 
 ### CI 工作流
 
