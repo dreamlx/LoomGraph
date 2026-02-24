@@ -126,6 +126,27 @@ embedding:
 
 ## 开发
 
+**推荐使用 Makefile 命令**（统一界面，更简洁）：
+
+```bash
+# 查看所有可用命令
+make help
+
+# 常用开发命令
+make install        # 安装依赖
+make test           # 运行测试
+make lint           # 代码检查
+make lint-fix       # 自动修复 lint 问题
+make clean          # 清理临时文件
+
+# 发布管理
+make release VERSION=0.8.0    # 一键发布
+make delivery-summary         # 生成交付总结
+make token-list               # 查看客户 Token 状态
+```
+
+**直接使用脚本**（如果不想用 Makefile）：
+
 ```bash
 # 安装开发依赖
 pip install -e ".[dev]"
