@@ -130,8 +130,8 @@ async def resolve_workspace_with_fallback(
 
     # No valid workspace found
     raise click.ClickException(
-        f"No workspace found for project. "
-        f"Index the codebase first: loomgraph index ."
+        "No workspace found for project. "
+        "Index the codebase first: loomgraph index ."
     )
 
 

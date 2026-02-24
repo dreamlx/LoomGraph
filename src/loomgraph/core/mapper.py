@@ -15,8 +15,8 @@ from typing import Any
 from .models import (
     Call,
     EntityData,
-    Inheritance,
     Import,
+    Inheritance,
     RelationData,
     Symbol,
 )

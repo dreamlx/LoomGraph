@@ -11,7 +11,6 @@ from loomgraph.core.impact.models import (
     RiskAssessment,
 )
 
-
 # Core modules that should have higher risk when modified
 CORE_MODULES = {
     "auth",
