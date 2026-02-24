@@ -15,8 +15,6 @@ from loomgraph.cli.main import (
     check_codeindex,
     check_lightrag_api,
     main,
-    output_error,
-    output_success,
 )
 
 
@@ -140,6 +138,7 @@ class TestResolveWorkspaceWithFallback:
     async def test_existing_workspace_no_fallback(self) -> None:
         """Should return target workspace if it has data."""
         from unittest.mock import AsyncMock
+
         from loomgraph.cli._common import resolve_workspace_with_fallback
 
         mock_client = AsyncMock()
@@ -156,6 +155,7 @@ class TestResolveWorkspaceWithFallback:
     async def test_fallback_to_main(self) -> None:
         """Should fallback to main branch if feature branch is empty."""
         from unittest.mock import AsyncMock
+
         from loomgraph.cli._common import resolve_workspace_with_fallback
 
         mock_client = AsyncMock()
@@ -175,6 +175,7 @@ class TestResolveWorkspaceWithFallback:
     async def test_fallback_to_develop(self) -> None:
         """Should try develop if main is also empty."""
         from unittest.mock import AsyncMock
+
         from loomgraph.cli._common import resolve_workspace_with_fallback
 
         mock_client = AsyncMock()
@@ -195,6 +196,7 @@ class TestResolveWorkspaceWithFallback:
     async def test_fallback_to_master(self) -> None:
         """Should try master if main and develop are empty."""
         from unittest.mock import AsyncMock
+
         from loomgraph.cli._common import resolve_workspace_with_fallback
 
         mock_client = AsyncMock()
@@ -216,7 +218,9 @@ class TestResolveWorkspaceWithFallback:
     async def test_no_valid_workspace_raises_error(self) -> None:
         """Should raise error if no workspace has data."""
         from unittest.mock import AsyncMock
+
         import click
+
         from loomgraph.cli._common import resolve_workspace_with_fallback
 
         mock_client = AsyncMock()
@@ -233,7 +237,9 @@ class TestResolveWorkspaceWithFallback:
     async def test_allow_fallback_false_raises_immediately(self) -> None:
         """Should not fallback when allow_fallback=False."""
         from unittest.mock import AsyncMock
+
         import click
+
         from loomgraph.cli._common import resolve_workspace_with_fallback
 
         mock_client = AsyncMock()
@@ -251,6 +257,7 @@ class TestResolveWorkspaceWithFallback:
     async def test_skip_same_branch_in_fallback(self) -> None:
         """Should skip target branch in fallback chain if it's main/develop/master."""
         from unittest.mock import AsyncMock
+
         from loomgraph.cli._common import resolve_workspace_with_fallback
 
         mock_client = AsyncMock()
@@ -271,6 +278,7 @@ class TestResolveWorkspaceWithFallback:
     async def test_handles_total_entities_field(self) -> None:
         """Should handle both entity_count and total_entities fields."""
         from unittest.mock import AsyncMock
+
         from loomgraph.cli._common import resolve_workspace_with_fallback
 
         mock_client = AsyncMock()
@@ -286,6 +294,7 @@ class TestResolveWorkspaceWithFallback:
     async def test_handles_api_error_as_empty(self) -> None:
         """Should treat API error as empty workspace and try fallback."""
         from unittest.mock import AsyncMock
+
         from loomgraph.cli._common import resolve_workspace_with_fallback
 
         mock_client = AsyncMock()
@@ -304,7 +313,9 @@ class TestResolveWorkspaceWithFallback:
     async def test_non_colon_workspace_no_fallback(self) -> None:
         """Should raise error for non-colon workspace (no branch info)."""
         from unittest.mock import AsyncMock
+
         import click
+
         from loomgraph.cli._common import resolve_workspace_with_fallback
 
         mock_client = AsyncMock()
