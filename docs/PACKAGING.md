@@ -11,6 +11,66 @@ LoomGraph 提供两条发布通道：
 
 客户配置 (`config.yaml`) 始终手动交付，不打入包内。
 
+## 快速开始（使用 Makefile）
+
+项目提供了统一的 `Makefile` 来简化常用操作。**推荐使用 make 命令**而非直接调用脚本。
+
+### 查看所有可用命令
+
+```bash
+make help
+```
+
+### 常用命令速查
+
+| 命令 | 说明 |
+|------|------|
+| `make release VERSION=0.8.0` | 🚀 **完整发布流程**（bump → test → lint → commit → tag → push） |
+| `make delivery-summary` | 📋 生成客户交付总结 |
+| `make token-list` | 🔑 查看所有客户 Token 状态 |
+| `make token-check` | ⏰ 检查即将过期的 Token |
+| `make test` | ✅ 运行所有测试 |
+| `make lint` | 🔍 代码检查 |
+| `make package-all` | 📦 打包所有客户（离线包） |
+
+### 典型工作流示例
+
+**场景 1: 发布新版本**
+```bash
+# 一键发布（推荐）
+make release VERSION=0.8.0
+
+# 等待 GitHub Actions 完成后
+make delivery-summary
+
+# 将交付总结发送给客户
+cat /tmp/customer_delivery_summary.txt
+```
+
+**场景 2: 检查 Token 状态**
+```bash
+# 查看所有 Token
+make token-list
+
+# 检查即将过期的 Token
+make token-check
+
+# 验证单个 Token
+make token-verify CUSTOMER=zcyl TOKEN=github_pat_...
+```
+
+**场景 3: 开发调试**
+```bash
+# 运行测试
+make test
+
+# 修复 lint 问题
+make lint-fix
+
+# 清理临时文件
+make clean
+```
+
 ## 目录结构
 
 ```
@@ -82,25 +142,39 @@ EOF
 
 ### 标准发布步骤
 
+**推荐方式（使用 Makefile）**:
+
+```bash
+# 一键发布（自动执行 bump → test → lint → commit → tag → push）
+make release VERSION=0.8.0
+
+# 等待 GitHub Actions 完成（~1 分钟），然后生成交付总结
+make delivery-summary
+
+# 查看交付总结并发送给客户
+cat /tmp/customer_delivery_summary.txt
+```
+
+**手动方式（直接调用脚本）**:
+
 ```bash
 # 1. Bump version（自动更新 pyproject.toml, customers/VERSION, CHANGELOG.md）
-python scripts/bump_version.py 0.2.5
+python scripts/bump_version.py 0.8.0
 
 # 2. Commit + tag
 git add pyproject.toml customers/VERSION CHANGELOG.md
-git commit -m "chore: bump version to 0.2.5"
-git tag v0.2.5
+git commit -m "chore: bump version to 0.8.0"
+git tag v0.8.0
 
 # 3. Push（触发 CI: test → build → GitHub Release）
 git push origin develop --tags
 
 # 4. 生成交付总结（发布成功后）
 python scripts/generate_delivery_summary.py
-# 输出: /tmp/customer_delivery_summary.txt
 
 # 5. 通知客户升级
-#    复制 /tmp/customer_delivery_summary.txt 中的对应命令发送给客户
-#    或直接发送 customers/{customer}/INSTALL.md 文件
+cat /tmp/customer_delivery_summary.txt
+# 复制对应客户的命令发送，或直接发送 customers/{customer}/INSTALL.md
 ```
 
 ### 客户 Token 管理
