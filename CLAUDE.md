@@ -546,6 +546,7 @@ embedding:
 | ADR-008 | 双向调度器（能力边界） | [ADR-008](docs/adr/ADR-008-bidirectional-orchestrator.md) |
 | ADR-009 | Workspace 即知识快照 | [ADR-009](docs/adr/ADR-009-workspace-as-knowledge-snapshot.md) |
 | ADR-010 | 搜索体系重构 (find/query/graph) | [ADR-010](docs/adr/ADR-010-search-architecture-redesign.md) |
+| ADR-011 | AI 迭代策略（外部 vs 内部） | [ADR-011](docs/adr/ADR-011-ai-iteration-strategy.md) |
 
 ## CLI 命令 (AI Agent 友好)
 
