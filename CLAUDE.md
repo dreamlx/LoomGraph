@@ -547,6 +547,7 @@ embedding:
 | ADR-009 | Workspace 即知识快照 | [ADR-009](docs/adr/ADR-009-workspace-as-knowledge-snapshot.md) |
 | ADR-010 | 搜索体系重构 (find/query/graph) | [ADR-010](docs/adr/ADR-010-search-architecture-redesign.md) |
 | ADR-011 | AI 迭代策略（外部 vs 内部） | [ADR-011](docs/adr/ADR-011-ai-iteration-strategy.md) |
+| ADR-012 | 技术债务分析标准化格式 | [ADR-012](docs/adr/ADR-012-technical-debt-analysis-format.md) |
 
 ## CLI 命令 (AI Agent 友好)
 
