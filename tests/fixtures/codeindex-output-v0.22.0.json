@@ -1,0 +1,1441 @@
+{
+  "total_files": 97,
+  "total_issues": 11,
+  "critical_issues": 0,
+  "high_issues": 0,
+  "medium_issues": 11,
+  "low_issues": 0,
+  "average_quality_score": 99.43298969072166,
+  "timestamp": "2026-03-06T18:57:19.456846Z",
+  "summary": {
+    "total_files": 97,
+    "giant_files": 0,
+    "giant_functions": 3,
+    "test_smells": 64,
+    "avg_maintainability": 9.9
+  },
+  "giant_files": [],
+  "giant_functions": [
+    {
+      "path": "tests/test_symbol_overload.py",
+      "function_name": "TestNoiseBreakdown.test_noise_breakdown_categorization",
+      "lines": 92
+    },
+    {
+      "path": "tests/test_tech_debt_reporter.py",
+      "function_name": "TestTechDebtReporter.test_generate_report_for_multiple_files",
+      "lines": 85
+    },
+    {
+      "path": "tests/test_parser_swift_integration.py",
+      "function_name": "TestSwiftIntegration.test_parse_real_swift_file",
+      "lines": 133
+    }
+  ],
+  "maintainability_scores": [
+    {
+      "path": "tests/test_cli_scan_defaults_bdd.py",
+      "score": 9.5,
+      "breakdown": {
+        "quality_score_based": 9.5
+      }
+    },
+    {
+      "path": "tests/test_typescript_parser.py",
+      "score": 9.5,
+      "breakdown": {
+        "quality_score_based": 9.5
+      }
+    },
+    {
+      "path": "tests/test_tech_debt_bdd.py",
+      "score": 9.5,
+      "breakdown": {
+        "quality_score_based": 9.5
+      }
+    },
+    {
+      "path": "tests/test_java_calls.py",
+      "score": 9.5,
+      "breakdown": {
+        "quality_score_based": 9.5
+      }
+    },
+    {
+      "path": "tests/test_python_calls.py",
+      "score": 9.5,
+      "breakdown": {
+        "quality_score_based": 9.5
+      }
+    },
+    {
+      "path": "tests/test_init_wizard_bdd.py",
+      "score": 9.5,
+      "breakdown": {
+        "quality_score_based": 9.5
+      }
+    },
+    {
+      "path": "tests/test_symbol_overload.py",
+      "score": 9.5,
+      "breakdown": {
+        "quality_score_based": 9.5
+      }
+    },
+    {
+      "path": "tests/test_tech_debt_reporter.py",
+      "score": 9.5,
+      "breakdown": {
+        "quality_score_based": 9.5
+      }
+    },
+    {
+      "path": "tests/test_tech_debt_detector.py",
+      "score": 9.5,
+      "breakdown": {
+        "quality_score_based": 9.5
+      }
+    },
+    {
+      "path": "tests/test_cli_parse.py",
+      "score": 9.5,
+      "breakdown": {
+        "quality_score_based": 9.5
+      }
+    },
+    {
+      "path": "tests/test_parser_swift_integration.py",
+      "score": 9.5,
+      "breakdown": {
+        "quality_score_based": 9.5
+      }
+    }
+  ],
+  "file_reports": [
+    {
+      "file_path": "tests/test_cli_json.py",
+      "quality_score": 100.0,
+      "file_lines": 267,
+      "total_symbols": 10,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_parser.py",
+      "quality_score": 100.0,
+      "file_lines": 315,
+      "total_symbols": 12,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_parser_objc_association.py",
+      "quality_score": 100.0,
+      "file_lines": 380,
+      "total_symbols": 15,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_cli_scan_defaults_bdd.py",
+      "quality_score": 95.0,
+      "file_lines": 286,
+      "total_symbols": 28,
+      "total_issues": 1,
+      "issues": [
+        {
+          "severity": "MEDIUM",
+          "category": "too_many_functions",
+          "metric_value": 24,
+          "threshold": 15,
+          "description": "File has 24 top-level functions (threshold: 15)",
+          "suggestion": "Group related functions into classes or separate modules"
+        }
+      ]
+    },
+    {
+      "file_path": "tests/test_windows_path_optimization.py",
+      "quality_score": 100.0,
+      "file_lines": 247,
+      "total_symbols": 19,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_typescript_parser.py",
+      "quality_score": 95.0,
+      "file_lines": 946,
+      "total_symbols": 80,
+      "total_issues": 1,
+      "issues": [
+        {
+          "severity": "MEDIUM",
+          "category": "medium_file",
+          "metric_value": 946,
+          "threshold": 800,
+          "description": "File has 946 lines (threshold: 800)",
+          "suggestion": "Consider refactoring to reduce file size"
+        }
+      ]
+    },
+    {
+      "file_path": "tests/test_java_lambda.py",
+      "quality_score": 100.0,
+      "file_lines": 311,
+      "total_symbols": 21,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_backward_compatibility.py",
+      "quality_score": 100.0,
+      "file_lines": 152,
+      "total_symbols": 4,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_scanner_passthrough.py",
+      "quality_score": 100.0,
+      "file_lines": 176,
+      "total_symbols": 13,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_python_inheritance.py",
+      "quality_score": 100.0,
+      "file_lines": 707,
+      "total_symbols": 38,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/conftest.py",
+      "quality_score": 100.0,
+      "file_lines": 131,
+      "total_symbols": 4,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_semantic_extractor.py",
+      "quality_score": 100.0,
+      "file_lines": 340,
+      "total_symbols": 21,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_config_adaptive.py",
+      "quality_score": 100.0,
+      "file_lines": 343,
+      "total_symbols": 17,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_smart_writer_docstring.py",
+      "quality_score": 100.0,
+      "file_lines": 242,
+      "total_symbols": 9,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_claude_md_injection.py",
+      "quality_score": 100.0,
+      "file_lines": 121,
+      "total_symbols": 15,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_cli_hooks.py",
+      "quality_score": 100.0,
+      "file_lines": 279,
+      "total_symbols": 22,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_route_info.py",
+      "quality_score": 100.0,
+      "file_lines": 103,
+      "total_symbols": 8,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_php_inheritance.py",
+      "quality_score": 100.0,
+      "file_lines": 543,
+      "total_symbols": 30,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_parser_swift_protocols.py",
+      "quality_score": 100.0,
+      "file_lines": 379,
+      "total_symbols": 18,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_cli_tech_debt.py",
+      "quality_score": 100.0,
+      "file_lines": 176,
+      "total_symbols": 15,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_parser_swift_docstrings.py",
+      "quality_score": 100.0,
+      "file_lines": 297,
+      "total_symbols": 14,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_tech_debt_formatters.py",
+      "quality_score": 100.0,
+      "file_lines": 341,
+      "total_symbols": 12,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_tech_debt_bdd.py",
+      "quality_score": 95.0,
+      "file_lines": 487,
+      "total_symbols": 44,
+      "total_issues": 1,
+      "issues": [
+        {
+          "severity": "MEDIUM",
+          "category": "too_many_functions",
+          "metric_value": 44,
+          "threshold": 15,
+          "description": "File has 44 top-level functions (threshold: 15)",
+          "suggestion": "Group related functions into classes or separate modules"
+        }
+      ]
+    },
+    {
+      "file_path": "tests/test_smart_writer_semantic.py",
+      "quality_score": 100.0,
+      "file_lines": 285,
+      "total_symbols": 12,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_php_calls.py",
+      "quality_score": 100.0,
+      "file_lines": 659,
+      "total_symbols": 30,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_java_throws.py",
+      "quality_score": 100.0,
+      "file_lines": 270,
+      "total_symbols": 19,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_python_import_alias.py",
+      "quality_score": 100.0,
+      "file_lines": 351,
+      "total_symbols": 24,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_error_handling.py",
+      "quality_score": 100.0,
+      "file_lines": 220,
+      "total_symbols": 9,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_hooks_config.py",
+      "quality_score": 100.0,
+      "file_lines": 141,
+      "total_symbols": 16,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_python_docstring_description.py",
+      "quality_score": 100.0,
+      "file_lines": 221,
+      "total_symbols": 9,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_test_smells.py",
+      "quality_score": 100.0,
+      "file_lines": 303,
+      "total_symbols": 16,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_java_annotations.py",
+      "quality_score": 100.0,
+      "file_lines": 245,
+      "total_symbols": 15,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_java_calls.py",
+      "quality_score": 95.0,
+      "file_lines": 965,
+      "total_symbols": 34,
+      "total_issues": 1,
+      "issues": [
+        {
+          "severity": "MEDIUM",
+          "category": "medium_file",
+          "metric_value": 965,
+          "threshold": 800,
+          "description": "File has 965 lines (threshold: 800)",
+          "suggestion": "Consider refactoring to reduce file size"
+        }
+      ]
+    },
+    {
+      "file_path": "tests/test_symbol_scorer.py",
+      "quality_score": 100.0,
+      "file_lines": 537,
+      "total_symbols": 36,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_route_extractor.py",
+      "quality_score": 100.0,
+      "file_lines": 141,
+      "total_symbols": 9,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/__init__.py",
+      "quality_score": 100.0,
+      "file_lines": 1,
+      "total_symbols": 0,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_python_calls.py",
+      "quality_score": 95.0,
+      "file_lines": 819,
+      "total_symbols": 42,
+      "total_issues": 1,
+      "issues": [
+        {
+          "severity": "MEDIUM",
+          "category": "medium_file",
+          "metric_value": 819,
+          "threshold": 800,
+          "description": "File has 819 lines (threshold: 800)",
+          "suggestion": "Consider refactoring to reduce file size"
+        }
+      ]
+    },
+    {
+      "file_path": "tests/test_route_registry.py",
+      "quality_score": 100.0,
+      "file_lines": 135,
+      "total_symbols": 15,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_parser_detection.py",
+      "quality_score": 100.0,
+      "file_lines": 139,
+      "total_symbols": 14,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_tech_debt_java.py",
+      "quality_score": 100.0,
+      "file_lines": 335,
+      "total_symbols": 16,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_lazy_loading.py",
+      "quality_score": 100.0,
+      "file_lines": 119,
+      "total_symbols": 6,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_parser_swift_properties.py",
+      "quality_score": 100.0,
+      "file_lines": 431,
+      "total_symbols": 22,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_init_wizard_bdd.py",
+      "quality_score": 95.0,
+      "file_lines": 767,
+      "total_symbols": 70,
+      "total_issues": 1,
+      "issues": [
+        {
+          "severity": "MEDIUM",
+          "category": "too_many_functions",
+          "metric_value": 70,
+          "threshold": 15,
+          "description": "File has 70 top-level functions (threshold: 15)",
+          "suggestion": "Group related functions into classes or separate modules"
+        }
+      ]
+    },
+    {
+      "file_path": "tests/test_java_inheritance.py",
+      "quality_score": 100.0,
+      "file_lines": 590,
+      "total_symbols": 36,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_dataclass_structure.py",
+      "quality_score": 100.0,
+      "file_lines": 128,
+      "total_symbols": 18,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_cli_docstring_options.py",
+      "quality_score": 100.0,
+      "file_lines": 278,
+      "total_symbols": 11,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_symbol_overload.py",
+      "quality_score": 95.0,
+      "file_lines": 316,
+      "total_symbols": 15,
+      "total_issues": 1,
+      "issues": [
+        {
+          "severity": "MEDIUM",
+          "category": "long_method",
+          "metric_value": 92,
+          "threshold": 80,
+          "description": "'TestNoiseBreakdown.test_noise_breakdown_categorization' has 92 lines (threshold: 80)",
+          "suggestion": "Consider breaking into smaller functions"
+        }
+      ]
+    },
+    {
+      "file_path": "tests/test_ai_helper.py",
+      "quality_score": 100.0,
+      "file_lines": 129,
+      "total_symbols": 4,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_parser_swift_generics.py",
+      "quality_score": 100.0,
+      "file_lines": 395,
+      "total_symbols": 19,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_parser_swift_inheritance.py",
+      "quality_score": 100.0,
+      "file_lines": 356,
+      "total_symbols": 18,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_java_module.py",
+      "quality_score": 100.0,
+      "file_lines": 372,
+      "total_symbols": 28,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_php_loomgraph_integration.py",
+      "quality_score": 100.0,
+      "file_lines": 410,
+      "total_symbols": 20,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_docstring_processor.py",
+      "quality_score": 100.0,
+      "file_lines": 404,
+      "total_symbols": 13,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_java_generic_bounds.py",
+      "quality_score": 100.0,
+      "file_lines": 257,
+      "total_symbols": 18,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_call_integration.py",
+      "quality_score": 100.0,
+      "file_lines": 321,
+      "total_symbols": 17,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_adaptive_selector.py",
+      "quality_score": 100.0,
+      "file_lines": 306,
+      "total_symbols": 37,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_smart_writer_adaptive.py",
+      "quality_score": 100.0,
+      "file_lines": 286,
+      "total_symbols": 15,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_docstring_config.py",
+      "quality_score": 100.0,
+      "file_lines": 211,
+      "total_symbols": 12,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_tech_debt_reporter.py",
+      "quality_score": 95.0,
+      "file_lines": 518,
+      "total_symbols": 16,
+      "total_issues": 1,
+      "issues": [
+        {
+          "severity": "MEDIUM",
+          "category": "long_method",
+          "metric_value": 85,
+          "threshold": 80,
+          "description": "'TestTechDebtReporter.test_generate_report_for_multiple_files' has 85 lines (threshold: 80)",
+          "suggestion": "Consider breaking into smaller functions"
+        }
+      ]
+    },
+    {
+      "file_path": "tests/test_route_table_display.py",
+      "quality_score": 100.0,
+      "file_lines": 185,
+      "total_symbols": 7,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_smart_writer_integration.py",
+      "quality_score": 100.0,
+      "file_lines": 136,
+      "total_symbols": 6,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_project_index_semantic.py",
+      "quality_score": 100.0,
+      "file_lines": 243,
+      "total_symbols": 9,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_objc_association_utils.py",
+      "quality_score": 100.0,
+      "file_lines": 317,
+      "total_symbols": 22,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_help_system_bdd.py",
+      "quality_score": 100.0,
+      "file_lines": 210,
+      "total_symbols": 15,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_java_lombok.py",
+      "quality_score": 100.0,
+      "file_lines": 534,
+      "total_symbols": 30,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_loomgraph_integration.py",
+      "quality_score": 100.0,
+      "file_lines": 439,
+      "total_symbols": 17,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_cli_debt_scan.py",
+      "quality_score": 100.0,
+      "file_lines": 200,
+      "total_symbols": 12,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_smart_writer.py",
+      "quality_score": 100.0,
+      "file_lines": 287,
+      "total_symbols": 8,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_php_comment_extraction.py",
+      "quality_score": 100.0,
+      "file_lines": 192,
+      "total_symbols": 8,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_tech_debt_detector.py",
+      "quality_score": 95.0,
+      "file_lines": 1014,
+      "total_symbols": 67,
+      "total_issues": 1,
+      "issues": [
+        {
+          "severity": "MEDIUM",
+          "category": "medium_file",
+          "metric_value": 1014,
+          "threshold": 800,
+          "description": "File has 1014 lines (threshold: 800)",
+          "suggestion": "Consider refactoring to reduce file size"
+        }
+      ]
+    },
+    {
+      "file_path": "tests/test_parser_swift_extensions.py",
+      "quality_score": 100.0,
+      "file_lines": 418,
+      "total_symbols": 18,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_json_output.py",
+      "quality_score": 100.0,
+      "file_lines": 297,
+      "total_symbols": 17,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_typescript_integration.py",
+      "quality_score": 100.0,
+      "file_lines": 151,
+      "total_symbols": 11,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_parser_objc_bridging.py",
+      "quality_score": 100.0,
+      "file_lines": 252,
+      "total_symbols": 15,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_php_import_alias.py",
+      "quality_score": 100.0,
+      "file_lines": 307,
+      "total_symbols": 21,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_java_parser.py",
+      "quality_score": 100.0,
+      "file_lines": 368,
+      "total_symbols": 31,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_directory_tree.py",
+      "quality_score": 100.0,
+      "file_lines": 181,
+      "total_symbols": 7,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_story_4_4_integration.py",
+      "quality_score": 100.0,
+      "file_lines": 323,
+      "total_symbols": 9,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_smart_writer_enriched.py",
+      "quality_score": 100.0,
+      "file_lines": 368,
+      "total_symbols": 23,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_java_edge_cases.py",
+      "quality_score": 100.0,
+      "file_lines": 550,
+      "total_symbols": 38,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_parser_objc_basic.py",
+      "quality_score": 100.0,
+      "file_lines": 353,
+      "total_symbols": 18,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_route_table_description.py",
+      "quality_score": 100.0,
+      "file_lines": 291,
+      "total_symbols": 7,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_php_docstring_extraction.py",
+      "quality_score": 100.0,
+      "file_lines": 309,
+      "total_symbols": 15,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_integration_swift_objc.py",
+      "quality_score": 100.0,
+      "file_lines": 451,
+      "total_symbols": 14,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_parser_swift_poc.py",
+      "quality_score": 100.0,
+      "file_lines": 271,
+      "total_symbols": 11,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_parser_objc_categories.py",
+      "quality_score": 100.0,
+      "file_lines": 335,
+      "total_symbols": 17,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_java_error_recovery.py",
+      "quality_score": 100.0,
+      "file_lines": 453,
+      "total_symbols": 33,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_parser_swift_property_wrappers.py",
+      "quality_score": 100.0,
+      "file_lines": 340,
+      "total_symbols": 16,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_file_classifier.py",
+      "quality_score": 100.0,
+      "file_lines": 251,
+      "total_symbols": 11,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_java_spring.py",
+      "quality_score": 100.0,
+      "file_lines": 352,
+      "total_symbols": 27,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_parser_swift_signatures.py",
+      "quality_score": 100.0,
+      "file_lines": 542,
+      "total_symbols": 27,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_thinkphp_route_extractor.py",
+      "quality_score": 100.0,
+      "file_lines": 284,
+      "total_symbols": 7,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_tech_debt_ios.py",
+      "quality_score": 100.0,
+      "file_lines": 562,
+      "total_symbols": 16,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_cli_parse.py",
+      "quality_score": 95.0,
+      "file_lines": 273,
+      "total_symbols": 22,
+      "total_issues": 1,
+      "issues": [
+        {
+          "severity": "MEDIUM",
+          "category": "god_class_warning",
+          "metric_value": 21,
+          "threshold": 20,
+          "description": "Class 'TestCliParse' has 21 methods (threshold: 20)",
+          "suggestion": "Consider splitting responsibilities into smaller classes"
+        }
+      ]
+    },
+    {
+      "file_path": "tests/test_adaptive_config.py",
+      "quality_score": 100.0,
+      "file_lines": 191,
+      "total_symbols": 21,
+      "total_issues": 0,
+      "issues": []
+    },
+    {
+      "file_path": "tests/test_parser_swift_integration.py",
+      "quality_score": 95.0,
+      "file_lines": 441,
+      "total_symbols": 12,
+      "total_issues": 1,
+      "issues": [
+        {
+          "severity": "MEDIUM",
+          "category": "long_method",
+          "metric_value": 133,
+          "threshold": 80,
+          "description": "'TestSwiftIntegration.test_parse_real_swift_file' has 133 lines (threshold: 80)",
+          "suggestion": "Consider breaking into smaller functions"
+        }
+      ]
+    },
+    {
+      "file_path": "tests/test_parallel_scan.py",
+      "quality_score": 100.0,
+      "file_lines": 281,
+      "total_symbols": 13,
+      "total_issues": 0,
+      "issues": []
+    }
+  ],
+  "test_smells": [
+    {
+      "path": "tests/test_windows_path_optimization.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @pytest.mark.skip at line 120",
+      "line_number": 120,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_windows_path_optimization.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @pytest.mark.skip at line 143",
+      "line_number": 143,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_windows_path_optimization.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @pytest.mark.skip at line 164",
+      "line_number": 164,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_semantic_extractor.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @pytest.mark.skip at line 266",
+      "line_number": 266,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_test_smells.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @skip at line 4",
+      "line_number": 4,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_test_smells.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: it.skip( at line 17",
+      "line_number": 17,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_test_smells.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: it.skip( at line 26",
+      "line_number": 26,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_test_smells.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: xit( at line 42",
+      "line_number": 42,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_test_smells.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: xit( at line 46",
+      "line_number": 46,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_test_smells.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: describe.skip( at line 60",
+      "line_number": 60,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_test_smells.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: describe.skip( at line 64",
+      "line_number": 64,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_test_smells.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @skip at line 77",
+      "line_number": 77,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_test_smells.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @pytest.mark.skip at line 83",
+      "line_number": 83,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_test_smells.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @pytest.mark.skip at line 97",
+      "line_number": 97,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_test_smells.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @skip at line 100",
+      "line_number": 100,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_test_smells.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @unittest.skip at line 107",
+      "line_number": 107,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_test_smells.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @unittest.skip at line 117",
+      "line_number": 117,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_test_smells.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @Ignore at line 120",
+      "line_number": 120,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_test_smells.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @Ignore at line 129",
+      "line_number": 129,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_test_smells.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @Ignore at line 141",
+      "line_number": 141,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_test_smells.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @Disabled at line 144",
+      "line_number": 144,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_test_smells.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @Disabled at line 151",
+      "line_number": 151,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_test_smells.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @Disabled at line 163",
+      "line_number": 163,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_test_smells.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @pytest.mark.skip at line 190",
+      "line_number": 190,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_test_smells.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @pytest.mark.skip at line 197",
+      "line_number": 197,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_test_smells.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: it.skip( at line 281",
+      "line_number": 281,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_test_smells.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: xit( at line 282",
+      "line_number": 282,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_java_calls.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @pytest.mark.skip at line 574",
+      "line_number": 574,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_java_calls.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @pytest.mark.skip at line 598",
+      "line_number": 598,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_java_calls.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @pytest.mark.skip at line 622",
+      "line_number": 622,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_java_calls.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @pytest.mark.skip at line 657",
+      "line_number": 657,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_java_calls.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @pytest.mark.skip at line 685",
+      "line_number": 685,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_java_calls.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @pytest.mark.skip at line 708",
+      "line_number": 708,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_java_calls.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @pytest.mark.skip at line 756",
+      "line_number": 756,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_cli_debt_scan.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @pytest.mark.skip at line 30",
+      "line_number": 30,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_cli_debt_scan.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @pytest.mark.skip at line 61",
+      "line_number": 61,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_cli_debt_scan.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @pytest.mark.skip at line 89",
+      "line_number": 89,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_cli_debt_scan.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @pytest.mark.skip at line 93",
+      "line_number": 93,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_tech_debt_detector.py",
+      "type": "giant_test_file",
+      "details": "Test file has 1014 lines (threshold: 1000)",
+      "line_number": null,
+      "metric_value": 1014
+    },
+    {
+      "path": "tests/test_java_parser.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @pytest.mark.skip at line 31",
+      "line_number": 31,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_java_parser.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @pytest.mark.skip at line 42",
+      "line_number": 42,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_java_parser.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @pytest.mark.skip at line 50",
+      "line_number": 50,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_java_parser.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @pytest.mark.skip at line 68",
+      "line_number": 68,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_java_parser.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @pytest.mark.skip at line 81",
+      "line_number": 81,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_java_parser.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @pytest.mark.skip at line 94",
+      "line_number": 94,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_java_parser.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @pytest.mark.skip at line 109",
+      "line_number": 109,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_java_parser.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @pytest.mark.skip at line 121",
+      "line_number": 121,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_java_parser.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @pytest.mark.skip at line 138",
+      "line_number": 138,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_java_parser.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @pytest.mark.skip at line 155",
+      "line_number": 155,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_java_parser.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @pytest.mark.skip at line 167",
+      "line_number": 167,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_java_parser.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @pytest.mark.skip at line 183",
+      "line_number": 183,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_java_parser.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @pytest.mark.skip at line 198",
+      "line_number": 198,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_java_parser.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @pytest.mark.skip at line 213",
+      "line_number": 213,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_java_parser.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @pytest.mark.skip at line 229",
+      "line_number": 229,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_java_parser.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @pytest.mark.skip at line 242",
+      "line_number": 242,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_java_parser.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @pytest.mark.skip at line 261",
+      "line_number": 261,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_java_parser.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @pytest.mark.skip at line 273",
+      "line_number": 273,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_java_parser.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @pytest.mark.skip at line 294",
+      "line_number": 294,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_java_parser.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @pytest.mark.skip at line 307",
+      "line_number": 307,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_java_parser.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @pytest.mark.skip at line 324",
+      "line_number": 324,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_java_parser.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @pytest.mark.skip at line 340",
+      "line_number": 340,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_java_parser.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @pytest.mark.skip at line 352",
+      "line_number": 352,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_java_parser.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @pytest.mark.skip at line 366",
+      "line_number": 366,
+      "metric_value": null
+    },
+    {
+      "path": "tests/test_php_docstring_extraction.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @pytest.mark.skip at line 215",
+      "line_number": 215,
+      "metric_value": null
+    }
+  ]
+}

@@ -1,0 +1,61 @@
+{
+  "target_path": "/Users/dreamlinx/Dropbox/Projects/codeindex/tests",
+  "timestamp": "2026-03-06T21:38:48.660093Z",
+  "total_files": 97,
+  "total_issues": 11,
+  "critical_issues": 0,
+  "high_issues": 0,
+  "medium_issues": 11,
+  "low_issues": 0,
+  "average_quality_score": 99.43298969072166,
+  "summary": {
+    "total_files": 97,
+    "giant_files": 0,
+    "giant_functions": 3,
+    "test_smells": 64,
+    "avg_maintainability": 9.9
+  },
+  "giant_files": [],
+  "giant_functions": [
+    {
+      "path": "tests/test_symbol_overload.py",
+      "function_name": "TestNoiseBreakdown.test_noise_breakdown_categorization",
+      "lines": 92
+    },
+    {
+      "path": "tests/test_tech_debt_reporter.py",
+      "function_name": "TestTechDebtReporter.test_generate_report_for_multiple_files",
+      "lines": 85
+    },
+    {
+      "path": "tests/test_parser_swift_integration.py",
+      "function_name": "TestSwiftIntegration.test_parse_real_swift_file",
+      "lines": 133
+    }
+  ],
+  "maintainability_scores": [
+    {
+      "path": "tests/test_cli_scan_defaults_bdd.py",
+      "score": 9.5,
+      "breakdown": {
+        "quality_score_based": 9.5
+      }
+    },
+    {
+      "path": "tests/test_typescript_parser.py",
+      "score": 9.5,
+      "breakdown": {
+        "quality_score_based": 9.5
+      }
+    },
+    {
+      "path": "tests/test_tech_debt_detector.py",
+      "score": 9.5,
+      "breakdown": {
+        "quality_score_based": 9.5
+      }
+    }
+  ],
+  "test_smells": [],
+  "file_reports": []
+}

@@ -1,0 +1,100 @@
+{
+  "target_path": "/path/to/project/src",
+  "timestamp": "2026-03-06T21:38:48.660093Z",
+  "total_files": 10,
+  "total_issues": 5,
+  "critical_issues": 0,
+  "high_issues": 0,
+  "medium_issues": 5,
+  "low_issues": 0,
+  "average_quality_score": 85.0,
+  "summary": {
+    "total_files": 10,
+    "giant_files": 1,
+    "giant_functions": 2,
+    "test_smells": 3,
+    "avg_maintainability": 7.5
+  },
+  "giant_files": [
+    {
+      "path": "src/services/UserService.ts",
+      "lines": 2500,
+      "severity": "critical"
+    }
+  ],
+  "giant_functions": [
+    {
+      "path": "src/utils/processOrder.ts",
+      "function_name": "processComplexOrder",
+      "lines": 150
+    },
+    {
+      "path": "src/services/UserService.ts",
+      "function_name": "handleUserRegistration",
+      "lines": 120
+    }
+  ],
+  "test_smells": [
+    {
+      "path": "src/__tests__/BLE.test.ts",
+      "type": "giant_test",
+      "details": "Test file exceeds 1000 lines",
+      "lines": 1625,
+      "metric_value": 1625
+    },
+    {
+      "path": "src/__tests__/helpers.test.ts",
+      "type": "skipped_test",
+      "details": "Skipped test detected: it.skip at line 42",
+      "line_number": 42,
+      "metric_value": null
+    },
+    {
+      "path": "src/__tests__/utils.test.ts",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @pytest.mark.skip at line 120",
+      "line_number": 120,
+      "metric_value": null
+    }
+  ],
+  "maintainability_scores": [
+    {
+      "path": "src/services/UserService.ts",
+      "score": 3.0,
+      "breakdown": {
+        "quality_score_based": 3.0
+      }
+    },
+    {
+      "path": "src/utils/processOrder.ts",
+      "score": 7.0,
+      "breakdown": {
+        "quality_score_based": 7.0
+      }
+    },
+    {
+      "path": "src/controllers/PaymentController.ts",
+      "score": 9.5,
+      "breakdown": {
+        "quality_score_based": 9.5
+      }
+    }
+  ],
+  "file_reports": [
+    {
+      "file_path": "src/services/UserService.ts",
+      "issues": [
+        {
+          "category": "super_large_file",
+          "severity": "critical",
+          "metric_value": 2500
+        },
+        {
+          "category": "long_method",
+          "severity": "medium",
+          "metric_value": 150
+        }
+      ]
+    }
+  ]
+}

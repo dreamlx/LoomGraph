@@ -28,6 +28,7 @@ def main(verbose: bool, quiet: bool) -> None:
 # Bottom imports trigger @main.command() registration in each submodule.
 from loomgraph.cli import (  # noqa: E402, F401
     _analysis,
+    _debt,
     _hooks,
     _indexing,
     _search,
