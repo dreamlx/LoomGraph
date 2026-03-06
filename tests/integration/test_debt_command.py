@@ -39,7 +39,7 @@ class TestDebtCommand:
 
     def test_debt_without_data(self, runner: CliRunner):
         """Test debt command without codeindex data."""
-        result = runner.invoke(main, ["debt"])
+        result = runner.invoke(main, ["debt", "--skip-topology"])
 
         assert result.exit_code == 0
         output = json.loads(result.output)
@@ -52,7 +52,7 @@ class TestDebtCommand:
     ):
         """Test debt command with minimal data (JSON format)."""
         result = runner.invoke(
-            main, ["debt", "--codeindex-data", str(minimal_fixture_path)]
+            main, ["debt", "--codeindex-data", str(minimal_fixture_path), "--skip-topology"]
         )
 
         assert result.exit_code == 0
@@ -62,7 +62,10 @@ class TestDebtCommand:
         report = output["data"]
         assert report["schema_version"] == "1.0"
         assert report["generator"]["tool"] == "loomgraph"
-        assert report["overall_health"]["grade"] == "C"
+        # Quality = 100 - (1*10 + 2*5 + 3*1) = 77
+        # Topology = 100 (skip topology)
+        # Total = (77 + 100) // 2 = 88 → Grade B
+        assert report["overall_health"]["grade"] == "B"
         assert len(report["issues"]) == 6
 
     def test_debt_with_minimal_data_console_format(
@@ -77,6 +80,7 @@ class TestDebtCommand:
                 str(minimal_fixture_path),
                 "--format",
                 "console",
+                "--skip-topology",
             ],
         )
 
@@ -87,8 +91,8 @@ class TestDebtCommand:
         data = output["data"]
         assert "message" in data
         assert "=== Technical Debt Analysis ===" in data["message"]
-        assert "Overall Score: 77/100" in data["message"]
-        assert "Grade: C" in data["message"]
+        assert "Overall Score: 88/100" in data["message"]
+        assert "Grade: B" in data["message"]
         assert "report" in data
 
     def test_debt_with_minimal_data_markdown_format(
@@ -103,6 +107,7 @@ class TestDebtCommand:
                 str(minimal_fixture_path),
                 "--format",
                 "markdown",
+                "--skip-topology",
             ],
         )
 
@@ -115,7 +120,7 @@ class TestDebtCommand:
         content = data["content"]
         assert "# Technical Debt Analysis Report" in content
         assert "## Overall Health" in content
-        assert "**Score**: 77/100 (Grade: C)" in content
+        assert "**Score**: 88/100 (Grade: B)" in content
         assert "## Critical Priority Issues" in content
 
     def test_debt_with_nonexistent_file(self, runner: CliRunner):
@@ -146,7 +151,7 @@ class TestDebtCommand:
     ):
         """Test that all expected issue categories are detected."""
         result = runner.invoke(
-            main, ["debt", "--codeindex-data", str(minimal_fixture_path)]
+            main, ["debt", "--codeindex-data", str(minimal_fixture_path), "--skip-topology"]
         )
 
         assert result.exit_code == 0
@@ -161,7 +166,7 @@ class TestDebtCommand:
     def test_debt_severity_levels(self, runner: CliRunner, minimal_fixture_path: Path):
         """Test that all severity levels are assigned correctly."""
         result = runner.invoke(
-            main, ["debt", "--codeindex-data", str(minimal_fixture_path)]
+            main, ["debt", "--codeindex-data", str(minimal_fixture_path), "--skip-topology"]
         )
 
         assert result.exit_code == 0
@@ -190,7 +195,7 @@ class TestDebtCommand:
     ):
         """Test that complexity is estimated from lines."""
         result = runner.invoke(
-            main, ["debt", "--codeindex-data", str(minimal_fixture_path)]
+            main, ["debt", "--codeindex-data", str(minimal_fixture_path), "--skip-topology"]
         )
 
         assert result.exit_code == 0

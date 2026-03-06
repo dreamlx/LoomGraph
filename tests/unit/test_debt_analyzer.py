@@ -384,11 +384,15 @@ class TestCalculateOverallHealth:
             ),
         ]
 
-        result = analyzer._calculate_overall_health()
+        result = analyzer._calculate_overall_health(topology_score=100)
 
-        # Score = 100 - (1*10 + 1*5 + 1*1) = 84
-        assert result["total_score"] == 84
-        assert result["grade"] == "B"
+        # Quality = 100 - (1*10 + 1*5 + 1*1) = 84
+        # Topology = 100 (passed in)
+        # Total = (84 + 100) // 2 = 92
+        assert result["total_score"] == 92
+        assert result["grade"] == "A"
+        assert result["breakdown"]["quality"] == 84
+        assert result["breakdown"]["topology"] == 100
         assert result["summary"]["p0_issues"] == 1
         assert result["summary"]["p1_issues"] == 1
         assert result["summary"]["p2_issues"] == 1
@@ -404,7 +408,7 @@ class TestCalculateOverallHealth:
         assert result["summary"]["p0_issues"] == 0
 
     def test_grade_thresholds(self, analyzer: DebtAnalyzer):
-        """Test all grade thresholds."""
+        """Test all grade thresholds with multi-dimensional scoring."""
         test_cases = [
             (100, "A"),
             (90, "A"),
@@ -418,10 +422,13 @@ class TestCalculateOverallHealth:
             (0, "F"),
         ]
 
-        for score, expected_grade in test_cases:
-            # Calculate how many issues to get the target score
-            # score = 100 - penalty → penalty = 100 - score
-            penalty = 100 - score
+        for target_score, expected_grade in test_cases:
+            # With topology_score=100 (perfect), total = (quality + 100) // 2
+            # To get target_score, quality = 2*target_score - 100
+            # quality = 100 - penalty → penalty = 100 - quality = 200 - 2*target_score
+            quality_needed = 2 * target_score - 100
+            penalty = 100 - quality_needed
+
             # Use P2 issues (penalty = 1 each)
             analyzer.issues = [
                 DebtIssue(
@@ -433,13 +440,13 @@ class TestCalculateOverallHealth:
                     location={},
                     metrics={},
                 )
-                for i in range(penalty)
+                for i in range(max(0, penalty))
             ]
 
-            result = analyzer._calculate_overall_health()
+            result = analyzer._calculate_overall_health(topology_score=100)
             assert (
                 result["grade"] == expected_grade
-            ), f"Score {score} should be grade {expected_grade}"
+            ), f"Target {target_score} (quality={quality_needed}) should be grade {expected_grade}, got {result['grade']} (total={result['total_score']})"
 
 
 class TestIssueToDict:

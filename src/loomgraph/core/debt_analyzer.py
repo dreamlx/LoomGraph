@@ -18,6 +18,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
+from loomgraph.core.lightrag_client import LightRAGClient
+
 
 @dataclass
 class CodeindexData:
@@ -65,11 +67,23 @@ class DebtAnalyzer:
     to provide comprehensive technical debt analysis.
 
     Usage:
-        analyzer = DebtAnalyzer()
+        from loomgraph.core.lightrag_client import LightRAGClient
+        from loomgraph.core.config import get_settings
+
+        settings = get_settings()
+        client = LightRAGClient(settings.lightrag.api_url)
+        analyzer = DebtAnalyzer(client=client)
         result = await analyzer.analyze(codeindex_data=codeindex_json)
     """
 
-    def __init__(self) -> None:
+    def __init__(self, client: LightRAGClient | None = None) -> None:
+        """Initialize DebtAnalyzer.
+
+        Args:
+            client: Optional LightRAG client for topology analysis.
+                   If None, topology analysis will be skipped.
+        """
+        self.client = client
         self.issues: list[DebtIssue] = []
 
     def import_codeindex_data(self, raw_data: dict[str, Any]) -> CodeindexData:
@@ -210,7 +224,7 @@ class DebtAnalyzer:
         return breakdown
 
     async def analyze(
-        self, codeindex_data: dict[str, Any] | None = None
+        self, codeindex_data: dict[str, Any] | None = None, module: str | None = None
     ) -> dict[str, Any]:
         """
         Main analysis entry point.
@@ -219,6 +233,7 @@ class DebtAnalyzer:
 
         Args:
             codeindex_data: Optional codeindex JSON output
+            module: Optional module filter for topology analysis (e.g. "cli")
 
         Returns:
             Debt report in standardized format (ADR-012)
@@ -232,11 +247,13 @@ class DebtAnalyzer:
         if imported_data:
             await self._analyze_codeindex_issues(imported_data)
 
-        # Step 3: Analyze graph topology (future: integrate with TopologyAnalyzer)
-        # await self._analyze_topology_issues()
+        # Step 3: Analyze graph topology (if client available)
+        topology_score = 100  # Default perfect score
+        if self.client:
+            topology_score = await self._analyze_topology_issues(module=module)
 
         # Step 4: Calculate overall health
-        overall_health = self._calculate_overall_health()
+        overall_health = self._calculate_overall_health(topology_score=topology_score)
 
         # Step 5: Generate report
         return {
@@ -322,6 +339,136 @@ class DebtAnalyzer:
             )
             issue_id_counter += 1
 
+    async def _analyze_topology_issues(self, module: str | None = None) -> int:
+        """
+        Analyze graph topology for structural code smells.
+
+        Converts topology analysis results into DebtIssue objects.
+
+        Args:
+            module: Optional module filter (e.g. "cli" for src/cli/)
+
+        Returns:
+            Topology score (0-100)
+        """
+        from loomgraph.core.topology import TopologyAnalyzer
+
+        analyzer = TopologyAnalyzer(
+            client=self.client,
+            hub_threshold=8,
+            god_threshold=10,
+            module=module,
+        )
+        result = await analyzer.analyze()
+
+        issue_id_counter = len(self.issues) + 1
+
+        # Convert orphan entities to issues (P1)
+        for orphan in result.orphans:
+            self.issues.append(
+                DebtIssue(
+                    id=f"debt-{issue_id_counter:03d}",
+                    severity="P1",
+                    category="orphan_entity",
+                    entity=orphan.get("entity", orphan.get("entity_name", "unknown")),
+                    entity_type=orphan.get("type", orphan.get("entity_type", "unknown")),
+                    location={
+                        "file": orphan.get("source_id", "unknown"),
+                    },
+                    metrics={
+                        "in_degree": orphan.get("in_degree", 0),
+                        "out_degree": orphan.get("out_degree", 0),
+                    },
+                    suggestion="Connect to other entities or consider removal if unused",
+                )
+            )
+            issue_id_counter += 1
+
+        # Convert hubs to issues (P1 - fragility risk)
+        for hub in result.hubs:
+            self.issues.append(
+                DebtIssue(
+                    id=f"debt-{issue_id_counter:03d}",
+                    severity="P1",
+                    category="hub_fragility",
+                    entity=hub.get("entity", hub.get("entity_name", "unknown")),
+                    entity_type=hub.get("type", hub.get("entity_type", "unknown")),
+                    location={
+                        "file": hub.get("source_id", "unknown"),
+                    },
+                    metrics={
+                        "in_degree": hub.get("in_degree", 0),
+                    },
+                    suggestion="High fan-in creates fragility; consider splitting responsibilities",
+                )
+            )
+            issue_id_counter += 1
+
+        # Convert god functions to issues (P0 - high complexity)
+        for god in result.god_functions:
+            self.issues.append(
+                DebtIssue(
+                    id=f"debt-{issue_id_counter:03d}",
+                    severity="P0",
+                    category="god_function",
+                    entity=god.get("entity", god.get("entity_name", "unknown")),
+                    entity_type=god.get("type", god.get("entity_type", "function")),
+                    location={
+                        "file": god.get("source_id", "unknown"),
+                    },
+                    metrics={
+                        "out_degree": god.get("out_degree", 0),
+                    },
+                    suggestion="High fan-out indicates excessive responsibility; refactor into smaller functions",
+                )
+            )
+            issue_id_counter += 1
+
+        # Convert placeholder modules to issues (P2 - maintenance burden)
+        for placeholder in result.placeholder_modules:
+            self.issues.append(
+                DebtIssue(
+                    id=f"debt-{issue_id_counter:03d}",
+                    severity="P2",
+                    category="placeholder_module",
+                    entity=placeholder.get("entity", placeholder.get("entity_name", "unknown")),
+                    entity_type="module",
+                    location={
+                        "file": placeholder.get("source_id", "unknown"),
+                    },
+                    metrics={
+                        "entity_count": placeholder.get("entity_count", 0),
+                    },
+                    suggestion="Low entity count suggests incomplete or placeholder module",
+                )
+            )
+            issue_id_counter += 1
+
+        # Convert coupling density to issue if high (P1)
+        if result.coupling.density > 0.5:
+            most_coupled = result.coupling.most_coupled_pairs[:3]  # Top 3
+            self.issues.append(
+                DebtIssue(
+                    id=f"debt-{issue_id_counter:03d}",
+                    severity="P1",
+                    category="coupling_density",
+                    entity="cross-module",
+                    entity_type="system",
+                    location={},
+                    metrics={
+                        "density": result.coupling.density,
+                        "cross_module_relations": result.coupling.cross_module,
+                        "intra_module_relations": result.coupling.intra_module,
+                    },
+                    details={
+                        "most_coupled_pairs": most_coupled,
+                    },
+                    suggestion=f"High coupling density ({result.coupling.density:.2f}); consider architectural refactoring",
+                )
+            )
+
+        return result.topology_score
+
     def _lookup_maintainability(self, data: CodeindexData, path: str) -> float:
         """Lookup maintainability score from codeindex data."""
         for score_data in data.maintainability_scores:
@@ -329,14 +476,25 @@ class DebtAnalyzer:
                 return score_data["score"]
         return 5.0  # Default mid-range score
 
-    def _calculate_overall_health(self) -> dict[str, Any]:
-        """Calculate overall health score from issues."""
+    def _calculate_overall_health(self, topology_score: int = 100) -> dict[str, Any]:
+        """Calculate overall health score from issues.
+
+        Args:
+            topology_score: Topology health score from TopologyAnalyzer (0-100)
+
+        Returns:
+            Overall health dict with breakdown by dimension
+        """
         p0_issues = sum(1 for i in self.issues if i.severity == "P0")
         p1_issues = sum(1 for i in self.issues if i.severity == "P1")
         p2_issues = sum(1 for i in self.issues if i.severity == "P2")
 
-        # Simple scoring: 100 - (P0*10 + P1*5 + P2*1)
-        total_score = max(0, 100 - (p0_issues * 10 + p1_issues * 5 + p2_issues * 1))
+        # Quality scoring: 100 - (P0*10 + P1*5 + P2*1)
+        quality_score = max(0, 100 - (p0_issues * 10 + p1_issues * 5 + p2_issues * 1))
+
+        # Overall score: average of quality and topology
+        # (test_coverage and maintainability not yet implemented)
+        total_score = (quality_score + topology_score) // 2
 
         # Grade calculation
         if total_score >= 90:
@@ -354,13 +512,13 @@ class DebtAnalyzer:
             "total_score": total_score,
             "grade": grade,
             "breakdown": {
-                "topology": 0,  # TODO: integrate TopologyAnalyzer
-                "quality": total_score,
-                "test_coverage": 0,
-                "maintainability": 0,
+                "topology": topology_score,
+                "quality": quality_score,
+                "test_coverage": 0,  # TODO: integrate coverage data
+                "maintainability": 0,  # TODO: aggregate from codeindex
             },
             "summary": {
-                "total_entities": 0,
+                "total_entities": 0,  # TODO: get from topology result
                 "p0_issues": p0_issues,
                 "p1_issues": p1_issues,
                 "p2_issues": p2_issues,
