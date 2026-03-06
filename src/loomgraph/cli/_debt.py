@@ -126,7 +126,7 @@ async def _async_debt(
         settings = get_settings()
         workspace_name = get_auto_workspace(workspace)
         client = LightRAGClient(
-            api_url=settings.lightrag.api_url,
+            base_url=settings.lightrag.api_url,
             timeout=settings.lightrag.api_timeout,
             workspace=workspace_name,
         )
