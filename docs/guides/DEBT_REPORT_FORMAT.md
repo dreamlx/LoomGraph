@@ -385,21 +385,34 @@ OrderService → PaymentService → OrderValidator → OrderService
 
 ## 数据契约（codeindex ↔ LoomGraph）
 
-### codeindex 输出格式
+### 职责分离原则
 
-codeindex 通过 `debt-scan` 命令输出 JSON 数据，LoomGraph 通过 `--codeindex-data` 参数导入。
+**codeindex**（原始数据采集器）:
+- ✅ 提供：测量值（lines, line_number, severity）
+- ❌ 不提供：推断值（complexity）、聚合值（详细 breakdown）
 
-**codeindex 输出示例**：
+**LoomGraph**（分析引擎）:
+- ✅ 接收：codeindex 原始数据
+- ✅ 计算：complexity 估算、breakdown 聚合、多维度评分
+
+---
+
+### codeindex 输出格式（v0.22.0 实际格式）
+
+codeindex 通过 `tech-debt` 命令（`debt-scan` 为别名）输出 JSON 数据。
+
+**实际输出示例**：
 
 ```json
 {
-  "timestamp": "2024-03-05T10:25:00Z",
-  "target_path": "./src",
+  "timestamp": "2026-03-06T15:32:14.368787Z",
+  // ❌ 无 target_path 字段（调用上下文，LoomGraph 自己记录）
   "summary": {
-    "total_files": 115,
-    "giant_files": 2,
-    "giant_functions": 8,
-    "test_smells": 17
+    "total_files": 97,
+    "giant_files": 0,
+    "giant_functions": 3,
+    "test_smells": 64,
+    "avg_maintainability": 9.9
   },
   "giant_files": [
     {
@@ -408,17 +421,35 @@ codeindex 通过 `debt-scan` 命令输出 JSON 数据，LoomGraph 通过 `--code
       "severity": "critical"
     }
   ],
+  "giant_functions": [
+    {
+      "path": "tests/test_symbol_overload.py",
+      "function_name": "test_noise_breakdown_categorization",
+      "lines": 92
+      // ❌ 无 complexity 字段（LoomGraph 基于 lines 估算）
+    }
+  ],
+  "test_smells": [
+    {
+      "path": "tests/test_windows_path_optimization.py",
+      "type": "skipped_test",
+      "details": "Skipped test detected: @pytest.mark.skip at line 120",
+      "line_number": 120,
+      "metric_value": null
+      // ✅ 使用 line_number（行号），不是 lines（行数）
+    }
+  ],
   "maintainability_scores": [
     {
-      "path": "src/services/UserService.ts",
-      "score": 3,
+      "path": "tests/test_cli_scan_defaults_bdd.py",
+      "score": 9.5,
       "breakdown": {
-        "file_size_penalty": -5,
-        "comment_ratio_penalty": -2,
-        "naming_violations": 0
+        "quality_score_based": 9.5
+        // ❌ 简化 breakdown（详细聚合在 LoomGraph）
       }
     }
-  ]
+  ],
+  "file_reports": [...]  // 完整原始数据（供 LoomGraph 聚合）
 }
 ```
 
@@ -426,7 +457,7 @@ codeindex 通过 `debt-scan` 命令输出 JSON 数据，LoomGraph 通过 `--code
 
 ```bash
 # Step 1: codeindex 扫描
-codeindex debt-scan ./src --format json > /tmp/codeindex-debt.json
+codeindex tech-debt ./src --format json > /tmp/codeindex-debt.json
 
 # Step 2: LoomGraph 分析（自动合并 codeindex 数据）
 loomgraph debt --codeindex-data /tmp/codeindex-debt.json --format markdown
@@ -434,12 +465,16 @@ loomgraph debt --codeindex-data /tmp/codeindex-debt.json --format markdown
 
 **数据映射规则**：
 
-| codeindex 字段 | LoomGraph 字段 | 说明 |
+| codeindex 字段 | LoomGraph 处理 | 说明 |
 |---------------|---------------|------|
-| `maintainability_scores[].score` | `issues[].metrics.maintainability_score` | 可维护性评分（0-10） |
-| `giant_files[].path` | `issues[].location.file` | 文件路径 |
-| `giant_files[].lines` | `issues[].metrics.lines` | 代码行数 |
-| `test_smells[]` | `issues[]` (category=test_smell) | 测试 Smells |
+| `timestamp` | 直接使用 | ISO 8601 时间戳 |
+| `summary.*` | 直接使用 | 汇总统计 |
+| `giant_files[].lines` | 直接使用 | 文件行数 |
+| `giant_functions[].lines` | → 估算 `complexity` | `complexity ≈ lines // 10` |
+| `test_smells[].line_number` | 直接使用 | 跳过测试的行号 |
+| `maintainability_scores[].score` | 直接使用或调整 | 0-10 分 |
+| `maintainability_scores[].breakdown` | 忽略，从 `file_reports` 聚合 | 详细分解由 LoomGraph 计算 |
+| `file_reports` | 聚合详细 `breakdown` | 完整问题列表 |
 
 ---
 

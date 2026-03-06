@@ -166,12 +166,12 @@ Confidence（置信度）+ Speed（速度）+ Isolation（隔离性）= 总分
 
 | 功能 | codeindex | LoomGraph | 数据流 |
 |------|-----------|-----------|--------|
-| 文件大小统计 | ✅ 主责 | ❌ | → |
-| 超长函数检测 | ✅ 主责 | ❌ | → |
+| 文件大小统计（lines） | ✅ 主责 | ❌ | → |
+| 超长函数检测（lines） | ✅ 主责 | ❌ | → |
 | Mock 使用统计 | ✅ 主责 | ❌ | → |
 | 跳过的测试识别 | ✅ 主责 | ❌ | → |
-| 圈复杂度/认知复杂度 | ✅ 主责 | ❌ | → |
-| **可维护性评分** | ✅ 计算 | 🔄 集成 | codeindex → LoomGraph |
+| 圈复杂度/认知复杂度 | ❌ | ✅ 估算 | ← 基于 lines |
+| **可维护性评分** | ✅ 原始分 | 🔄 集成/调整 | codeindex → LoomGraph |
 | 孤儿实体检测 | ❌ | ✅ 主责 | |
 | 循环依赖检测 | ❌ | ✅ 主责 | |
 | 架构分层违规 | ❌ | ✅ 主责 | |
@@ -220,26 +220,42 @@ loomgraph debt --action-plan
 #### codeindex 侧
 
 ```bash
-# 新增子命令
-codeindex debt-scan ./src --format json
+# tech-debt 命令（统一入口，debt-scan 为别名）
+codeindex tech-debt ./src --format json
 
-# 输出示例
+# 输出示例（实际格式，v0.22.0）
 {
+  "timestamp": "2026-03-06T15:32:14Z",
+  "summary": {
+    "total_files": 97,
+    "giant_files": 0,
+    "giant_functions": 3,
+    "test_smells": 64,
+    "avg_maintainability": 9.9
+  },
   "giant_files": [
-    {"path": "UserService.ts", "lines": 2500, "score": 3}
+    {"path": "UserService.ts", "lines": 2500, "severity": "critical"}
   ],
   "giant_functions": [
-    {"path": "processOrder", "lines": 150, "complexity": 25}
+    {"path": "processOrder.py", "function_name": "process", "lines": 150}
+    // ❌ 无 complexity 字段（LoomGraph 自己估算）
   ],
   "test_smells": [
-    {"path": "BLE.test.ts", "type": "giant_test", "lines": 1625}
+    {"path": "test_foo.py", "type": "skipped_test", "line_number": 120}
+    // ❌ 无 lines 字段（line_number 语义更清晰）
   ],
-  "maintainability_scores": {
-    "UserService.ts": 3,
-    "OrderService.ts": 7
-  }
+  "maintainability_scores": [
+    {"path": "UserService.ts", "score": 3, "breakdown": {"quality_score_based": 3}}
+    // ❌ breakdown 结构简化（详细聚合在 LoomGraph）
+  ],
+  "file_reports": [...]  // 完整原始数据
 }
 ```
+
+**职责说明**：
+- ✅ codeindex 提供：原始测量值（lines, line_number, severity）
+- ❌ codeindex 不提供：推断值（complexity）、聚合值（breakdown 详细分解）
+- ✅ LoomGraph 负责：基于原始数据计算评分和推断
 
 ---
 
@@ -296,14 +312,19 @@ p0_issues = [i for i in report["issues"] if i["severity"] == "P0"]
 
 ### 为什么职责边界清晰？
 
-**避免重复开发**：
-- codeindex 已有复杂度计算能力（tree-sitter AST）
-- LoomGraph 专注图谱分析（调用关系、影响范围）
-- 明确数据流向：codeindex → LoomGraph，单向依赖
+**单一职责原则**：
+- **codeindex = 原始数据采集器**：提供测量值（lines, line_number, severity）
+- **LoomGraph = 分析引擎**：基于原始数据 + 图谱关系进行评分和推断
+- **明确数据流向**：codeindex → LoomGraph，单向依赖
+
+**避免越界**：
+- ❌ codeindex 不应提供：`complexity`（推断值）、详细 `breakdown`（聚合值）
+- ✅ codeindex 只提供：`lines`（原始数据）、`file_reports`（完整问题列表）
+- ✅ LoomGraph 负责：从原始数据推导 complexity、从 file_reports 聚合 breakdown
 
 **独立演化**：
-- codeindex 可独立升级复杂度算法（如迁移到 Ruff）
-- LoomGraph 可独立优化图谱查询性能
+- codeindex 可优化检测规则（阈值调整、新增 Smell 类型）
+- LoomGraph 可独立调整评分算法（complexity 估算公式、breakdown 权重）
 
 ---
 
