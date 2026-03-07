@@ -393,3 +393,84 @@ async def _async_check(
         "stale_entries": stale_entries,
         "suggestion": suggestion,
     }
+
+
+@main.command("git-metrics")
+@click.argument("path", type=click.Path(exists=True), default=".")
+@click.option("--since", default="3 months", help="Time window (e.g., '3 months', '6 months', '1 year')")
+@click.option("--output", "-o", type=click.Path(), help="Save results to JSON file")
+def git_metrics(path: str, since: str, output: str | None) -> None:
+    """Analyze git history metrics for technical debt.
+
+    PATH: Repository root path (default: current directory)
+
+    Examples:
+        loomgraph git-metrics ./src               # Analyze src directory
+        loomgraph git-metrics --since "6 months"  # 6-month window
+        loomgraph git-metrics --output metrics.json  # Save to file
+    """
+    try:
+        from loomgraph.core.git_metrics import GitMetricsAnalyzer
+
+        analyzer = GitMetricsAnalyzer(Path(path), since=since)
+        result = analyzer.analyze()
+
+        # Convert to dict for JSON serialization
+        output_data = {
+            "repo_path": str(result.repo_path),
+            "since": result.since,
+            "analyzed_at": result.analyzed_at.isoformat(),
+            "summary": result.summary,
+            "hotspots": [
+                {
+                    "file": h.file,
+                    "change_freq": h.change_freq,
+                    "hotspot_score": h.hotspot_score,
+                    "rank": h.rank,
+                }
+                for h in result.hotspots
+            ],
+            "bus_factor": [
+                {
+                    "file": bf.file,
+                    "owner": bf.owner,
+                    "contributors": bf.contributors,
+                    "risk_level": bf.risk_level,
+                }
+                for bf in result.bus_factor
+            ],
+            "file_metrics": {
+                file_path: {
+                    "change_frequency": fm.change_frequency,
+                    "last_modified_days": fm.last_modified_days,
+                    "authors": fm.authors,
+                    "primary_author": fm.primary_author,
+                    "bug_fix_count": fm.bug_fix_count,
+                    "bug_fix_ratio": round(fm.bug_fix_ratio, 3),
+                    "churn": fm.churn,
+                    "age_days": fm.age_days,
+                }
+                for file_path, fm in result.file_metrics.items()
+            },
+        }
+
+        # Save to file if --output specified
+        if output:
+            import json
+
+            with open(output, "w") as f:
+                json.dump(output_data, f, indent=2)
+
+            output_success(
+                {
+                    "message": f"Git metrics saved to {output}",
+                    "hotspots": len(result.hotspots),
+                    "bus_factor_critical": result.summary.get("bus_factor_critical", 0),
+                }
+            )
+        else:
+            # Output to console
+            output_success(output_data)
+
+    except Exception as e:
+        output_error(f"Git metrics analysis failed: {e}", ErrorCode.OPERATION_FAILED)
