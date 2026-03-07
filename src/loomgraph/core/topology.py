@@ -8,6 +8,7 @@ and cross-module coupling density.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -66,6 +67,18 @@ ORPHAN_SUFFIX_PATTERNS = (
     "Client",  # LightRAGClient, JinaEmbeddingClient - service clients
 )
 
+# Regex patterns for common data classes and DTOs (reduce false positives)
+ORPHAN_REGEX_PATTERNS = (
+    r".*Config$",  # Configuration classes (e.g., AdaptiveSymbolsConfig)
+    r".*Result$",  # Result DTOs (e.g., ScanResult, ParseResult)
+    r".*Info$",  # Information classes (e.g., ErrorInfo, RouteInfo)
+    r".*Error$",  # Error classes (e.g., ValidationError)
+    r".*Data$",  # Data classes (e.g., EntityData, RelationData)
+    r".*DTO$",  # Explicit DTOs (e.g., UserDTO)
+    r".*Model$",  # Data models (e.g., UserModel)
+    r".*Schema$",  # Schema definitions (e.g., RequestSchema)
+)
+
 # Public utility functions with expected high fan-in (hubs by design)
 WHITELIST_HUBS = frozenset({
     # CLI output helpers (used across all CLI commands)
@@ -119,7 +132,15 @@ def _is_whitelisted_orphan(name: str, source_id: str = "") -> bool:
     # Suffix patterns (Analyzer, Extractor, Parser, etc.)
     # Extract the class name (before the last dot if namespaced)
     class_name = name.split(".")[-1] if "." not in name else name.split(".")[0]
-    return any(class_name.endswith(pattern) for pattern in ORPHAN_SUFFIX_PATTERNS)
+    if any(class_name.endswith(pattern) for pattern in ORPHAN_SUFFIX_PATTERNS):
+        return True
+
+    # Regex patterns for data classes and DTOs (Config, Result, Info, Error, etc.)
+    for pattern in ORPHAN_REGEX_PATTERNS:
+        if re.match(pattern, class_name):
+            return True
+
+    return False
 
 
 def _entity_name(entity: dict[str, Any]) -> str:
@@ -520,12 +541,33 @@ class TopologyAnalyzer:
             {"from": p[0], "to": p[1], "count": c} for (p, c) in sorted_pairs
         ]
 
+        # Aggregate class and constructor relations (fix false positive orphans)
+        # For classes, include relations of their __init__ methods
+        aggregated_in_degree = dict(in_degree)
+        aggregated_out_degree = dict(out_degree)
+
+        for name, entity in entity_map.items():
+            if entity.get("entity_type", "") == "class":
+                # Check if constructor has relations
+                init_name = f"{name}.__init__"
+                if init_name in in_degree:
+                    # Merge constructor's callers into class
+                    if name not in aggregated_in_degree:
+                        aggregated_in_degree[name] = []
+                    aggregated_in_degree[name].extend(in_degree[init_name])
+                if init_name in out_degree:
+                    # Merge constructor's callees into class
+                    if name not in aggregated_out_degree:
+                        aggregated_out_degree[name] = []
+                    aggregated_out_degree[name].extend(out_degree[init_name])
+
         # Detect orphans (0 in + 0 out, exclude module type and whitelisted)
         orphans = []
         for name, entity in entity_map.items():
             if entity.get("entity_type", "") == "module":
                 continue
-            if name not in in_degree and name not in out_degree:
+            # Use aggregated degrees (includes constructor relations for classes)
+            if name not in aggregated_in_degree and name not in aggregated_out_degree:
                 source_id = entity.get("source_id", "")
                 # Exclude whitelisted orphans (data classes, DTOs, test fixtures, etc.)
                 if _is_whitelisted_orphan(name, source_id):
