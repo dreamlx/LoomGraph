@@ -1,6 +1,6 @@
 [project]
 name = "loomgraph"
-version = "0.9.0"
+version = "0.9.1"
 description = "Enterprise Code Intelligence Engine - H200 Optimized GraphRAG for Code"
 readme = "README.md"
 requires-python = ">=3.11"
