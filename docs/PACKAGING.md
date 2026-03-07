@@ -25,7 +25,7 @@ make help
 
 | 命令 | 说明 |
 |------|------|
-| `make release VERSION=0.8.0` | 🚀 **完整发布流程**（bump → test → lint → commit → tag → push） |
+| `make release VERSION=0.9.0` | 🚀 **完整发布流程**（bump → test → lint → commit → tag → push） |
 | `make delivery-summary` | 📋 生成客户交付总结 |
 | `make token-list` | 🔑 查看所有客户 Token 状态 |
 | `make token-check` | ⏰ 检查即将过期的 Token |
@@ -38,7 +38,7 @@ make help
 **场景 1: 发布新版本**
 ```bash
 # 一键发布（推荐）
-make release VERSION=0.8.0
+make release VERSION=0.9.0
 
 # 等待 GitHub Actions 完成后
 make delivery-summary
@@ -146,7 +146,7 @@ EOF
 
 ```bash
 # 一键发布（自动执行 bump → test → lint → commit → tag → push）
-make release VERSION=0.8.0
+make release VERSION=0.9.0
 
 # 等待 GitHub Actions 完成（~1 分钟），然后生成交付总结
 make delivery-summary
@@ -159,12 +159,12 @@ cat /tmp/customer_delivery_summary.txt
 
 ```bash
 # 1. Bump version（自动更新 pyproject.toml, customers/VERSION, CHANGELOG.md）
-python scripts/bump_version.py 0.8.0
+python scripts/bump_version.py 0.9.0
 
 # 2. Commit + tag
 git add pyproject.toml customers/VERSION CHANGELOG.md
-git commit -m "chore: bump version to 0.8.0"
-git tag v0.8.0
+git commit -m "chore: bump version to 0.9.0"
+git tag v0.9.0
 
 # 3. Push（触发 CI: test → build → GitHub Release）
 git push origin develop --tags
@@ -198,7 +198,7 @@ cat /tmp/customer_delivery_summary.txt
 python scripts/manage_tokens.py --check-expiry
 
 # 生成安装命令
-python scripts/manage_tokens.py --generate-install customer --version v0.8.0
+python scripts/manage_tokens.py --generate-install customer --version v0.9.0
 
 # 列出所有客户 token 状态
 python scripts/manage_tokens.py --list
@@ -223,7 +223,7 @@ python scripts/manage_tokens.py --verify customer --token github_pat_xxxxx
 python scripts/generate_delivery_summary.py
 
 # 生成指定版本的交付总结
-python scripts/generate_delivery_summary.py --version v0.8.0
+python scripts/generate_delivery_summary.py --version v0.9.0
 
 # 自定义输出路径
 python scripts/generate_delivery_summary.py --output ~/Desktop/delivery.txt
@@ -243,7 +243,7 @@ python scripts/generate_delivery_summary.py --print
 **输出示例**：
 ```
 ═══════════════════════════════════════════════════════════════
-  LoomGraph v0.8.0 客户交付包 - 就绪
+  LoomGraph v0.9.0 客户交付包 - 就绪
 ═══════════════════════════════════════════════════════════════
 
 📦 3 个客户安装包已准备完毕，每个包含：

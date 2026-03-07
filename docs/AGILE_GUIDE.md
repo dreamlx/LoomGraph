@@ -177,7 +177,10 @@ Task 是开发者的具体工作项。**不建 GitHub Issue**，在以下位置�
 ```
 v0.5.0  ← EPIC-005 + EPIC-006
 v0.6.0  ← EPIC-007
-v0.7.0  ← MCP Server
+v0.7.0  ← EPIC-008 (搜索体系重构)
+v0.8.0  ← EPIC-009 (图谱拓扑分析)
+v0.9.0  ← EPIC-010 (Git × 知识图谱融合)
+v1.0.0  ← MCP Server
 ```
 
 ### 5.3 Issue → PR → Close 流程
@@ -238,7 +241,7 @@ codeindex parse JSON → LoomGraph mapper → LightRAG HTTP API
 三仓库版本独立，但在 ROADMAP.md 中标注版本对应关系：
 
 ```
-codeindex v0.18  ←→  LoomGraph v0.5.0  ←→  LightRAG (latest API)
+codeindex v0.20+  ←→  LoomGraph v0.9.0  ←→  LightRAG (latest API)
 ```
 
 ---

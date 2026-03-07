@@ -1,14 +1,14 @@
 # LoomGraph 开发路线图
 
-**版本**: 0.7.0
-**更新日期**: 2026-02-22
+**版本**: 0.9.0
+**更新日期**: 2026-03-07
 
 ---
 
 ## 📍 当前状态: Phase 3 全部完成 ✅
 
-**已完成**: MVP 核心 + LightRAG 集成 + CLI + 双通道发布 + deps/overview (EPIC-004) + Workspace 管理 (EPIC-005) + 跨 Workspace 对比 (EPIC-006) + 研发熵减 Skills (EPIC-007) + insert_custom_kg 迁移 (636x 提速) + 搜索体系重构 (EPIC-008) + 图谱拓扑分析 (EPIC-009) + 增量更新策略 (EPIC-003)
-**下一个**: IDE 集成 (MCP Server, v0.8.0)
+**已完成**: MVP 核心 + LightRAG 集成 + CLI + 双通道发布 + deps/overview (EPIC-004) + Workspace 管理 (EPIC-005) + 跨 Workspace 对比 (EPIC-006) + 研发熵减 Skills (EPIC-007) + insert_custom_kg 迁移 (636x 提速) + 搜索体系重构 (EPIC-008) + 图谱拓扑分析 (EPIC-009) + 增量更新策略 (EPIC-003) + Git × 知识图谱时空融合 (EPIC-010)
+**下一个**: IDE 集成 (MCP Server, v1.0.0)
 
 ---
 
@@ -158,7 +158,21 @@
 
 详见 [EPIC-003](epics/EPIC-003-update-strategy.md)
 
-### 第五阶段: IDE 集成 — v0.8.0
+### 第四阶段d: Git × 知识图谱时空融合 — v0.9.0 ✅
+
+> **背景**: 静态代码质量 + 拓扑健康度无法预测未来趋势，缺少时间维度
+> **价值**: 引入 Git 历史度量，从"快照评估"升级为"趋势预测"，提前预警技术债务恶化
+
+| EPIC | Feature | 描述 | 状态 |
+|------|---------|------|------|
+| EPIC-010 | `git-metrics` | Git 历史度量分析（热点检测、总线因子、缺陷率） | ✅ |
+| EPIC-010 | `debt --with-git` | 三维度债务评分（质量 + 拓扑 + Git） | ✅ |
+| EPIC-010 | `trends` | 代码腐化趋势预测（线性回归 + 自动预警） | ✅ |
+| EPIC-010 | Dogfooding | 5 个 bugs 发现并修复 | ✅ |
+
+详见 [EPIC-010](epics/EPIC-010.md) 和 [docs/DOGFOODING_EPIC010.md](DOGFOODING_EPIC010.md)
+
+### 第五阶段: IDE 集成 — v1.0.0
 
 > **定位**: 封装所有 CLI 能力为 MCP 工具，服务 Cursor/IDE 用户
 > **放最后的原因**: 能封装最多命令；当前客户群体用 Claude Code Skills，MCP 不紧急
@@ -207,10 +221,11 @@
 | v0.5.0 | Phase 3 | 能力层 | 跨 workspace 对比 (compare/similar) (EPIC-006) | ✅ 已发布 |
 | v0.6.0 | Phase 3 | Skill 层 | 研发熵减 Skills (debt-radar/sync-advisor/evolution) (EPIC-007) | ✅ 已发布 |
 | v0.6.1 | Phase 3 | — | insert_custom_kg 迁移 (636x 提速) + CLI 模块拆分 | ✅ 已发布 |
-| v0.7.0 | Phase 3 | 能力层 | 搜索体系重构: find / query / graph 三分 (EPIC-008) | ✅ 已完成 |
-| v0.7.1 | Phase 3 | 能力+Skill | 图谱拓扑债务分析: topology / check / Skill A 增强 (EPIC-009) | 📋 规划中 |
-| v0.8.0 | Phase 3 | 集成层 | MCP Server (封装全部命令) | 📋 规划中 |
-| v1.0.0 | Phase 4 | — | 生产就绪 | 📋 远期 |
+| v0.7.0 | Phase 3 | 能力层 | 搜索体系重构: find / query / graph 三分 (EPIC-008) | ✅ 已发布 |
+| v0.8.0 | Phase 3 | 能力+Skill | 图谱拓扑债务分析: topology / check / Skill A 增强 (EPIC-009) | ✅ 已发布 |
+| v0.9.0 | Phase 3 | 能力层 | Git × 知识图谱时空融合: git-metrics / trends / 三维评分 (EPIC-010) | ✅ 已发布 |
+| v1.0.0 | Phase 3 | 集成层 | MCP Server (封装全部命令) | 📋 规划中 |
+| v2.0.0 | Phase 4 | — | 生产就绪（性能优化 + 企业级特性） | 📋 远期 |
 
 ---
 
@@ -226,14 +241,18 @@
 | Impact | 19 | ✅ |
 | Injector | 18 | ✅ |
 | DepsAnalyzer | 14 | ✅ |
+| GitMetricsAnalyzer | 14 | ✅ |
+| TrendAnalyzer | 13 | ✅ |
 | Config | 13 | ✅ |
 | Embedding | 11 | ✅ |
 | Indexer | 11 | ✅ |
 | CompareAnalyzer | 11 | ✅ |
 | OverviewAnalyzer | 10 | ✅ |
 | SimilarAnalyzer | 10 | ✅ |
+| TopologyAnalyzer | 10 | ✅ |
 | Git | 8 | ✅ |
-| **小计** | **260** | ✅ |
+| GitParser | 8 | ✅ |
+| **小计** | **305** | ✅ |
 
 ### 集成测试
 
@@ -245,7 +264,9 @@
 | LightRAG Connection | 3 | ✅ |
 | **小计** | **22** | ✅ |
 
-| **Total** | **282** | ✅ |
+| **Total** | **327** | ✅ |
+
+**注**: v0.9.0 实际测试数为 358（包含 31 个未在此表分类的新增测试）
 
 ---
 
@@ -262,6 +283,9 @@
 | **ADR-008** | **双向调度器** | **codeindex/LoomGraph 能力边界** |
 | **ADR-009** | **Workspace 即知识快照** | **从隔离机制到可对比的知识切片** |
 | **ADR-010** | **搜索体系重构** | **find/query/graph 三分，语义问答差异化** |
+| **ADR-011** | **AI 迭代策略** | **外部 AI 优先（codeindex），内部 AI 保守** |
+| **ADR-012** | **技术债务分析格式** | **Console/Markdown/JSON 三格式输出** |
+| **ADR-013** | **Git × 知识图谱时空融合** | **独立分析 + 后期 Join，三维度评分** |
 
 ---
 
@@ -290,11 +314,16 @@ v0.6.0                                Skill A: debt-radar
 v0.7.0                                搜索体系重构               query API
                                       find / query / graph         ✅
 
-v0.7.1                                拓扑债务分析
-                                      topology / check
-                                      Skill A 增强
+v0.8.0                                拓扑债务分析               orphans / degree /
+                                      topology / check             stats / source_ids
+                                      Skill A 增强                 ✅
 
-v0.8.0                                MCP Server
+v0.9.0                                Git × 知识图谱融合         (无需新 endpoint)
+                                      git-metrics / trends
+                                      debt --with-git
+                                      三维度评分 ✅
+
+v1.0.0                                MCP Server
                                       (封装全部命令)
 ```
 
@@ -335,11 +364,27 @@ EPIC-006 ──────────┐         │            │    ├─�
 
 ## 更新日志
 
-- **2026-02-21 (v0.7.1 规划)**:
+- **2026-03-07 (v0.9.0 发布)**:
+  - EPIC-010 已完成: Git × 知识图谱时空融合 (358 tests)
+  - 新增 git-metrics 命令: 热点检测、总线因子、缺陷率
+  - 新增 trends 命令: 线性回归趋势预测 + 自动预警
+  - debt 命令增强: --with-git 三维度评分
+  - Dogfooding 发现并修复 5 个 bugs
+  - README 大改: 数据驱动的价值主张 + v0.9.0 特性展示
+  - 测试覆盖: 282 → 358 (+76 tests)
+  - 性能: git-metrics <3s, trends <1s
+- **2026-02-22 (v0.8.0 发布)**:
+  - EPIC-009 已完成: 图谱拓扑债务分析 (320 tests)
+  - 新增 topology 命令: orphans / hubs / god / coupling / module 分析
+  - 新增 check 命令: 索引新鲜度检查（source_id vs 磁盘文件）
+  - Skill A 增强: debt-radar 从 3→7 维度分析
+  - LightRAG 服务端 4 个新 endpoint: orphans / degree / stats / source_ids
+- **2026-02-21 (v0.7.0 发布)**:
   - EPIC-008 已完成: find / query / graph 三分 (282 tests)
-  - EPIC-009 创建: 图谱拓扑债务分析 — topology / check / Skill A 增强
-  - dogfooding 发现: codeindex 全绿时图谱仍发现 46 孤岛 + 72 上帝函数 + 34 过时索引
-  - v0.7.1 = 拓扑分析，MCP Server 保持 v0.8.0
+  - 搜索体系重构: find (结构化) / query (语义RAG) / graph (精确遍历)
+  - find 新增 --with-relations 参数（BFS 减少 N+1 调用）
+  - graph 增强: 结果添加 source_id 字段
+  - workspace 泄漏问题证伪（header 名称混淆）
 - **2026-02-21 (v0.7.0 规划)**:
   - EPIC-008 创建: 搜索体系重构 — find / query / graph 三分
   - Issue #7 关闭 (superseded by EPIC-008)
