@@ -97,6 +97,54 @@ class TestTopologyAnalyzerFromData:
         assert len(result.orphans) == 0
         assert result.total_entities == 0
 
+    def test_orphan_class_constructor_aggregation(self) -> None:
+        """Class with __init__ calls should NOT be orphan (Issue #28 fix)."""
+        entities = [
+            self._make_entity("MyClass", "src/models.py", "class"),
+            self._make_entity("MyClass.__init__", "src/models.py", "external"),
+            self._make_entity("TestCase", "tests/test_models.py"),
+        ]
+        relations = [
+            # Constructor is called, but not the class itself
+            self._make_relation("TestCase", "MyClass.__init__"),
+        ]
+
+        analyzer = TopologyAnalyzer(client=None)
+        result = analyzer.analyze_from_data(entities, relations)
+
+        # MyClass should NOT be orphan (has constructor calls)
+        orphan_names = [o["entity"] for o in result.orphans]
+        assert "MyClass" not in orphan_names
+
+    def test_orphan_whitelist_regex_patterns(self) -> None:
+        """Data classes matching regex patterns should be whitelisted (Issue #28 fix)."""
+        entities = [
+            self._make_entity("UserConfig", "src/config.py", "class"),
+            self._make_entity("ScanResult", "src/scanner.py", "class"),
+            self._make_entity("ErrorInfo", "src/errors.py", "class"),
+            self._make_entity("RequestData", "src/api.py", "class"),
+            self._make_entity("UserDTO", "src/dtos.py", "class"),
+            self._make_entity("DatabaseModel", "src/db.py", "class"),
+            self._make_entity("APISchema", "src/schemas.py", "class"),
+            # This one should be detected as orphan (no pattern match)
+            self._make_entity("Helper", "src/utils.py", "function"),
+        ]
+        relations = []  # All have 0 relations
+
+        analyzer = TopologyAnalyzer(client=None)
+        result = analyzer.analyze_from_data(entities, relations)
+
+        # Only "Helper" should be orphan, all data classes whitelisted
+        orphan_names = [o["entity"] for o in result.orphans]
+        assert "Helper" in orphan_names
+        assert "UserConfig" not in orphan_names  # Matches *Config$
+        assert "ScanResult" not in orphan_names  # Matches *Result$
+        assert "ErrorInfo" not in orphan_names  # Matches *Info$
+        assert "RequestData" not in orphan_names  # Matches *Data$
+        assert "UserDTO" not in orphan_names  # Matches *DTO$
+        assert "DatabaseModel" not in orphan_names  # Matches *Model$
+        assert "APISchema" not in orphan_names  # Matches *Schema$
+
     def test_hub_detection(self) -> None:
         """Entity with high in-degree should be flagged as hub."""
         entities = [
