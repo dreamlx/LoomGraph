@@ -3,18 +3,19 @@
 TDD Green Phase: Tests now use actual implementation.
 """
 
-import pytest
 from pathlib import Path
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from loomgraph.core.impact import (
-    ImpactAnalyzer,
-    GitDiffParser,
-    ChangedSymbolExtractor,
-    ChangeType,
+    Caller,
     ChangedFile,
     ChangedSymbol,
-    Caller,
+    ChangedSymbolExtractor,
+    ChangeType,
+    GitDiffParser,
+    ImpactAnalyzer,
     ImpactResult,
     RiskAssessment,
     RiskAssessor,
@@ -297,18 +298,20 @@ class TestImpactAnalyzer:
                     added_lines=[(10, 15)],
                 )
             ]
-            with patch.object(GitDiffParser, "get_current_commit", return_value="abc1234"):
-                with patch.object(ChangedSymbolExtractor, "extract_from_files") as mock_extract:
-                    mock_extract.return_value = [
-                        ChangedSymbol(
-                            name="test_func",
-                            file="src/test.py",
-                            change_type=ChangeType.MODIFIED,
-                            lines_changed=5,
-                        )
-                    ]
+            with (
+                patch.object(GitDiffParser, "get_current_commit", return_value="abc1234"),
+                patch.object(ChangedSymbolExtractor, "extract_from_files") as mock_extract,
+            ):
+                mock_extract.return_value = [
+                    ChangedSymbol(
+                        name="test_func",
+                        file="src/test.py",
+                        change_type=ChangeType.MODIFIED,
+                        lines_changed=5,
+                    )
+                ]
 
-                    result = await analyzer.analyze_commit("HEAD")
+                result = await analyzer.analyze_commit("HEAD")
 
         assert result.commit == "abc1234"
         assert len(result.changed_symbols) == 1

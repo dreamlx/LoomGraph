@@ -12,12 +12,12 @@ Pipeline:
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 from loomgraph.core.injector import inject_parse_result
 from loomgraph.core.lightrag_client import LightRAGClient
-from loomgraph.core.mapper import detect_language
 from loomgraph.core.models import IndexResult, ParseResult
 
 if TYPE_CHECKING:
@@ -244,7 +244,6 @@ async def index_file(
         IndexResult for the single file
     """
     path = Path(file_path)
-    errors: list[str] = []
 
     # Parse
     result = parse_file(path)

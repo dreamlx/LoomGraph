@@ -7,7 +7,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from loomgraph.core.impact.models import ChangeType, ChangedFile, ChangedSymbol
+from loomgraph.core.impact.models import ChangedFile, ChangedSymbol, ChangeType
 
 
 class ExtractorError(Exception):

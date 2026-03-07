@@ -129,7 +129,9 @@ class TestH200FullPipeline:
     ) -> None:
         """Test injecting a parsed Python file into H200."""
         import time
+
         from codeindex.parser import parse_file
+
         from loomgraph.core.adapter import adapt_parse_result
         from loomgraph.core.injector import inject_parse_result
 

@@ -50,8 +50,10 @@ loomgraph index .
 
 本项目已用 LoomGraph 索引，可使用以下命令：
 
-- `loomgraph search "<查询>"` - 语义搜索代码
-- `loomgraph graph "<类名.方法名>"` - 查询调用关系
+- `loomgraph find "<名称>"` - 结构化实体搜索（类/函数/方法）
+- `loomgraph query "<问题>"` - 语义知识问答（RAG）
+- `loomgraph graph "<实体>"` - 查询调用关系
+- `loomgraph topology` - 技术债务分析
 - `loomgraph status` - 检查服务状态
 ```
 
@@ -65,10 +67,16 @@ loomgraph index .
 
 | 命令 | 说明 | 示例 |
 |------|------|------|
-| `loomgraph status` | 检查服务状态 | `loomgraph status` |
-| `loomgraph index <path>` | 索引代码库 | `loomgraph index .` |
-| `loomgraph search <query>` | 语义搜索 | `loomgraph search "用户认证"` |
+| `loomgraph status` | 检查服务状态与 workspace 信息 | `loomgraph status` |
+| `loomgraph index <path>` | 索引代码库（首次/全量） | `loomgraph index .` |
+| `loomgraph update` | 增量更新（基于 git 变更） | `loomgraph update --since HEAD~5` |
+| `loomgraph find <query>` | 结构化实体搜索（名称匹配） | `loomgraph find "UserService"` |
+| `loomgraph query <question>` | 语义知识问答（RAG） | `loomgraph query "用户认证流程"` |
 | `loomgraph graph <entity>` | 查询调用关系 | `loomgraph graph "UserService.login"` |
+| `loomgraph topology` | 图谱拓扑债务分析 | `loomgraph topology --module cli` |
+| `loomgraph check` | 索引新鲜度检查 | `loomgraph check` |
+
+完整命令列表见 [CLI_DESIGN.md](docs/api/CLI_DESIGN.md)。
 
 ### 错误处理
 
@@ -117,6 +125,27 @@ embedding:
 ---
 
 ## 开发
+
+**推荐使用 Makefile 命令**（统一界面，更简洁）：
+
+```bash
+# 查看所有可用命令
+make help
+
+# 常用开发命令
+make install        # 安装依赖
+make test           # 运行测试
+make lint           # 代码检查
+make lint-fix       # 自动修复 lint 问题
+make clean          # 清理临时文件
+
+# 发布管理
+make release VERSION=0.8.0    # 一键发布
+make delivery-summary         # 生成交付总结
+make token-list               # 查看客户 Token 状态
+```
+
+**直接使用脚本**（如果不想用 Makefile）：
 
 ```bash
 # 安装开发依赖

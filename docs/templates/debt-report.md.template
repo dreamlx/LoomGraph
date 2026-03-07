@@ -1,0 +1,275 @@
+# 技术债务分析报告
+
+**项目**: {{project}}
+**生成时间**: {{timestamp}}
+**LoomGraph 版本**: {{generator.version}}
+
+---
+
+## 📊 整体健康度评分
+
+| 维度 | 得分 | 状态 |
+|------|------|------|
+| **总分** | **{{overall_health.total_score}}/100** | {{overall_health.grade_emoji}} {{overall_health.grade}} 级 |
+| 拓扑健康度 | {{overall_health.breakdown.topology}}/100 | {{overall_health.breakdown.topology_emoji}} |
+| 代码质量 | {{overall_health.breakdown.quality}}/100 | {{overall_health.breakdown.quality_emoji}} |
+| 测试覆盖 | {{overall_health.breakdown.test_coverage}}/100 | {{overall_health.breakdown.test_coverage_emoji}} |
+| 可维护性 | {{overall_health.breakdown.maintainability}}/100 | {{overall_health.breakdown.maintainability_emoji}} |
+
+**问题统计**:
+- 🔴 严重问题 (P0): {{overall_health.summary.p0_issues}}
+- 🟡 中等问题 (P1): {{overall_health.summary.p1_issues}}
+- 🟢 轻微问题 (P2): {{overall_health.summary.p2_issues}}
+
+---
+
+{{#if has_p0_issues}}
+## 🔴 严重问题（P0）
+
+{{#each p0_issues}}
+### {{index}}. {{category_label}}：{{entity}}
+
+**位置**: `{{location.file}}`{{#if location.start_line}} (Lines {{location.start_line}}-{{location.end_line}}){{/if}}
+
+**质量评分**: {{metrics.total_score}}/40{{#if is_below_threshold}} (低于阈值 25){{/if}}
+
+| 评分维度 | 得分 | 说明 |
+|---------|------|------|
+| 可维护性 | {{metrics.maintainability_score}}/10 | {{maintainability_description}} |
+| 可测试性 | {{metrics.testability_score}}/10 | {{testability_description}} |
+| 影响半径 | {{metrics.impact_radius_score}}/10 | {{impact_description}} |
+| 耦合度 | {{metrics.coupling_score}}/10 | {{coupling_description}} |
+
+{{#if metrics.lines}}
+**指标**:
+- 代码行数：{{metrics.lines}}
+{{/if}}
+{{#if metrics.methods}}
+- 方法数：{{metrics.methods}}
+{{/if}}
+{{#if details.in_degree}}
+- 被依赖次数：{{details.in_degree}}
+{{/if}}
+{{#if details.out_degree}}
+- 依赖数量：{{details.out_degree}}
+{{/if}}
+
+{{#if suggestion}}
+**建议**:
+
+{{suggestion_formatted}}
+{{/if}}
+
+{{#if estimated_effort}}
+**预估工作量**: {{estimated_effort.days}} 天（{{estimated_effort.complexity_label}}复杂度）
+{{/if}}
+
+{{#if references}}
+**影响范围**:
+{{#each references}}
+- `{{this}}`
+{{/each}}
+{{/if}}
+
+---
+
+{{/each}}
+{{/if}}
+
+{{#if has_p1_issues}}
+## 🟡 中等问题（P1）
+
+{{#each p1_issues}}
+### {{index}}. {{category_label}}：{{entity}}
+
+**位置**: `{{location.file}}`
+
+**质量评分**: {{metrics.total_score}}/40
+
+{{#if suggestion}}
+**建议**: {{suggestion}}
+{{/if}}
+
+{{#if estimated_effort}}
+**预估工作量**: {{estimated_effort.days}} 天
+{{/if}}
+
+---
+
+{{/each}}
+{{/if}}
+
+{{#if has_p2_issues}}
+## 🟢 轻微问题（P2）
+
+<details>
+<summary>展开查看 {{p2_issues_count}} 个轻微问题</summary>
+
+{{#each p2_issues}}
+### {{index}}. {{category_label}}：{{entity}}
+
+**位置**: `{{location.file}}`
+**评分**: {{metrics.total_score}}/40
+{{#if suggestion}}**建议**: {{suggestion}}{{/if}}
+
+{{/each}}
+
+</details>
+
+---
+
+{{/if}}
+
+{{#if trends}}
+## 📈 趋势分析
+
+**时间范围**: {{trends.period_label}}（{{trends.period_range}}）
+
+```
+债务演化:
+  ┌────────────────────────────────┐
+  │ 新增债务: {{trends.debt_increase}} {{trends.debt_increase_emoji}}              │
+  │ 债务偿还: {{trends.debt_repayment}}                  │
+  │ 净增长: {{trends.net_change}}                    │
+  └────────────────────────────────┘
+```
+
+{{#if trends.hotspots}}
+**热点模块**（债务增长最快）:
+
+{{#each trends.hotspots}}
+{{index}}. **{{module}}** ({{change}})
+{{/each}}
+{{/if}}
+
+{{#if trends.comparison}}
+**对比上次报告**:
+- 总分变化：{{trends.comparison.score_delta_formatted}}
+- 新增问题：{{trends.comparison.new_issues}} 个
+- 已解决问题：{{trends.comparison.resolved_issues}} 个
+{{/if}}
+
+---
+
+{{/if}}
+
+{{#if recommendations}}
+## 🎯 重构建议优先级
+
+| 优先级 | 模块 | 操作 | 预估工作量 | ROI | 阻塞因素 |
+|--------|------|------|-----------|-----|---------|
+{{#each recommendations}}
+| P{{priority_display}} | {{target}} | {{action_label}} | {{estimated_effort_days}} | {{expected_roi_label}} | {{blockers_display}} |
+{{/each}}
+
+{{#if has_detailed_steps}}
+### 详细实施步骤
+
+{{#each recommendations_with_steps}}
+#### 优先级 {{priority_display}}: {{target}}
+
+{{#each steps}}
+{{step_index}}. {{this}}
+{{/each}}
+
+{{/each}}
+{{/if}}
+
+---
+
+{{/if}}
+
+## 💡 如何使用本报告
+
+1. **立即行动**：优先处理 🔴 P0 严重问题
+2. **规划重构**：将 P1 问题加入 Sprint 计划
+3. **追踪趋势**：定期（每周/每月）生成报告，对比债务变化
+4. **团队评审**：与团队讨论高优先级重构方案
+
+### 下一步命令
+
+```bash
+# 查看特定模块的详细分析
+loomgraph debt --module {{suggested_module}}
+
+# 生成重构计划
+loomgraph refactor-plan {{suggested_target}}
+
+# 查看依赖关系
+loomgraph deps {{suggested_target}}
+
+# 影响分析（变更前评估）
+loomgraph impact {{suggested_target}}
+```
+
+---
+
+## 📋 附录
+
+### A1: 完整问题列表
+
+<details>
+<summary>展开查看所有 {{total_issues_count}} 个问题</summary>
+
+| ID | 严重性 | 类型 | 实体 | 位置 | 评分 |
+|----|--------|------|------|------|------|
+{{#each all_issues}}
+| {{id}} | {{severity}} | {{category}} | {{entity}} | {{location.file}} | {{metrics.total_score}}/40 |
+{{/each}}
+
+</details>
+
+### A2: 评分算法说明
+
+**可维护性评分**（0-10 分）：
+- 基于文件大小（>2000 行 -5 分，>1000 行 -3 分）
+- 注释率（<5% -2 分）
+- 命名规范（>10 个违规 -2 分）
+
+**可测试性评分**（0-10 分）：
+- 依赖数量（>20 个 -4 分，>10 个 -2 分）
+- 职责单一性（上帝类 -3 分）
+- 循环依赖（存在 -3 分）
+
+**影响半径评分**（0-10 分）：
+- 入度（>50 -5 分，>20 -3 分）
+- 出度（>30 -3 分）
+
+**耦合度评分**（0-10 分）：
+- 直接依赖（>15 -4 分，>8 -2 分）
+- 跨模块依赖（>5 -3 分）
+- 循环依赖（存在 -3 分）
+
+### A3: 问题类型说明
+
+| 类型 | 说明 | 检测阈值 |
+|------|------|---------|
+| `god_class` | 上帝类 | methods >50 或 lines >2000 |
+| `god_function` | 上帝函数 | lines >100 或 complexity >20 |
+| `orphan_entity` | 孤儿实体 | in_degree = 0 且非入口点 |
+| `hub_fragility` | Hub 脆弱性 | in_degree >30 或 out_degree >20 |
+| `circular_dependency` | 循环依赖 | 检测到环形依赖链 |
+| `architecture_violation` | 架构违规 | Infra → Domain 反向依赖 |
+| `test_smell` | 测试 Smells | it.skip、超大测试文件 |
+| `high_coupling` | 高耦合 | coupling_score <3 |
+| `low_maintainability` | 低可维护性 | maintainability_score <3 |
+
+### A4: 元数据
+
+**生成命令**:
+```bash
+{{generator.command}}
+```
+
+**数据来源**:
+- LoomGraph 版本：{{generator.version}}
+- codeindex 数据：{{codeindex_data_source}}
+- LightRAG workspace：{{project}}
+
+**报告文件**:
+- JSON 版本：[{{json_report_path}}]({{json_report_path}})
+- Markdown 版本：本文件
+
+---
+
+*本报告由 [LoomGraph](https://github.com/dreamlx/LoomGraph) 自动生成。格式规范见 [DEBT_REPORT_FORMAT.md](../guides/DEBT_REPORT_FORMAT.md)。*

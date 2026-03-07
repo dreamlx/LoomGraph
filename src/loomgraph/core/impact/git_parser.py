@@ -7,7 +7,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from loomgraph.core.impact.models import ChangeType, ChangedFile
+from loomgraph.core.impact.models import ChangedFile, ChangeType
 
 
 class GitError(Exception):
@@ -38,9 +38,9 @@ class GitDiffParser:
                 raise GitError(f"git {' '.join(args)} failed: {result.stderr}")
             return result.stdout
         except subprocess.TimeoutExpired:
-            raise GitError(f"git {' '.join(args)} timed out")
+            raise GitError(f"git {' '.join(args)} timed out") from None
         except FileNotFoundError:
-            raise GitError("git command not found")
+            raise GitError("git command not found") from None
 
     def get_changed_files_for_commit(self, commit: str = "HEAD") -> list[ChangedFile]:
         """Get list of changed files for a commit.
@@ -55,7 +55,7 @@ class GitDiffParser:
         try:
             self._run_git("rev-parse", "--verify", commit)
         except GitError:
-            raise GitError(f"Invalid commit: {commit}")
+            raise GitError(f"Invalid commit: {commit}") from None
 
         # Get diff with parent
         if commit == "HEAD":

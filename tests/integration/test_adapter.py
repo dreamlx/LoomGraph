@@ -2,11 +2,10 @@
 
 from pathlib import Path
 
-import pytest
-
 from codeindex.parser import parse_file
+
 from loomgraph.core.adapter import adapt_parse_result
-from loomgraph.core.models import ParseResult, Symbol, Import
+from loomgraph.core.models import ParseResult
 
 
 class TestAdaptParseResult:

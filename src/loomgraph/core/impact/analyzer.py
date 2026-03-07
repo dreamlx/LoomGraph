@@ -6,13 +6,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from loomgraph.core.impact.extractor import ChangedSymbolExtractor
+from loomgraph.core.impact.git_parser import GitDiffParser
 from loomgraph.core.impact.models import (
     Caller,
     ChangedSymbol,
     ImpactResult,
 )
-from loomgraph.core.impact.git_parser import GitDiffParser
-from loomgraph.core.impact.extractor import ChangedSymbolExtractor
 
 if TYPE_CHECKING:
     from loomgraph.core.lightrag_client import LightRAGClient
@@ -26,7 +26,7 @@ class ImpactAnalyzer:
     to determine what parts of the codebase are affected by changes.
     """
 
-    lightrag_client: "LightRAGClient"
+    lightrag_client: LightRAGClient
     repo_path: Path = Path(".")
     max_depth: int = 2
 

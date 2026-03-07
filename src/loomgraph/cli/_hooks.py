@@ -9,7 +9,6 @@ import click
 
 from .main import main
 
-
 LOOMGRAPH_MARKER = "# loomgraph-managed hook"
 SUPPORTED_HOOKS = ["post-commit"]
 
@@ -115,8 +114,8 @@ def install(install_all: bool, force: bool) -> None:
         loomgraph hooks install --all    # Install all hooks
         loomgraph hooks install --force  # Overwrite existing
     """
-    from .main import output_error, output_success
     from ._setup import ErrorCode
+    from .main import output_error, output_success
 
     try:
         repo_root = find_git_repo()
@@ -162,8 +161,8 @@ def uninstall(uninstall_all: bool, no_restore: bool) -> None:
         loomgraph hooks uninstall --all      # Uninstall all
         loomgraph hooks uninstall --no-restore  # Don't restore backup
     """
-    from .main import output_error, output_success
     from ._setup import ErrorCode
+    from .main import output_error, output_success
 
     try:
         repo_root = find_git_repo()
@@ -196,8 +195,8 @@ def status() -> None:
     Example:
         loomgraph hooks status
     """
-    from .main import output_error, output_success
     from ._setup import ErrorCode
+    from .main import output_error, output_success
 
     try:
         repo_root = find_git_repo()

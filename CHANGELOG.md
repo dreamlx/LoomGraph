@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Makefile**: Unified command interface for all development, testing, and release workflows. 40+ commands organized into 9 categories (Development, Release Management, Token Management, Packaging, CLI, Docker, Git). Run `make help` to see all available commands.
+- **Delivery summary generator**: `scripts/generate_delivery_summary.py` - automated customer delivery document generation with install commands, token info, release highlights, and delivery instructions. Integrated into release workflow.
+- **ADR-011: AI Iteration Strategy**: Architectural decision documenting "external iteration" approach - LoomGraph provides high-quality atomic capabilities, Claude controls iteration. Analyzed Manon's "internal iteration" model and concluded external iteration offers better cost (40-60% savings), performance (75% faster), transparency, and flexibility.
+- **ADR-012: Technical Debt Analysis Format**: Standardized multi-dimensional scoring system (Maintainability + Testability + Impact + Coupling = 0-40 score) with three output formats (JSON/Markdown/Console). Defines clear responsibility boundaries between codeindex (static analysis) and LoomGraph (graph analysis). Decision rules: ≥35 keep, 25-34 refactor, <25 rewrite.
+
+### Changed
+- **Release workflow**: Now recommends `make release VERSION=x.y.z` as the primary method (auto-runs bump → test → lint → commit → tag → push)
+
+## [0.8.0] - 2026-02-24
+
+### Added
+- **GitHub Token management system**: Comprehensive enterprise-grade token lifecycle management for online customer access
+  - `docs/guides/TOKEN_MANAGEMENT.md` (26KB): Complete guide covering Fine-grained PAT creation, storage solutions (password managers/GPG), secure delivery methods, lifecycle management, and security best practices
+  - `docs/guides/TOKEN_QUICKSTART.md`: 5-minute quick start guide with 4 common scenarios and customer installation templates
+  - `scripts/manage_tokens.py`: CLI management tool with 4 core features: `--check-expiry` (30-day advance warning), `--list` (customer token status), `--generate-install` (pip/pipx commands), `--verify` (GitHub API validation)
+  - Customer delivery packages: `customers/{customer,customer,demo}/` with `INSTALL.md` (installation guide with token) and `config.yaml` (service configuration)
+  - Token metadata tracking in `customers.yaml` (github_token_name, created/expires dates, last_4 digits, contact info)
+  - `customers/DELIVERY_GUIDE.md`: Complete delivery workflow and security checklist
+
+### Changed
+- **Workspace fallback**: Query commands (`find`, `query`, `graph`, `topology`, `check`, `impact`, `deps`, `overview`) now automatically fallback to `main`/`develop`/`master` branches when target workspace is empty. Multi-workspace comparison commands (`workspace compare`, `workspace similar`) require explicit workspace specification. Improves UX for 80% use case (single knowledge graph workflow). See Issue #20 Phase 1.
+- **`resolve_workspace_with_fallback()`**: new core function in `cli/_common.py` that transparently resolves workspace with fallback to main branches, controlled by `allow_fallback` parameter. Displays info message when fallback occurs.
+- **Token management in PACKAGING.md**: Enhanced section with links to comprehensive token management guides and quick reference for management tools.
+
+### Fixed
+- **Token verification proxy compatibility**: Added `trust_env=False` to `httpx.Client` in `manage_tokens.py` to avoid socksio dependency when system has SOCKS proxy configured.
+
 ## [0.7.0] - 2026-02-22
 
 ### Added - EPIC-003: Incremental Update Strategy
@@ -171,6 +199,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Project roadmap, epics, and feature definitions
 
 [Unreleased]: https://github.com/dreamlx/LoomGraph/compare/v0.6.0...HEAD
+[0.8.0]: https://github.com/dreamlx/LoomGraph/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/dreamlx/LoomGraph/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/dreamlx/LoomGraph/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/dreamlx/LoomGraph/compare/v0.2.5...v0.6.0

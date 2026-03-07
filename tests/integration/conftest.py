@@ -10,13 +10,14 @@ from __future__ import annotations
 
 import asyncio
 import os
+from collections.abc import Generator
 from pathlib import Path
-from typing import TYPE_CHECKING, AsyncGenerator, Generator
+from typing import TYPE_CHECKING
 
 import pytest
 
 if TYPE_CHECKING:
-    from lightrag import LightRAG
+    pass
 
 # Database connection settings
 DB_HOST = os.getenv("LOOMGRAPH_DB_HOST", "localhost")
@@ -120,7 +121,7 @@ class MockEmbeddingClient:
         self.dimension = dimension
         self._call_count = 0
 
-    async def embed(self, texts: list[str]) -> "MockEmbedResult":
+    async def embed(self, texts: list[str]) -> MockEmbedResult:
         """Return deterministic mock embeddings."""
         import hashlib
 
