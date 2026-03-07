@@ -35,12 +35,91 @@ NOISE_SUFFIXES = frozenset({
     ".startswith", ".endswith", ".lower", ".upper",
 })
 
+# Data classes and DTOs that are legitimately orphaned (used via serialization)
+WHITELIST_ORPHANS = frozenset({
+    # Core data models (models.py)
+    "Call", "Import", "Inheritance", "Symbol", "ParseResult",
+    "EntityData", "RelationData",
+    # Result DTOs (to_dict for JSON serialization)
+    "CompareResult", "DepsResult", "TopologyResult", "ImpactResult",
+    "OverviewResult", "CouplingMetrics", "SimilarResult",
+    # Impact analysis models
+    "ChangedFile", "ChangedSymbol", "Caller",
+    # Embedding models
+    "EmbeddingResult",
+    # Dataclass utility methods
+    "to_dict", "__post_init__",
+    # Enums
+    "ChangeType", "ErrorCode",
+    # Config utilities
+    "reset_settings",
+    # CLI command groups
+    "workspace",
+})
+
+# Suffix patterns for entities that are legitimately orphaned
+ORPHAN_SUFFIX_PATTERNS = (
+    "Analyzer",  # CompareAnalyzer, DepsAnalyzer, etc. - called by CLI dynamically
+    "Extractor",  # ChangedSymbolExtractor - helper classes
+    "Parser",  # GitDiffParser - utility classes
+    "Assessor",  # RiskAssessor - analysis classes
+    "Client",  # LightRAGClient, JinaEmbeddingClient - service clients
+)
+
+# Public utility functions with expected high fan-in (hubs by design)
+WHITELIST_HUBS = frozenset({
+    # CLI output helpers (used across all CLI commands)
+    "output_success", "output_error", "output_partial_error",
+    # Configuration singletons (used across all modules)
+    "get_settings", "get_auto_workspace",
+    # Internal helpers (high fan-in is intentional)
+    "LightRAGClient._get_headers", "_get_headers",
+    "LightRAGAPIError.__init__", "__init__",
+})
+
 
 def _is_noise(name: str) -> bool:
     """Check if an entity name is stdlib/noise and should be excluded."""
     if name in STDLIB_ENTITIES:
         return True
     return any(name.endswith(suffix) for suffix in NOISE_SUFFIXES)
+
+
+def _is_whitelisted_orphan(name: str, source_id: str = "") -> bool:
+    """Check if an entity is a legitimate orphan (whitelist).
+
+    Args:
+        name: Entity name (may be namespaced like "CompareResult.to_dict")
+        source_id: File path where entity is defined
+
+    Returns:
+        True if the entity should be excluded from orphan detection
+    """
+    # Exact match in whitelist
+    if name in WHITELIST_ORPHANS:
+        return True
+
+    # Test fixtures/helpers (support both "tests/" and "/tests/")
+    if "tests/" in source_id or source_id.startswith("test_"):
+        return True
+
+    # Models.py file pattern (data classes)
+    if "models.py" in source_id or "/models/" in source_id:
+        return True
+
+    # Namespaced methods (.to_dict, .__post_init__, etc.)
+    if "." in name:
+        base_name, method_name = name.rsplit(".", 1)
+        if method_name in WHITELIST_ORPHANS:  # e.g., "to_dict", "__post_init__"
+            return True
+        # Dunder methods (called by runtime)
+        if method_name.startswith("__") and method_name.endswith("__"):
+            return True
+
+    # Suffix patterns (Analyzer, Extractor, Parser, etc.)
+    # Extract the class name (before the last dot if namespaced)
+    class_name = name.split(".")[-1] if "." not in name else name.split(".")[0]
+    return any(class_name.endswith(pattern) for pattern in ORPHAN_SUFFIX_PATTERNS)
 
 
 def _entity_name(entity: dict[str, Any]) -> str:
@@ -292,8 +371,25 @@ class TopologyAnalyzer:
                 or item.get("source_id") == "external"
             )
 
-        orphans = [o for o in orphans if _keep(o)]
-        hubs = [h for h in hubs if _keep(h)]
+        def _keep_orphan(item: dict[str, Any]) -> bool:
+            """Filter orphans, excluding whitelisted data classes."""
+            if not _keep(item):
+                return False
+            name = _server_name(item)
+            source_id = item.get("source_id", "")
+            # Use unified whitelist logic
+            return not _is_whitelisted_orphan(name, source_id)
+
+        def _keep_hub(item: dict[str, Any]) -> bool:
+            """Filter hubs, excluding whitelisted utilities."""
+            if not _keep(item):
+                return False
+            name = _server_name(item)
+            # Exclude whitelisted hubs (public utilities)
+            return name not in WHITELIST_HUBS
+
+        orphans = [o for o in orphans if _keep_orphan(o)]
+        hubs = [h for h in hubs if _keep_hub(h)]
         gods = [
             g for g in gods
             if _keep(g) and g.get("entity_type") != "module"
@@ -424,16 +520,20 @@ class TopologyAnalyzer:
             {"from": p[0], "to": p[1], "count": c} for (p, c) in sorted_pairs
         ]
 
-        # Detect orphans (0 in + 0 out, exclude module type)
+        # Detect orphans (0 in + 0 out, exclude module type and whitelisted)
         orphans = []
         for name, entity in entity_map.items():
             if entity.get("entity_type", "") == "module":
                 continue
             if name not in in_degree and name not in out_degree:
+                source_id = entity.get("source_id", "")
+                # Exclude whitelisted orphans (data classes, DTOs, test fixtures, etc.)
+                if _is_whitelisted_orphan(name, source_id):
+                    continue
                 orphans.append({
                     "entity": name,
                     "type": entity.get("entity_type", "unknown"),
-                    "source_id": entity.get("source_id", ""),
+                    "source_id": source_id,
                 })
 
         # Detect hubs (high in-degree)
@@ -442,11 +542,18 @@ class TopologyAnalyzer:
             in_degree.items(), key=lambda x: len(x[1]), reverse=True
         ):
             if len(callers) >= self.hub_threshold and name in entity_map:
+                # Skip whitelisted hubs (public utilities)
+                if name in WHITELIST_HUBS:
+                    continue
                 entity = entity_map[name]
+                source_id = entity.get("source_id", "")
+                # Exclude by file pattern (common utilities)
+                if "_common.py" in source_id or "/config.py" in source_id:
+                    continue
                 hubs.append({
                     "entity": name,
                     "type": entity.get("entity_type", "unknown"),
-                    "source_id": entity.get("source_id", ""),
+                    "source_id": source_id,
                     "in_degree": len(callers),
                     "callers_sample": callers[:5],
                 })
