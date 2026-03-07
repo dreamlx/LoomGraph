@@ -14,11 +14,15 @@ Responsibility:
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from loomgraph.core.lightrag_client import LightRAGClient
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -57,6 +61,9 @@ class DebtIssue:
     suggestion: str = ""
     estimated_effort: dict[str, str] = field(default_factory=dict)
     references: list[str] = field(default_factory=list)
+    # EPIC-010 Feature 2: Git enrichment fields
+    confidence: str | None = None  # high/medium/low for orphan entities
+    is_hotspot: bool | None = None  # True if god_function + high change_freq
 
 
 class DebtAnalyzer:
@@ -224,16 +231,23 @@ class DebtAnalyzer:
         return breakdown
 
     async def analyze(
-        self, codeindex_data: dict[str, Any] | None = None, module: str | None = None
+        self,
+        codeindex_data: dict[str, Any] | None = None,
+        module: str | None = None,
+        with_git: bool = False,
+        git_since: str = "3 months",
     ) -> dict[str, Any]:
         """
         Main analysis entry point.
 
-        Combines codeindex static analysis with LoomGraph graph topology.
+        Combines codeindex static analysis with LoomGraph graph topology
+        and optionally git history metrics (EPIC-010 Feature 2).
 
         Args:
             codeindex_data: Optional codeindex JSON output
             module: Optional module filter for topology analysis (e.g. "cli")
+            with_git: Enable git metrics analysis (default: False)
+            git_since: Time window for git analysis (default: "3 months")
 
         Returns:
             Debt report in standardized format (ADR-012)
@@ -252,8 +266,26 @@ class DebtAnalyzer:
         if self.client:
             topology_score = await self._analyze_topology_issues(module=module)
 
-        # Step 4: Calculate overall health
-        overall_health = self._calculate_overall_health(topology_score=topology_score)
+        # Step 3.5: Analyze git history (EPIC-010 Feature 2)
+        git_score = 100  # Default perfect score (no git penalties)
+        if with_git:
+            try:
+                from loomgraph.core.git_metrics import GitMetricsAnalyzer
+
+                analyzer = GitMetricsAnalyzer(Path.cwd(), since=git_since)
+                git_metrics = analyzer.analyze()
+                git_score = self._analyze_git_issues(git_metrics)
+                self._enrich_with_git_metrics(git_metrics)
+            except Exception as e:
+                # Graceful fallback: non-git projects or git errors
+                logger.warning(f"Git analysis failed, skipping: {e}")
+                git_score = 100  # No penalty
+
+        # Step 4: Calculate overall health (three-dimensional if with_git)
+        overall_health = self._calculate_overall_health(
+            topology_score=topology_score,
+            git_score=git_score if with_git else None,
+        )
 
         # Step 5: Generate report
         return {
@@ -476,11 +508,14 @@ class DebtAnalyzer:
                 return score_data["score"]
         return 5.0  # Default mid-range score
 
-    def _calculate_overall_health(self, topology_score: int = 100) -> dict[str, Any]:
+    def _calculate_overall_health(
+        self, topology_score: int = 100, git_score: int | None = None
+    ) -> dict[str, Any]:
         """Calculate overall health score from issues.
 
         Args:
             topology_score: Topology health score from TopologyAnalyzer (0-100)
+            git_score: Git metrics health score (0-100), None if --with-git not enabled
 
         Returns:
             Overall health dict with breakdown by dimension
@@ -492,9 +527,13 @@ class DebtAnalyzer:
         # Quality scoring: 100 - (P0*10 + P1*5 + P2*1)
         quality_score = max(0, 100 - (p0_issues * 10 + p1_issues * 5 + p2_issues * 1))
 
-        # Overall score: average of quality and topology
-        # (test_coverage and maintainability not yet implemented)
-        total_score = (quality_score + topology_score) // 2
+        # Overall score: three-dimensional (quality + topology + git) or two-dimensional
+        if git_score is not None:
+            # Three-dimensional scoring (EPIC-010)
+            total_score = (quality_score + topology_score + git_score) // 3
+        else:
+            # Two-dimensional scoring (backward compatible)
+            total_score = (quality_score + topology_score) // 2
 
         # Grade calculation
         if total_score >= 90:
@@ -508,15 +547,21 @@ class DebtAnalyzer:
         else:
             grade = "F"
 
+        breakdown: dict[str, int] = {
+            "topology": topology_score,
+            "quality": quality_score,
+            "test_coverage": 0,  # TODO: integrate coverage data
+            "maintainability": 0,  # TODO: aggregate from codeindex
+        }
+
+        # Add git dimension if enabled
+        if git_score is not None:
+            breakdown["git"] = git_score
+
         return {
             "total_score": total_score,
             "grade": grade,
-            "breakdown": {
-                "topology": topology_score,
-                "quality": quality_score,
-                "test_coverage": 0,  # TODO: integrate coverage data
-                "maintainability": 0,  # TODO: aggregate from codeindex
-            },
+            "breakdown": breakdown,
             "summary": {
                 "total_entities": 0,  # TODO: get from topology result
                 "p0_issues": p0_issues,
@@ -527,7 +572,7 @@ class DebtAnalyzer:
 
     def _issue_to_dict(self, issue: DebtIssue) -> dict[str, Any]:
         """Convert DebtIssue to dict for JSON serialization."""
-        return {
+        result = {
             "id": issue.id,
             "severity": issue.severity,
             "category": issue.category,
@@ -540,3 +585,118 @@ class DebtAnalyzer:
             "estimated_effort": issue.estimated_effort,
             "references": issue.references,
         }
+
+        # Add git enrichment fields if present (EPIC-010)
+        if issue.confidence is not None:
+            result["confidence"] = issue.confidence
+        if issue.is_hotspot is not None:
+            result["is_hotspot"] = issue.is_hotspot
+
+        return result
+
+    def _analyze_git_issues(self, git_metrics: Any) -> int:
+        """Generate debt issues from git metrics (EPIC-010 Feature 2).
+
+        Detects:
+        1. critical_hotspot (P0): High change_freq + high in_degree = system fragile points
+        2. knowledge_silo (P1): Bus factor = 1 (single contributor)
+
+        Args:
+            git_metrics: GitMetricsResult from GitMetricsAnalyzer
+
+        Returns:
+            Git health score (0-100), penalty-based
+        """
+        penalty = 0
+
+        # 1. Critical Hotspot Detection (P0)
+        for hotspot in git_metrics.hotspots:
+            if hotspot.hotspot_score >= 80:  # Critical threshold
+                issue_id = f"debt-git-{len(self.issues) + 1:03d}"
+                self.issues.append(
+                    DebtIssue(
+                        id=issue_id,
+                        severity="P0",
+                        category="critical_hotspot",
+                        entity=hotspot.file,
+                        entity_type="file",
+                        location={"file": hotspot.file},
+                        metrics={
+                            "change_frequency": hotspot.change_freq,
+                            "hotspot_score": hotspot.hotspot_score,
+                            "rank": hotspot.rank,
+                        },
+                        suggestion=f"⚠️ Critical hotspot: {hotspot.change_freq} changes in {git_metrics.since}. Refactor ASAP to reduce fragility.",
+                    )
+                )
+                penalty += 15  # P0 hotspot = 15 points
+
+        # 2. Knowledge Silo Detection (P1)
+        for silo in git_metrics.bus_factor:
+            if silo.risk_level == "critical":  # contributors = 1
+                issue_id = f"debt-git-{len(self.issues) + 1:03d}"
+                self.issues.append(
+                    DebtIssue(
+                        id=issue_id,
+                        severity="P1",
+                        category="knowledge_silo",
+                        entity=silo.file,
+                        entity_type="file",
+                        location={"file": silo.file},
+                        metrics={
+                            "owner": silo.owner,
+                            "contributors": silo.contributors,
+                            "total_commits": silo.total_commits,
+                        },
+                        suggestion=f"Only {silo.owner} knows this code (bus factor = 1). Add documentation or pair programming.",
+                    )
+                )
+                penalty += 8  # P1 silo = 8 points
+
+        return max(0, 100 - penalty)
+
+    def _enrich_with_git_metrics(self, git_metrics: Any) -> None:
+        """Enrich existing issues with git metrics (EPIC-010 Feature 2).
+
+        1. orphan_entity: Add confidence field (high/medium/low based on last_modified_days)
+        2. god_function: Add is_hotspot marker (if change_frequency > 10)
+
+        Args:
+            git_metrics: GitMetricsResult from GitMetricsAnalyzer
+        """
+        # Build file_path → FileMetrics lookup
+        file_metrics_map = git_metrics.file_metrics
+
+        for issue in self.issues:
+            file_path = issue.location.get("file", "")
+
+            # Skip if no git data for this file
+            if file_path not in file_metrics_map:
+                continue
+
+            fm = file_metrics_map[file_path]
+
+            # 1. Enrich orphan_entity with confidence
+            if issue.category == "orphan_entity":
+                days = fm.last_modified_days
+
+                if days > 365:
+                    issue.confidence = "high"
+                    issue.suggestion += " (1 year+ no changes, high confidence dead code)"
+                elif days > 90:
+                    issue.confidence = "medium"
+                else:
+                    issue.confidence = "low"
+                    issue.suggestion += " (recently modified, may be new or dynamic call)"
+
+                issue.metrics["last_modified_days"] = days
+
+            # 2. Enrich god_function with is_hotspot marker
+            if issue.category == "god_function":
+                freq = fm.change_frequency
+
+                if freq > 10:  # Hotspot threshold
+                    issue.is_hotspot = True
+                    issue.severity = "P0"  # Upgrade from P1 to P0
+                    issue.suggestion += f" ⚠️ Hotspot: {freq} changes in {git_metrics.since}."
+                    issue.metrics["change_frequency"] = freq

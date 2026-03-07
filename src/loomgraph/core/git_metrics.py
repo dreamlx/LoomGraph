@@ -1,0 +1,194 @@
+"""Git metrics analyzer for technical debt analysis.
+
+This module provides GitMetricsAnalyzer for detecting:
+- Hotspots: High-frequency change files (system fragile points)
+- Bus Factor: Knowledge silo risks (single-contributor files)
+"""
+
+import logging
+import math
+from datetime import datetime
+from pathlib import Path
+
+from loomgraph.core.git_parser import GitLogParser
+from loomgraph.core.models import BusFactor, FileMetrics, GitMetricsResult, Hotspot
+
+logger = logging.getLogger(__name__)
+
+
+class GitMetricsAnalyzer:
+    """Analyze git history for technical debt metrics."""
+
+    def __init__(self, repo_path: Path | str, since: str = "3 months"):
+        """Initialize analyzer.
+
+        Args:
+            repo_path: Path to git repository root
+            since: Time window (e.g., "3 months", "6 months", "1 year")
+        """
+        self.repo_path = Path(repo_path)
+        self.since = since
+        self.parser = GitLogParser(repo_path)
+
+    def analyze(self) -> GitMetricsResult:
+        """Run full git metrics analysis.
+
+        Returns:
+            GitMetricsResult with file metrics, hotspots, and bus factor
+
+        Raises:
+            GitError: If git operations fail
+        """
+        # Parse commits
+        commits = self.parser.parse_commits(since=self.since)
+
+        # Aggregate file metrics
+        file_metrics = self.parser._aggregate_file_metrics(commits)
+
+        # Detect hotspots
+        hotspots = self._detect_hotspots(file_metrics)
+
+        # Detect bus factor
+        bus_factor = self._detect_bus_factor(file_metrics)
+
+        # Generate summary
+        summary = {
+            "total_files": len(file_metrics),
+            "total_commits": len(commits),
+            "hotspots_count": len(hotspots),
+            "bus_factor_critical": len([bf for bf in bus_factor if bf.risk_level == "critical"]),
+            "bus_factor_high": len([bf for bf in bus_factor if bf.risk_level == "high"]),
+        }
+
+        return GitMetricsResult(
+            repo_path=self.repo_path,
+            since=self.since,
+            analyzed_at=datetime.now(),
+            file_metrics=file_metrics,
+            hotspots=hotspots,
+            bus_factor=bus_factor,
+            summary=summary,
+        )
+
+    def _detect_hotspots(self, file_metrics: dict[str, FileMetrics]) -> list[Hotspot]:
+        """Detect hotspot files (high change frequency × high churn).
+
+        Algorithm:
+            hotspot_score = change_frequency × log10(churn + 1) × 10
+
+        Args:
+            file_metrics: FileMetrics indexed by file path
+
+        Returns:
+            List of Hotspot, sorted by score (desc)
+        """
+        hotspots = []
+
+        for file_path, metrics in file_metrics.items():
+            # Calculate hotspot score
+            score = self._calculate_hotspot_score(
+                change_freq=metrics.change_frequency,
+                churn=metrics.churn,
+            )
+
+            # Only include files with score >= 20 (meaningful hotspots)
+            if score >= 20:
+                # Get current file lines (TODO: read from file system)
+                # For now, use churn as proxy
+                lines = max(100, metrics.churn // 2)
+
+                hotspots.append(
+                    Hotspot(
+                        file=file_path,
+                        change_freq=metrics.change_frequency,
+                        lines=lines,
+                        hotspot_score=score,
+                        rank=0,  # Will be set after sorting
+                    )
+                )
+
+        # Sort by score (desc)
+        hotspots.sort(key=lambda h: h.hotspot_score, reverse=True)
+
+        # Assign ranks
+        for i, hotspot in enumerate(hotspots, start=1):
+            hotspot.rank = i
+
+        return hotspots
+
+    def _calculate_hotspot_score(self, change_freq: int, churn: int) -> int:
+        """Calculate hotspot score.
+
+        Formula:
+            score = change_frequency × log10(churn + 1) × 10
+
+        Capped at 100.
+
+        Args:
+            change_freq: Number of commits
+            churn: Total lines changed (added + deleted)
+
+        Returns:
+            Hotspot score (0-100)
+        """
+        if change_freq == 0 or churn == 0:
+            return 0
+
+        score = change_freq * math.log10(churn + 1) * 10
+        return min(100, int(score))
+
+    def _detect_bus_factor(
+        self,
+        file_metrics: dict[str, FileMetrics],
+        ownership_threshold: float = 0.7,
+    ) -> list[BusFactor]:
+        """Detect knowledge silo risks (single-contributor files).
+
+        Risk levels:
+            - critical: contributors = 1
+            - high: contributors = 2, ownership > 70%
+            - medium: contributors >= 3, ownership > 50%
+
+        Args:
+            file_metrics: FileMetrics indexed by file path
+            ownership_threshold: Ownership ratio threshold for high risk
+
+        Returns:
+            List of BusFactor, sorted by risk level
+        """
+        bus_factors = []
+
+        for file_path, metrics in file_metrics.items():
+            contributors = len(metrics.authors)
+            owner = metrics.primary_author
+
+            # Calculate ownership ratio (primary author commits / total commits)
+            # For now, estimate as 1.0 if only 1 contributor
+            if contributors == 1:
+                ownership_ratio = 1.0
+                risk_level = "critical"
+            elif contributors == 2:
+                # Need actual commit counts per author
+                # For now, assume primary author has >70% if flagged
+                ownership_ratio = 0.75  # Estimated
+                risk_level = "high" if ownership_ratio > ownership_threshold else "medium"
+            else:
+                # >= 3 contributors = healthy (not flagged)
+                continue
+
+            bus_factors.append(
+                BusFactor(
+                    file=file_path,
+                    owner=owner,
+                    contributors=contributors,
+                    ownership_ratio=ownership_ratio,
+                    total_commits=metrics.total_commits,
+                    risk_level=risk_level,
+                )
+            )
+
+        # Sort by risk level (critical > high > medium) then by total commits
+        risk_order = {"critical": 0, "high": 1, "medium": 2}
+        bus_factors.sort(key=lambda bf: (risk_order[bf.risk_level], -bf.total_commits))
+
+        return bus_factors
