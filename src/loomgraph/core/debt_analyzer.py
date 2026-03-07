@@ -287,6 +287,12 @@ class DebtAnalyzer:
             git_score=git_score if with_git else None,
         )
 
+        # Step 4.5: Auto-save metrics snapshot for trend analysis (EPIC-010 Feature 3)
+        self._save_metrics_snapshot(
+            entity="project",  # Project-level snapshot
+            overall_health=overall_health,
+        )
+
         # Step 5: Generate report
         return {
             "schema_version": "1.0",
@@ -700,3 +706,57 @@ class DebtAnalyzer:
                     issue.severity = "P0"  # Upgrade from P1 to P0
                     issue.suggestion += f" ⚠️ Hotspot: {freq} changes in {git_metrics.since}."
                     issue.metrics["change_frequency"] = freq
+
+    def _save_metrics_snapshot(
+        self,
+        entity: str,
+        overall_health: dict[str, Any],
+    ) -> None:
+        """Auto-save metrics snapshot for trend analysis (EPIC-010 Feature 3).
+
+        Saves a point-in-time snapshot of key metrics to enable trend analysis.
+        Snapshots are stored in ~/.loomgraph/metrics-history/
+
+        Args:
+            entity: Entity identifier (e.g., "project", "src/auth/user_service.py")
+            overall_health: Overall health metrics from analyze()
+        """
+        try:
+            from loomgraph.core.models import MetricsSnapshot
+            from loomgraph.core.trends import TrendAnalyzer
+
+            analyzer = TrendAnalyzer()
+
+            # Extract key metrics from overall_health
+            breakdown = overall_health.get("breakdown", {})
+            metrics = {
+                "total_score": overall_health.get("total_score", 100),
+                "quality_score": breakdown.get("quality", 100),
+                "topology_score": breakdown.get("topology", 100),
+            }
+
+            # Add git score if available (three-dimensional analysis)
+            if "git" in breakdown:
+                metrics["git_score"] = breakdown["git"]
+
+            # Add issue counts by severity
+            summary = overall_health.get("summary", {})
+            metrics["p0_issues"] = summary.get("p0_issues", 0)
+            metrics["p1_issues"] = summary.get("p1_issues", 0)
+            metrics["p2_issues"] = summary.get("p2_issues", 0)
+
+            # Create snapshot
+            snapshot = MetricsSnapshot(
+                entity=entity,
+                entity_type="project",  # Project-level for now
+                timestamp=datetime.now(UTC),
+                metrics=metrics,
+                workspace="default",  # TODO: get from context
+            )
+
+            # Save snapshot
+            analyzer.save_snapshot(snapshot)
+
+        except Exception as e:
+            # Don't fail the analysis if snapshot save fails
+            logger.warning(f"Failed to save metrics snapshot: {e}")

@@ -474,3 +474,71 @@ def git_metrics(path: str, since: str, output: str | None) -> None:
 
     except Exception as e:
         output_error(f"Git metrics analysis failed: {e}", ErrorCode.OPERATION_FAILED)
+
+
+@main.command("trends")
+@click.option("--entity", "-e", required=True, help="Entity identifier (e.g., 'src/auth/user_service.py')")
+@click.option("--metric", "-m", default="complexity", help="Metric to analyze (default: complexity)")
+@click.option("--months", default=6, help="Number of months to analyze (default: 6)")
+@click.option("--workspace", "-w", default=None, help="Filter by workspace (default: all)")
+def trends(entity: str, metric: str, months: int, workspace: str | None) -> None:
+    """Analyze code complexity trends over time (EPIC-010 Feature 3).
+
+    Requires historical snapshots collected by running 'loomgraph debt' multiple times.
+
+    Examples:
+        loomgraph trends -e "src/auth/user_service.py"           # Analyze complexity trend
+        loomgraph trends -e "src/core/" -m "coupling" --months 12  # 12-month coupling trend
+        loomgraph trends -e "src/api/" -w "myproject:main"        # Workspace-specific trend
+    """
+    try:
+        from loomgraph.core.trends import TrendAnalyzer
+
+        analyzer = TrendAnalyzer()
+
+        # Analyze trend
+        result = analyzer.analyze(
+            entity=entity,
+            metric_name=metric,
+            months=months,
+            workspace=workspace,
+        )
+
+        # Format output
+        output_data = {
+            "entity": result.entity,
+            "entity_type": result.entity_type,
+            "metric_name": result.metric_name,
+            "time_range": result.time_range,
+            "regression": {
+                "slope": round(result.regression.slope, 4),
+                "intercept": round(result.regression.intercept, 2),
+                "r_squared": round(result.regression.r_squared, 3),
+                "trend_direction": result.regression.trend_direction,
+            },
+            "forecast": round(result.forecast, 2),
+            "alert": result.alert,
+            "data_points": [
+                {
+                    "timestamp": p.timestamp.isoformat(),
+                    "value": p.value,
+                    "label": p.label,
+                }
+                for p in result.data_points
+            ],
+            "chart": result.chart,
+        }
+
+        output_success(output_data)
+
+    except ValueError as e:
+        output_error(
+            code=ErrorCode.INVALID_INPUT,
+            message=str(e),
+            suggestion="Run 'loomgraph debt' multiple times over weeks/months to collect trend data.",
+        )
+    except Exception as e:
+        output_error(
+            code=ErrorCode.OPERATION_FAILED,
+            message=f"Trend analysis failed: {e}",
+        )
