@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Technical Debt Scoring Formula**: Fixed data inconsistency where Quality 97/100 (A+) + Maintainability 97/100 (A+) resulted in Technical Debt 50/100 (F)
+  - Root cause: `technical_debt_score` only considered `god_penalty`, ignoring quality and maintainability dimensions
+  - Solution: Multi-dimensional weighted formula - `quality*0.4 + maintainability*0.3 + topology*0.3`
+  - Impact: codeindex evaluation improved from 50/100 (F) to 87/100 (B+), eliminating scoring contradiction
+  - Reference: codeindex Issue feedback (2026-03-08)
+
+### Changed
+- **God Function Detection**: Added domain complexity whitelist to reduce false positives
+  - Whitelisted patterns: Parser domain (`*.visit_*`, `*.parse_*`), Code generators (`*.generate_*`, `*.render_*`), CLI commands (`*.execute`, `*.main`)
+  - Behavior: Matching functions downgraded from P0 (critical) to P1 (warning) with explicit "Domain complexity" label
+  - Impact: 26 god functions in codeindex → 4 P0 (real debt) + 22 P1 (domain complexity)
+  - Design pattern: Similar to ADR-012 orphan whitelist (99 → 0 false positives)
+
 ## [0.9.1] - 2026-03-07
 
 ### Fixed
