@@ -92,7 +92,7 @@ async def resolve_workspace_with_fallback(
     """
     # Check if target workspace has data
     try:
-        stats = await client.get_graph_stats(workspace=workspace)
+        stats = await client.get_graph_stats()
         entity_count = stats.get("entity_count") or stats.get("total_entities", 0)
 
         if entity_count > 0:
@@ -117,7 +117,7 @@ async def resolve_workspace_with_fallback(
                 continue  # skip if already tried
 
             try:
-                stats = await client.get_graph_stats(workspace=fallback)
+                stats = await client.get_graph_stats()
                 entity_count = stats.get("entity_count") or stats.get("total_entities", 0)
                 if entity_count > 0:
                     click.echo(
