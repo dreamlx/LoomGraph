@@ -7,7 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
+## [0.9.0] - 2026-03-07
+
+### Added - EPIC-010: Git Metrics Integration
+
+#### Feature 1: Git History Metrics Analysis
+- **`loomgraph git-metrics` command**: Analyze repository git history for technical debt indicators
+  - `GitMetricsAnalyzer` class: Extract file-level metrics from git log (change frequency, churn, authors, bug fixes)
+  - `GitLogParser` class: Parse git log --numstat output with bug fix detection (keywords: fix, bug, patch)
+  - Hotspot detection: Calculate hotspot score = change_frequency × log10(churn + 1) × 10
+  - Bus factor analysis: Identify knowledge silos (1 contributor = critical, 2 contributors + >70% ownership = high risk)
+  - CLI options: `--since "3 months"` (time window), `--output metrics.json` (save results)
+  - 13 unit tests + 1 integration test (all passing)
+
+#### Feature 2: Three-Dimensional Debt Scoring
+- **Enhanced `loomgraph debt` command**: Integrate git metrics into debt analysis (optional `--with-git` flag)
+  - Three-dimensional scoring: `(quality + topology + git) // 3` (when `--with-git` enabled)
+  - Backward compatible: Two-dimensional scoring `(quality + topology) // 2` (default)
+  - New issue categories:
+    - `critical_hotspot` (P0): High-frequency change files (hotspot_score ≥ 80) with high coupling (in_degree > 8)
+    - `knowledge_silo` (P1): Single-contributor files (bus factor = 1) or 2 contributors with >70% ownership
+  - Issue enrichment:
+    - `orphan_entity`: Add confidence field (high/medium/low based on last_modified_days > 365/90/0)
+    - `god_function`: Add is_hotspot marker + upgrade to P0 if change_frequency > 10
+  - Graceful fallback: Non-git projects or git errors → git_score = 100 (no penalty)
+  - CLI options: `--with-git` (enable git analysis), `--git-since "3 months"` (time window)
+  - 7 unit tests (all passing, including graceful fallback test)
+
+#### Feature 3: Code Rot Trend Analysis
+- **`loomgraph trends` command**: Linear regression-based trend analysis for detecting code complexity growth over time
+  - `TrendAnalyzer` class: Load historical snapshots, calculate linear regression (least squares), generate ASCII charts
+  - Linear regression: slope/intercept/R² calculation with trend direction classification (increasing > 0.1/day, decreasing < -0.1/day, stable otherwise)
+  - Forecast: Predict next period value (30 days ahead)
+  - Alert generation: Rapid growth warning when slope > 0.15/day (~4.5/month)
+  - ASCII chart visualization: 60×16 character grid with data points (●) and trend line (─)
+  - Auto-save integration: `loomgraph debt` automatically saves project-level snapshot to `~/.loomgraph/metrics-history/`
+  - Snapshot cleanup: Delete snapshots older than 12 months (default)
+  - CLI options: `-e <entity>` (entity to analyze), `-m <metric>` (metric name, default: complexity), `--months N` (time window, default: 6), `-w <workspace>` (workspace filter)
+  - 13 unit tests (all passing, <1 second performance requirement verified)
+
+#### Documentation
+- **ADR-013: Git-Knowledge Graph Integration**: Technical design for three-dimensional debt analysis with git metrics integration strategy
+- **EPIC-010-git-metrics-integration.md**: Complete epic specification with 3 features and acceptance criteria
+- **EPIC-010-technical-design.md**: Detailed technical design covering data models, algorithms, CLI design, and integration points
+- **DEBT_REPORT_FORMAT.md**: Technical debt report format specification with JSON schema and output examples
+- **debt-report-v1.schema.json**: JSON Schema for debt report validation
+- **DOGFOODING_EPIC010.md**: Dogfooding results documenting 5 bugs found and fixed (timezone mismatch, error handling, UX improvements)
+
+#### Infrastructure
 - **Makefile**: Unified command interface for all development, testing, and release workflows. 40+ commands organized into 9 categories (Development, Release Management, Token Management, Packaging, CLI, Docker, Git). Run `make help` to see all available commands.
 - **Delivery summary generator**: `scripts/generate_delivery_summary.py` - automated customer delivery document generation with install commands, token info, release highlights, and delivery instructions. Integrated into release workflow.
 - **ADR-011: AI Iteration Strategy**: Architectural decision documenting "external iteration" approach - LoomGraph provides high-quality atomic capabilities, Claude controls iteration. Analyzed Manon's "internal iteration" model and concluded external iteration offers better cost (40-60% savings), performance (75% faster), transparency, and flexibility.
@@ -15,6 +62,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Release workflow**: Now recommends `make release VERSION=x.y.z` as the primary method (auto-runs bump → test → lint → commit → tag → push)
+
+### Fixed
+- **Trends timezone handling**: Fixed `TypeError` when comparing naive and aware datetimes. All functions now use `datetime.now(UTC)` consistently.
+- **Trends slope display**: Clarified slope units by displaying both `/month` and `/day` (e.g., "Slope: +30.00/month (+1.000/day)")
+- **Trends X-axis labels**: Same-day snapshots now show time ("HH:MM") instead of duplicate dates
+- **Trends error handling**: Changed `ErrorCode.OPERATION_FAILED` (non-existent) to `LIGHTRAG_ERROR` for proper error reporting
+- **Test suite UTC consistency**: All trend tests now use UTC-aware datetimes to prevent future timezone bugs
+
+### Performance
+- **Git metrics**: 99 hotspots + 159 bus factors analyzed in < 3 seconds (self-analysis on LoomGraph project)
+- **Trend analysis**: < 1 second for 6 months of data (10 snapshots, verified in performance test)
+- **Three-dimensional debt scoring**: No performance degradation when `--with-git` enabled (~2s for 278 issues on LoomGraph project)
 
 ## [0.8.0] - 2026-02-24
 

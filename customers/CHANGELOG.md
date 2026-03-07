@@ -4,6 +4,123 @@
 
 ---
 
+## [0.9.0] - 2026-03-07
+
+### 🎉 重大更新：技术债务预警系统
+
+**核心价值**：将代码健康度从静态评估升级为动态趋势预测，像体检系统一样监控代码健康度变化，提前预警技术债务恶化。
+
+#### 新增功能
+
+**1. Git 历史度量分析**
+- **热点检测**：基于变更频率 × 代码量，定位最容易出问题的文件
+- **总线因子分析**：识别知识孤岛风险（如某文件只有 1 人维护）
+- **缺陷率统计**：计算 bug fix 占比，识别质量脆弱点
+- **命令**：`loomgraph git-metrics [path] --since "3 months"`
+
+**2. 三维度债务评分**
+- 在原有静态分析基础上，新增**代码历史维度**
+- 综合评分 = (代码质量 + 拓扑健康 + Git 度量) / 3
+- 自动识别 7 大类债务问题：
+  - 超大文件（>5000 行）
+  - 上帝类（>50 方法）
+  - 高频热点（经常被改的文件）
+  - 知识孤岛（只有 1-2 人维护）
+  - 缺陷磁铁（bug fix 比例 >30%）
+- **命令**：`loomgraph debt --with-git`
+
+**3. 代码腐化趋势分析**
+- **线性回归预测**：基于历史快照预测未来 1 个月的复杂度变化
+- **自动快照保存**：每次运行 `loomgraph debt` 自动保存度量数据（存储在 `~/.loomgraph/metrics-history/`）
+- **ASCII 趋势图**：可视化复杂度、耦合度等指标的演化趋势
+- **自动预警**：当月增长率 >15% 时发出警报
+- **命令**：`loomgraph trends --entity "src/auth/user.py" --metric complexity --months 6`
+
+#### 升级方式
+
+**已有客户**（收到 upgrade 包）：
+```bash
+tar xzf loomgraph-upgrade-{customer}-v0.9.0.tar.gz
+cd loomgraph-upgrade-{customer}-v0.9.0
+./upgrade.sh
+
+# 重启 Claude Code 后新功能自动可用
+```
+
+**手动升级**（在线安装）：
+```bash
+source ~/.loomgraph-venv/bin/activate
+pip install --upgrade loomgraph
+loomgraph install-skills
+loomgraph version  # 应显示 0.9.0
+```
+
+#### 使用示例
+
+**场景 1：发现质量热点**
+```bash
+# 分析最近 3 个月的 Git 历史
+loomgraph git-metrics . --since "3 months"
+
+# 输出示例：
+# 热点文件 TOP 3:
+#   1. src/auth/user_service.py - 45 次提交，2300 行，热点分数 87/100
+#   2. src/api/handlers.py - 38 次提交，1800 行，热点分数 76/100
+#
+# 总线因子风险:
+#   src/core/config.py - 唯一维护者：张三（100% 提交），风险等级：critical
+```
+
+**场景 2：全面债务评估（推荐）**
+```bash
+# 启用 Git 维度分析（首次运行可能需要 2-3 秒解析 git log）
+loomgraph debt --with-git
+
+# 自动检测 7 大类问题，综合评分更准确
+```
+
+**场景 3：趋势预测（需要先积累历史数据）**
+```bash
+# Step 1: 多次运行 debt 命令积累快照（建议每周运行一次，持续 1-2 个月）
+loomgraph debt --with-git
+
+# Step 2: 分析趋势（需要至少 3 次快照）
+loomgraph trends --entity "src/auth/user_service.py" --metric complexity --months 6
+
+# 输出示例：
+# Trend: INCREASING
+# Slope: +3.00/month (+0.100/day), R²: 0.950
+#
+# ⚠️ Rapid complexity growth detected: +25.0% projected in next month.
+# Current: 45, Forecast: 56. Consider refactoring to prevent further deterioration.
+```
+
+#### 性能优化
+
+- Git 度量分析（3 个月历史）：**< 3 秒**（LoomGraph 项目，203 个文件，1387 次提交）
+- 趋势分析（6 个月数据）：**< 1 秒**（10+ 快照）
+- 启用 `--with-git` 对 `debt` 命令影响：**几乎无感知**（+0.5 秒）
+
+#### 版本对比
+
+| 功能 | v0.7.0 | v0.9.0 |
+|------|--------|--------|
+| 静态代码质量分析 | ✅ | ✅ |
+| 拓扑健康度分析 | ✅ | ✅ |
+| Git 历史度量 | ❌ | ✅ |
+| 三维度综合评分 | ❌ | ✅ |
+| 趋势预测 | ❌ | ✅ |
+| 自动预警 | ❌ | ✅ |
+
+#### 最佳实践
+
+1. **首次使用**：先运行 `loomgraph git-metrics .` 了解代码库历史健康度
+2. **定期监控**：每周运行一次 `loomgraph debt --with-git`（自动保存快照）
+3. **趋势分析**：积累 3+ 次快照后，使用 `loomgraph trends` 观察演化趋势
+4. **集成 CI**：在 CI 流程中运行，设置评分阈值（如 <60 分则构建失败）
+
+---
+
 ## [0.7.0] - 2026-02-22
 
 ### 🎉 重大更新：自动化增量更新
