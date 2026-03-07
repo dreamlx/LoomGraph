@@ -149,7 +149,7 @@ class TestResolveWorkspaceWithFallback:
         )
 
         assert result == "myproject:feature"
-        mock_client.get_graph_stats.assert_called_once_with(workspace="myproject:feature")
+        mock_client.get_graph_stats.assert_called_once_with()
 
     @pytest.mark.asyncio
     async def test_fallback_to_main(self) -> None:
