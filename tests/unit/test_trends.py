@@ -1,7 +1,6 @@
 """Unit tests for TrendAnalyzer (EPIC-010 Feature 3)."""
 
-import json
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -14,8 +13,8 @@ from loomgraph.core.trends import TrendAnalyzer
 @pytest.fixture
 def sample_snapshots():
     """Sample metrics snapshots for testing (6 months of data)."""
-    # Use recent timestamps (within last 6 months)
-    now = datetime.now()
+    # Use recent timestamps (within last 6 months) with UTC awareness
+    now = datetime.now(UTC)
     base_time = now - timedelta(days=150)  # Start 5 months ago
     snapshots = []
 
@@ -40,8 +39,8 @@ def sample_snapshots():
 @pytest.fixture
 def sample_stable_snapshots():
     """Sample snapshots with stable (no growth) metrics."""
-    # Use recent timestamps (within last 6 months)
-    now = datetime.now()
+    # Use recent timestamps (within last 6 months) with UTC awareness
+    now = datetime.now(UTC)
     base_time = now - timedelta(days=150)  # Start 5 months ago
     snapshots = []
 
@@ -79,7 +78,7 @@ class TestTrendAnalyzer:
         snapshot = MetricsSnapshot(
             entity="src/test.py",
             entity_type="file",
-            timestamp=datetime.now(),
+            timestamp=datetime.now(UTC),
             metrics={"complexity": 42},
             workspace="test:main",
         )
@@ -186,37 +185,40 @@ class TestTrendAnalyzer:
         analyzer = TrendAnalyzer()
 
         # Only 2 snapshots - not enough for trend
+        now = datetime.now(UTC)
         insufficient_snapshots = [
             MetricsSnapshot(
                 entity="src/test.py",
                 entity_type="file",
-                timestamp=datetime.now(),
+                timestamp=now,
                 metrics={"complexity": 30},
                 workspace="test:main",
             ),
             MetricsSnapshot(
                 entity="src/test.py",
                 entity_type="file",
-                timestamp=datetime.now() + timedelta(days=30),
+                timestamp=now + timedelta(days=30),
                 metrics={"complexity": 35},
                 workspace="test:main",
             ),
         ]
 
-        with patch.object(analyzer, "load_snapshots", return_value=insufficient_snapshots):
-            with pytest.raises(ValueError, match="at least 3 snapshots"):
-                analyzer.analyze(
-                    entity="src/test.py",
-                    metric_name="complexity",
-                    months=6,
-                )
+        with (
+            patch.object(analyzer, "load_snapshots", return_value=insufficient_snapshots),
+            pytest.raises(ValueError, match="at least 3 snapshots"),
+        ):
+            analyzer.analyze(
+                entity="src/test.py",
+                metric_name="complexity",
+                months=6,
+            )
 
     def test_cleanup_old_snapshots(self):
         """Test cleanup of snapshots older than 12 months."""
         analyzer = TrendAnalyzer()
 
         # Create mock files with different timestamps
-        now = datetime.now()
+        now = datetime.now(UTC)
         old_file = Mock()
         old_file.name = f"src_test_py_{(now - timedelta(days=400)).strftime('%Y%m%d_%H%M%S')}.json"
         old_file.stat.return_value.st_mtime = (now - timedelta(days=400)).timestamp()
@@ -267,7 +269,7 @@ class TestTrendAnalyzer:
         analyzer = TrendAnalyzer()
 
         # Dataset with steeper slope: y = 4x + 1 (4 units per day)
-        base_time = datetime(2024, 1, 1)
+        base_time = datetime(2024, 1, 1, tzinfo=UTC)
         data_points = [
             TrendPoint(base_time, 1, "T0"),                               # x=0, y=1
             TrendPoint(base_time + timedelta(days=10), 41, "T1"),         # x=10, y=41
@@ -327,20 +329,19 @@ class TestTrendIntegration:
         snapshot = MetricsSnapshot(
             entity="src/integration/test.py",
             entity_type="file",
-            timestamp=datetime.now(),
+            timestamp=datetime.now(UTC),
             metrics={"complexity": 42, "coupling": 10},
             workspace="integration:test",
         )
 
         # Save snapshot
-        with patch("pathlib.Path.mkdir"):
-            with patch("pathlib.Path.write_text") as mock_write:
-                analyzer.save_snapshot(snapshot)
+        with patch("pathlib.Path.mkdir"), patch("pathlib.Path.write_text") as mock_write:
+            analyzer.save_snapshot(snapshot)
 
-                # Verify JSON structure
-                written_json = mock_write.call_args[0][0]
-                assert "src/integration/test.py" in written_json
-                assert "42" in written_json
+            # Verify JSON structure
+            written_json = mock_write.call_args[0][0]
+            assert "src/integration/test.py" in written_json
+            assert "42" in written_json
 
     def test_auto_save_in_debt_command(self):
         """Test that debt command auto-saves snapshots."""

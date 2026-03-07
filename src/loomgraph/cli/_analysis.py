@@ -539,6 +539,6 @@ def trends(entity: str, metric: str, months: int, workspace: str | None) -> None
         )
     except Exception as e:
         output_error(
-            code=ErrorCode.OPERATION_FAILED,
+            code=ErrorCode.LIGHTRAG_ERROR,
             message=f"Trend analysis failed: {e}",
         )

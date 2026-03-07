@@ -6,7 +6,7 @@ Uses linear regression for trend prediction and generates ASCII charts.
 
 import hashlib
 import json
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from loomgraph.core.models import (
@@ -91,7 +91,7 @@ class TrendAnalyzer:
 
         # Find all matching files
         snapshots = []
-        cutoff = datetime.now() - timedelta(days=30 * months)
+        cutoff = datetime.now(UTC) - timedelta(days=30 * months)
 
         for file_path in self.storage_path.glob(pattern):
             try:
@@ -216,12 +216,12 @@ class TrendAnalyzer:
         Returns:
             Number of files deleted
         """
-        cutoff = datetime.now() - timedelta(days=30 * max_age_months)
+        cutoff = datetime.now(UTC) - timedelta(days=30 * max_age_months)
         deleted = 0
 
         for file_path in self.storage_path.glob("*.json"):
             # Check file modification time
-            mtime = datetime.fromtimestamp(file_path.stat().st_mtime)
+            mtime = datetime.fromtimestamp(file_path.stat().st_mtime, tz=UTC)
 
             if mtime < cutoff:
                 file_path.unlink()
@@ -357,7 +357,9 @@ class TrendAnalyzer:
 
         # Title
         lines.append(f"Trend: {regression.trend_direction.upper()}")
-        lines.append(f"Slope: {regression.slope:+.2f}/month, R²: {regression.r_squared:.3f}")
+        # Convert slope to per-month for display (slope is per-day internally)
+        slope_per_month = regression.slope * 30
+        lines.append(f"Slope: {slope_per_month:+.2f}/month ({regression.slope:+.3f}/day), R²: {regression.r_squared:.3f}")
         lines.append("")
 
         # Y-axis scale
@@ -399,9 +401,20 @@ class TrendAnalyzer:
         # X-axis
         lines.append("      └" + "─" * width)
 
-        # X-axis labels (first and last date)
-        first_label = data_points[0].label
-        last_label = data_points[-1].label
+        # X-axis labels (first and last date/time)
+        # If all points on same day, show time instead of date
+        first_ts = data_points[0].timestamp
+        last_ts = data_points[-1].timestamp
+
+        if first_ts.date() == last_ts.date():
+            # Same day - show time (HH:MM)
+            first_label = first_ts.strftime("%H:%M")
+            last_label = last_ts.strftime("%H:%M")
+        else:
+            # Different days - show date
+            first_label = data_points[0].label
+            last_label = data_points[-1].label
+
         x_labels = f"       {first_label}" + " " * (width - len(first_label) - len(last_label)) + last_label
         lines.append(x_labels)
 
