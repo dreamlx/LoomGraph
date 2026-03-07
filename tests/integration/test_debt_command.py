@@ -63,8 +63,9 @@ class TestDebtCommand:
         assert report["schema_version"] == "1.0"
         assert report["generator"]["tool"] == "loomgraph"
         # Quality = 100 - (1*10 + 2*5 + 3*1) = 77
+        # Maintainability = (3.0 + 7.0 + 9.5)/3 * 10 = 65
         # Topology = 100 (skip topology)
-        # Total = (77 + 100) // 2 = 88 → Grade B
+        # Total (v0.9.2) = int(77 * 0.4 + 65 * 0.3 + 100 * 0.3) = 80 → Grade B
         assert report["overall_health"]["grade"] == "B"
         assert len(report["issues"]) == 6
 
@@ -91,7 +92,8 @@ class TestDebtCommand:
         data = output["data"]
         assert "message" in data
         assert "=== Technical Debt Analysis ===" in data["message"]
-        assert "Overall Score: 88/100" in data["message"]
+        # v0.9.2: 80/100 (was 88/100)
+        assert "Overall Score: 80/100" in data["message"]
         assert "Grade: B" in data["message"]
         assert "report" in data
 
@@ -120,7 +122,8 @@ class TestDebtCommand:
         content = data["content"]
         assert "# Technical Debt Analysis Report" in content
         assert "## Overall Health" in content
-        assert "**Score**: 88/100 (Grade: B)" in content
+        # v0.9.2: 80/100 (was 88/100)
+        assert "**Score**: 80/100 (Grade: B)" in content
         assert "## Critical Priority Issues" in content
 
     def test_debt_with_nonexistent_file(self, runner: CliRunner):

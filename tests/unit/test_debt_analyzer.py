@@ -349,6 +349,82 @@ class TestLookupMaintainability:
         assert score == 5.0  # Default mid-range
 
 
+class TestGodFunctionWhitelist:
+    """Test God Function domain complexity whitelist (v0.9.2)."""
+
+    def test_is_whitelisted_god_function_parser(self):
+        """Test Parser domain functions are whitelisted."""
+        assert DebtAnalyzer._is_whitelisted_god_function("PythonParser.visit_module")
+        assert DebtAnalyzer._is_whitelisted_god_function("JavaParser._parse_class")
+        assert DebtAnalyzer._is_whitelisted_god_function("TSParser._extract_imports")
+
+    def test_is_whitelisted_god_function_generator(self):
+        """Test code generator functions are whitelisted."""
+        assert DebtAnalyzer._is_whitelisted_god_function("ReportGenerator.generate_html")
+        assert DebtAnalyzer._is_whitelisted_god_function("MarkdownRenderer.render_table")
+        assert DebtAnalyzer._is_whitelisted_god_function("Formatter.format_json_output")
+
+    def test_is_whitelisted_god_function_cli(self):
+        """Test CLI functions are whitelisted."""
+        assert DebtAnalyzer._is_whitelisted_god_function("IndexCommand.execute")
+        assert DebtAnalyzer._is_whitelisted_god_function("CLI._handle_error")
+        assert DebtAnalyzer._is_whitelisted_god_function("cli.main")
+
+    def test_is_not_whitelisted_god_function(self):
+        """Test business logic functions are NOT whitelisted."""
+        assert not DebtAnalyzer._is_whitelisted_god_function("UserService.createUser")
+        assert not DebtAnalyzer._is_whitelisted_god_function(
+            "PaymentProcessor.processPayment"
+        )
+        assert not DebtAnalyzer._is_whitelisted_god_function(
+            "DataAnalyzer.analyze_metrics"
+        )
+
+
+class TestMaintainabilityScoreCalculation:
+    """Test maintainability score calculation from codeindex (v0.9.2)."""
+
+    def test_calculate_maintainability_from_codeindex(self, analyzer: DebtAnalyzer):
+        """Test maintainability score aggregation."""
+        data = CodeindexData(
+            target_path=".",
+            timestamp="2026-03-08T00:00:00Z",
+            summary={},
+            maintainability_scores=[
+                {"path": "file1.py", "score": 8.5},
+                {"path": "file2.py", "score": 9.0},
+                {"path": "file3.py", "score": 7.5},
+            ],
+        )
+
+        score = analyzer._calculate_maintainability_score(data)
+
+        # Average: (8.5 + 9.0 + 7.5) / 3 = 8.33
+        # Normalized: 8.33 * 10 = 83.3
+        assert score == pytest.approx(83.33, abs=0.1)
+
+    def test_calculate_maintainability_no_data(self, analyzer: DebtAnalyzer):
+        """Test maintainability score with no codeindex data."""
+        score = analyzer._calculate_maintainability_score(None)
+
+        # No data = perfect score (no penalty)
+        assert score == 100.0
+
+    def test_calculate_maintainability_empty_scores(self, analyzer: DebtAnalyzer):
+        """Test maintainability score with empty scores array."""
+        data = CodeindexData(
+            target_path=".",
+            timestamp="2026-03-08T00:00:00Z",
+            summary={},
+            maintainability_scores=[],
+        )
+
+        score = analyzer._calculate_maintainability_score(data)
+
+        # Empty = perfect score
+        assert score == 100.0
+
+
 class TestCalculateOverallHealth:
     """Test _calculate_overall_health method."""
 
@@ -384,14 +460,18 @@ class TestCalculateOverallHealth:
             ),
         ]
 
-        result = analyzer._calculate_overall_health(topology_score=100)
+        result = analyzer._calculate_overall_health(
+            topology_score=100, maintainability_score=100.0
+        )
 
         # Quality = 100 - (1*10 + 1*5 + 1*1) = 84
+        # Maintainability = 100 (default)
         # Topology = 100 (passed in)
-        # Total = (84 + 100) // 2 = 92
-        assert result["total_score"] == 92
+        # Total = int(84 * 0.4 + 100 * 0.3 + 100 * 0.3) = int(33.6 + 30 + 30) = 93
+        assert result["total_score"] == 93
         assert result["grade"] == "A"
         assert result["breakdown"]["quality"] == 84
+        assert result["breakdown"]["maintainability"] == 100
         assert result["breakdown"]["topology"] == 100
         assert result["summary"]["p0_issues"] == 1
         assert result["summary"]["p1_issues"] == 1
@@ -408,7 +488,11 @@ class TestCalculateOverallHealth:
         assert result["summary"]["p0_issues"] == 0
 
     def test_grade_thresholds(self, analyzer: DebtAnalyzer):
-        """Test all grade thresholds with multi-dimensional scoring."""
+        """Test all grade thresholds with multi-dimensional scoring (v0.9.2).
+
+        Note: With new formula (quality*0.4 + maintainability*0.3 + topology*0.3),
+        the minimum possible score is 60 (when quality=0, others=100).
+        """
         test_cases = [
             (100, "A"),
             (90, "A"),
@@ -417,16 +501,16 @@ class TestCalculateOverallHealth:
             (79, "C"),
             (70, "C"),
             (69, "D"),
-            (60, "D"),
-            (59, "F"),
-            (0, "F"),
+            (60, "D"),  # Minimum possible score with new formula
         ]
 
         for target_score, expected_grade in test_cases:
-            # With topology_score=100 (perfect), total = (quality + 100) // 2
-            # To get target_score, quality = 2*target_score - 100
-            # quality = 100 - penalty → penalty = 100 - quality = 200 - 2*target_score
-            quality_needed = 2 * target_score - 100
+            # New formula (v0.9.2):
+            # total = int(quality * 0.4 + maintainability * 0.3 + topology * 0.3)
+            # With maintainability=100, topology=100:
+            # total = int(quality * 0.4 + 60)
+            # quality = (target - 60) / 0.4
+            quality_needed = (target_score - 60) / 0.4
             penalty = 100 - quality_needed
 
             # Use P2 issues (penalty = 1 each)
@@ -440,13 +524,15 @@ class TestCalculateOverallHealth:
                     location={},
                     metrics={},
                 )
-                for i in range(max(0, penalty))
+                for i in range(max(0, int(penalty)))
             ]
 
-            result = analyzer._calculate_overall_health(topology_score=100)
+            result = analyzer._calculate_overall_health(
+                topology_score=100, maintainability_score=100.0
+            )
             assert (
                 result["grade"] == expected_grade
-            ), f"Target {target_score} (quality={quality_needed}) should be grade {expected_grade}, got {result['grade']} (total={result['total_score']})"
+            ), f"Target {target_score} (quality={quality_needed:.1f}) should be grade {expected_grade}, got {result['grade']} (total={result['total_score']})"
 
 
 class TestIssueToDict:

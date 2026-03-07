@@ -15,6 +15,7 @@ Responsibility:
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -23,6 +24,28 @@ from typing import Any
 from loomgraph.core.lightrag_client import LightRAGClient
 
 logger = logging.getLogger(__name__)
+
+# God Function Domain Complexity Whitelist (v0.9.2)
+# These patterns identify functions with inherent domain complexity,
+# not code quality issues. Matches are downgraded from P0 → P1 warning.
+GOD_FUNCTION_WHITELIST_PATTERNS = (
+    # Parser domain (tree-sitter traversal requires extensive branching)
+    r".*Parser\.visit_.*",
+    r".*Parser\._parse_.*",
+    r".*Parser\._extract_.*",
+    # Code generators (string template accumulation)
+    r".*\.generate_.*",
+    r".*\.render_.*",
+    r".*\.format_.*_output",
+    r".*\.format_.*_report",
+    # CLI commands (exception handling chains + user interaction)
+    r".*Command\.execute",
+    r".*CLI\._handle_.*",
+    r".*\.main$",  # Main entry points are typically orchestration
+    # Build/packaging scripts (sequential steps)
+    r".*\.package_.*",
+    r".*\.build_.*",
+)
 
 
 @dataclass
@@ -92,6 +115,21 @@ class DebtAnalyzer:
         """
         self.client = client
         self.issues: list[DebtIssue] = []
+
+    @staticmethod
+    def _is_whitelisted_god_function(entity_name: str) -> bool:
+        """Check if a god function matches domain complexity patterns.
+
+        Args:
+            entity_name: Full entity name (e.g., "PythonParser.visit_module")
+
+        Returns:
+            True if the function is whitelisted (domain complexity, not debt)
+        """
+        for pattern in GOD_FUNCTION_WHITELIST_PATTERNS:
+            if re.match(pattern, entity_name):
+                return True
+        return False
 
     def import_codeindex_data(self, raw_data: dict[str, Any]) -> CodeindexData:
         """
@@ -281,19 +319,23 @@ class DebtAnalyzer:
                 logger.warning(f"Git analysis failed, skipping: {e}")
                 git_score = 100  # No penalty
 
-        # Step 4: Calculate overall health (three-dimensional if with_git)
+        # Step 4: Calculate maintainability score from codeindex
+        maintainability_score = self._calculate_maintainability_score(imported_data)
+
+        # Step 5: Calculate overall health (multi-dimensional)
         overall_health = self._calculate_overall_health(
             topology_score=topology_score,
             git_score=git_score if with_git else None,
+            maintainability_score=maintainability_score,
         )
 
-        # Step 4.5: Auto-save metrics snapshot for trend analysis (EPIC-010 Feature 3)
+        # Step 5.5: Auto-save metrics snapshot for trend analysis (EPIC-010 Feature 3)
         self._save_metrics_snapshot(
             entity="project",  # Project-level snapshot
             overall_health=overall_health,
         )
 
-        # Step 5: Generate report
+        # Step 6: Generate report
         return {
             "schema_version": "1.0",
             "timestamp": datetime.now(UTC).isoformat(),
@@ -442,14 +484,29 @@ class DebtAnalyzer:
             )
             issue_id_counter += 1
 
-        # Convert god functions to issues (P0 - high complexity)
+        # Convert god functions to issues (P0 or P1 based on domain)
         for god in result.god_functions:
+            entity_name = god.get("entity", god.get("entity_name", "unknown"))
+
+            # Check if this is domain complexity (not technical debt)
+            is_domain_complexity = self._is_whitelisted_god_function(entity_name)
+
+            # Downgrade domain complexity to P1 warning
+            severity = "P1" if is_domain_complexity else "P0"
+            suggestion = "High fan-out indicates excessive responsibility; refactor into smaller functions"
+
+            if is_domain_complexity:
+                suggestion = (
+                    "Domain complexity (Parser/Generator/CLI). "
+                    "Refactoring can improve readability but is not critical."
+                )
+
             self.issues.append(
                 DebtIssue(
                     id=f"debt-{issue_id_counter:03d}",
-                    severity="P0",
+                    severity=severity,
                     category="god_function",
-                    entity=god.get("entity", god.get("entity_name", "unknown")),
+                    entity=entity_name,
                     entity_type=god.get("type", god.get("entity_type", "function")),
                     location={
                         "file": god.get("source_id", "unknown"),
@@ -457,7 +514,8 @@ class DebtAnalyzer:
                     metrics={
                         "out_degree": god.get("out_degree", 0),
                     },
-                    suggestion="High fan-out indicates excessive responsibility; refactor into smaller functions",
+                    suggestion=suggestion,
+                    details={"is_domain_complexity": is_domain_complexity},
                 )
             )
             issue_id_counter += 1
@@ -514,14 +572,39 @@ class DebtAnalyzer:
                 return score_data["score"]
         return 5.0  # Default mid-range score
 
+    def _calculate_maintainability_score(
+        self, data: CodeindexData | None
+    ) -> float:
+        """Calculate aggregated maintainability score from codeindex data.
+
+        Args:
+            data: Imported codeindex data (None if not provided)
+
+        Returns:
+            Maintainability score (0-100), default 100 if no data
+        """
+        if not data or not data.maintainability_scores:
+            return 100.0  # No data = perfect score (no penalty)
+
+        # Aggregate: average of all file maintainability scores
+        scores = [item["score"] for item in data.maintainability_scores]
+        avg_score = sum(scores) / len(scores)
+
+        # Normalize: codeindex uses 0-10 scale, convert to 0-100
+        return avg_score * 10.0
+
     def _calculate_overall_health(
-        self, topology_score: int = 100, git_score: int | None = None
+        self,
+        topology_score: int = 100,
+        git_score: int | None = None,
+        maintainability_score: float = 100.0,
     ) -> dict[str, Any]:
         """Calculate overall health score from issues.
 
         Args:
             topology_score: Topology health score from TopologyAnalyzer (0-100)
             git_score: Git metrics health score (0-100), None if --with-git not enabled
+            maintainability_score: Aggregated maintainability from codeindex (0-100)
 
         Returns:
             Overall health dict with breakdown by dimension
@@ -533,13 +616,25 @@ class DebtAnalyzer:
         # Quality scoring: 100 - (P0*10 + P1*5 + P2*1)
         quality_score = max(0, 100 - (p0_issues * 10 + p1_issues * 5 + p2_issues * 1))
 
-        # Overall score: three-dimensional (quality + topology + git) or two-dimensional
+        # Overall score: Multi-dimensional weighted formula (v0.9.2 fix)
+        # - quality_score (40%): Issue penalties
+        # - maintainability_score (30%): Codeindex static analysis
+        # - topology_score (30%): Graph topology OR
+        # - git_score replaces topology if enabled
         if git_score is not None:
             # Three-dimensional scoring (EPIC-010)
-            total_score = (quality_score + topology_score + git_score) // 3
+            total_score = int(
+                quality_score * 0.4
+                + maintainability_score * 0.3
+                + git_score * 0.3
+            )
         else:
-            # Two-dimensional scoring (backward compatible)
-            total_score = (quality_score + topology_score) // 2
+            # Two-dimensional scoring (default)
+            total_score = int(
+                quality_score * 0.4
+                + maintainability_score * 0.3
+                + topology_score * 0.3
+            )
 
         # Grade calculation
         if total_score >= 90:
@@ -556,8 +651,8 @@ class DebtAnalyzer:
         breakdown: dict[str, int] = {
             "topology": topology_score,
             "quality": quality_score,
+            "maintainability": int(maintainability_score),
             "test_coverage": 0,  # TODO: integrate coverage data
-            "maintainability": 0,  # TODO: aggregate from codeindex
         }
 
         # Add git dimension if enabled

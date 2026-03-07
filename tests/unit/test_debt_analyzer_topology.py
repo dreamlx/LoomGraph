@@ -174,7 +174,7 @@ class TestTopologyIntegration:
     async def test_god_function_conversion(
         self, mock_client, mock_topology_result, monkeypatch
     ):
-        """Test god function is converted to P0 issue."""
+        """Test god function is converted to P0 issue (business logic)."""
         async def mock_analyze(self):
             return mock_topology_result
 
@@ -193,6 +193,52 @@ class TestTopologyIntegration:
         assert god_issue["entity"] == "GodFunction"
         assert god_issue["metrics"]["out_degree"] == 25
         assert "fan-out" in god_issue["suggestion"]
+
+    @pytest.mark.asyncio
+    async def test_god_function_whitelist_downgrade(
+        self, mock_client, monkeypatch
+    ):
+        """Test god function matching whitelist is downgraded to P1 (v0.9.2)."""
+        from loomgraph.core import topology
+        from loomgraph.core.topology import TopologyResult, CouplingMetrics
+
+        # Mock topology result with Parser domain god function
+        mock_result = TopologyResult(
+            orphans=[],
+            hubs=[],
+            god_functions=[
+                {
+                    "entity": "PythonParser.visit_module",
+                    "entity_name": "PythonParser.visit_module",
+                    "type": "function",
+                    "source_id": "src/parser.py",
+                    "out_degree": 25,
+                }
+            ],
+            placeholder_modules=[],
+            coupling=CouplingMetrics(
+                intra_module=10, cross_module=5, density=0.33, most_coupled_pairs=[]
+            ),
+            topology_score=100,
+        )
+
+        async def mock_analyze(self):
+            return mock_result
+
+        monkeypatch.setattr(topology.TopologyAnalyzer, "analyze", mock_analyze)
+
+        analyzer = DebtAnalyzer(client=mock_client)
+        result = await analyzer.analyze()
+
+        god_issue = next(
+            i for i in result["issues"] if i["category"] == "god_function"
+        )
+
+        # Should be downgraded to P1 (domain complexity, not debt)
+        assert god_issue["severity"] == "P1"
+        assert god_issue["entity"] == "PythonParser.visit_module"
+        assert god_issue["details"]["is_domain_complexity"] is True
+        assert "Domain complexity" in god_issue["suggestion"]
 
     @pytest.mark.asyncio
     async def test_placeholder_module_conversion(
@@ -326,12 +372,15 @@ class TestTopologyIntegration:
         # - 1 placeholder (P2) = 1
         # - 1 coupling (P1) = 5
         # Quality = 100 - 26 = 74
+        # Maintainability = 100 (default, no codeindex data)
         # Topology = 75 (from mock)
-        # Total = (74 + 75) // 2 = 74
+        # Total (v0.9.2) = int(74 * 0.4 + 100 * 0.3 + 75 * 0.3)
+        #                = int(29.6 + 30 + 22.5) = 82
         assert health["breakdown"]["quality"] == 74
+        assert health["breakdown"]["maintainability"] == 100
         assert health["breakdown"]["topology"] == 75
-        assert health["total_score"] == 74
-        assert health["grade"] == "C"
+        assert health["total_score"] == 82
+        assert health["grade"] == "B"
 
     @pytest.mark.asyncio
     async def test_module_filter_passed_to_topology(
