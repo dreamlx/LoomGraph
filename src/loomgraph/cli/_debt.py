@@ -50,17 +50,29 @@ from loomgraph.core.lightrag_client import LightRAGClient
     is_flag=True,
     help="Skip graph topology analysis (faster, codeindex-only)",
 )
+@click.option(
+    "--with-git",
+    is_flag=True,
+    help="Enable git metrics analysis (EPIC-010 Feature 2)",
+)
+@click.option(
+    "--git-since",
+    default="3 months",
+    help="Time window for git analysis (default: '3 months')",
+)
 def debt(
     codeindex_data: Path | None,
     output_format: str,
     workspace: str | None,
     module: str | None,
     skip_topology: bool,
+    with_git: bool,
+    git_since: str,
 ) -> None:
     """Analyze technical debt from codeindex data.
 
     Combines codeindex static analysis with LoomGraph graph topology
-    to provide multi-dimensional technical debt scoring.
+    and optionally git history metrics (EPIC-010 Feature 2).
 
     Examples:
         # Analyze from codeindex output only (fast)
@@ -69,6 +81,12 @@ def debt(
 
         # Full analysis with topology (requires indexed workspace)
         loomgraph debt --codeindex-data debt.json
+
+        # Three-dimensional analysis (quality + topology + git)
+        loomgraph debt --codeindex-data debt.json --with-git
+
+        # Custom git time window
+        loomgraph debt --codeindex-data debt.json --with-git --git-since "6 months"
 
         # Different output formats
         loomgraph debt --codeindex-data debt.json --format console
@@ -79,7 +97,9 @@ def debt(
     """
     try:
         result = asyncio.run(
-            _async_debt(codeindex_data, output_format, workspace, module, skip_topology)
+            _async_debt(
+                codeindex_data, output_format, workspace, module, skip_topology, with_git, git_since
+            )
         )
         output_success(result)
 
@@ -97,6 +117,8 @@ async def _async_debt(
     workspace: str | None,
     module: str | None,
     skip_topology: bool,
+    with_git: bool,
+    git_since: str,
 ) -> dict[str, Any]:
     """Async implementation of debt analysis.
 
@@ -106,6 +128,8 @@ async def _async_debt(
         workspace: Workspace name for topology analysis
         module: Module filter for topology analysis
         skip_topology: Skip topology analysis if True
+        with_git: Enable git metrics analysis (EPIC-010 Feature 2)
+        git_since: Time window for git analysis
 
     Returns:
         Debt report in requested format
@@ -133,7 +157,12 @@ async def _async_debt(
 
     # Analyze debt
     analyzer = DebtAnalyzer(client=client)
-    report = await analyzer.analyze(codeindex_data=codeindex_data, module=module)
+    report = await analyzer.analyze(
+        codeindex_data=codeindex_data,
+        module=module,
+        with_git=with_git,
+        git_since=git_since,
+    )
 
     # Format output
     if output_format == "json":
