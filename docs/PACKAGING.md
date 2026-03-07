@@ -11,6 +11,66 @@ LoomGraph 提供两条发布通道：
 
 客户配置 (`config.yaml`) 始终手动交付，不打入包内。
 
+## 快速开始（使用 Makefile）
+
+项目提供了统一的 `Makefile` 来简化常用操作。**推荐使用 make 命令**而非直接调用脚本。
+
+### 查看所有可用命令
+
+```bash
+make help
+```
+
+### 常用命令速查
+
+| 命令 | 说明 |
+|------|------|
+| `make release VERSION=0.8.0` | 🚀 **完整发布流程**（bump → test → lint → commit → tag → push） |
+| `make delivery-summary` | 📋 生成客户交付总结 |
+| `make token-list` | 🔑 查看所有客户 Token 状态 |
+| `make token-check` | ⏰ 检查即将过期的 Token |
+| `make test` | ✅ 运行所有测试 |
+| `make lint` | 🔍 代码检查 |
+| `make package-all` | 📦 打包所有客户（离线包） |
+
+### 典型工作流示例
+
+**场景 1: 发布新版本**
+```bash
+# 一键发布（推荐）
+make release VERSION=0.8.0
+
+# 等待 GitHub Actions 完成后
+make delivery-summary
+
+# 将交付总结发送给客户
+cat /tmp/customer_delivery_summary.txt
+```
+
+**场景 2: 检查 Token 状态**
+```bash
+# 查看所有 Token
+make token-list
+
+# 检查即将过期的 Token
+make token-check
+
+# 验证单个 Token
+make token-verify CUSTOMER=zcyl TOKEN=github_pat_...
+```
+
+**场景 3: 开发调试**
+```bash
+# 运行测试
+make test
+
+# 修复 lint 问题
+make lint-fix
+
+# 清理临时文件
+make clean
+```
+
 ## 目录结构
 
 ```
@@ -82,27 +142,70 @@ EOF
 
 ### 标准发布步骤
 
+**推荐方式（使用 Makefile）**:
+
+```bash
+# 一键发布（自动执行 bump → test → lint → commit → tag → push）
+make release VERSION=0.8.0
+
+# 等待 GitHub Actions 完成（~1 分钟），然后生成交付总结
+make delivery-summary
+
+# 查看交付总结并发送给客户
+cat /tmp/customer_delivery_summary.txt
+```
+
+**手动方式（直接调用脚本）**:
+
 ```bash
 # 1. Bump version（自动更新 pyproject.toml, customers/VERSION, CHANGELOG.md）
-python scripts/bump_version.py 0.2.5
+python scripts/bump_version.py 0.8.0
 
 # 2. Commit + tag
 git add pyproject.toml customers/VERSION CHANGELOG.md
-git commit -m "chore: bump version to 0.2.5"
-git tag v0.2.5
+git commit -m "chore: bump version to 0.8.0"
+git tag v0.8.0
 
 # 3. Push（触发 CI: test → build → GitHub Release）
 git push origin develop --tags
 
-# 4. 通知客户升级
-#    pip install --upgrade "loomgraph @ git+https://TOKEN@github.com/dreamlx/LoomGraph.git@v0.2.5"
+# 4. 生成交付总结（发布成功后）
+python scripts/generate_delivery_summary.py
+
+# 5. 通知客户升级
+cat /tmp/customer_delivery_summary.txt
+# 复制对应客户的命令发送，或直接发送 customers/{customer}/INSTALL.md
 ```
 
 ### 客户 Token 管理
 
-- 创建 GitHub Personal Access Token (PAT)，仅限 `contents:read` 权限
-- 每个客户使用独立 token，方便单独撤销
-- Token 通过安全渠道（加密邮件/即时通讯）交付
+**重要**: GitHub Token 管理是企业项目的安全核心，详见专门文档：
+
+📖 **[TOKEN_MANAGEMENT.md](guides/TOKEN_MANAGEMENT.md)**（完整指南）
+
+**快速要点**：
+- ✅ 使用 **Fine-grained Personal Access Token**（推荐，仓库级权限）
+- ✅ 每个客户使用**独立 token**（方便单独撤销）
+- ✅ 设置**过期时间**（90 天，提前 30 天预警）
+- ✅ 最小权限原则：仅 `Contents: Read-only`
+- ✅ 在 `customers.yaml` 中记录元数据（名称、创建日期、过期日期）
+- ✅ 使用密码管理器（1Password / Bitwarden）存储实际 token
+- ✅ 通过加密渠道交付（ProtonMail / 企业微信密聊）
+
+**管理工具**：
+```bash
+# 检查即将过期的 token
+python scripts/manage_tokens.py --check-expiry
+
+# 生成安装命令
+python scripts/manage_tokens.py --generate-install zcyl --version v0.8.0
+
+# 列出所有客户 token 状态
+python scripts/manage_tokens.py --list
+
+# 验证 token 是否有效
+python scripts/manage_tokens.py --verify zcyl --token github_pat_xxxxx
+```
 
 ### CI 工作流
 
@@ -110,6 +213,57 @@ git push origin develop --tags
 |----------|----------|------|
 | `test.yml` | PR to develop/main | lint → unit tests |
 | `release.yml` | tag push `v*` | lint → test → build wheel → GitHub Release |
+
+### 交付总结生成器
+
+每次 release 发布后，使用 `generate_delivery_summary.py` 生成格式化的客户交付总结：
+
+```bash
+# 生成当前版本的交付总结（自动读取 pyproject.toml）
+python scripts/generate_delivery_summary.py
+
+# 生成指定版本的交付总结
+python scripts/generate_delivery_summary.py --version v0.8.0
+
+# 自定义输出路径
+python scripts/generate_delivery_summary.py --output ~/Desktop/delivery.txt
+
+# 直接打印到终端
+python scripts/generate_delivery_summary.py --print
+```
+
+**生成内容包括**：
+- ✅ 每个客户的 pip/pipx 安装命令（含 Token）
+- ✅ 服务配置信息（LightRAG URL、语言）
+- ✅ Token 过期日期及剩余天数
+- ✅ 从 CHANGELOG.md 自动提取的版本亮点
+- ✅ 交付方式建议（企业微信/加密邮件）
+- ✅ 快速访问链接（GitHub Release、文档）
+
+**输出示例**：
+```
+═══════════════════════════════════════════════════════════════
+  LoomGraph v0.8.0 客户交付包 - 就绪
+═══════════════════════════════════════════════════════════════
+
+📦 3 个客户安装包已准备完毕，每个包含：
+   ✅ INSTALL.md - 完整安装说明（含 Token）
+   ✅ config.yaml - 服务配置文件
+
+───────────────────────────────────────────────────────────────
+1️⃣  智采云链（zcyl）
+───────────────────────────────────────────────────────────────
+
+📋 安装命令（复制发送给客户）:
+export LOOMGRAPH_TOKEN="github_pat_..."
+pip install "loomgraph @ git+https://${LOOMGRAPH_TOKEN}@github.com/..."
+...
+```
+
+**使用场景**：
+1. **发布后通知客户**：生成总结，复制对应客户的命令发送
+2. **批量交付**：一次性生成所有客户的安装信息
+3. **版本追溯**：指定旧版本重新生成交付文档
 
 ## 离线发布流程
 

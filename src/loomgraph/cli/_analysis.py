@@ -9,7 +9,13 @@ from typing import Any
 
 import click
 
-from loomgraph.cli._common import ErrorCode, get_auto_workspace, output_error, output_success
+from loomgraph.cli._common import (
+    ErrorCode,
+    get_auto_workspace,
+    output_error,
+    output_success,
+    resolve_workspace_with_fallback,
+)
 from loomgraph.cli.main import main
 from loomgraph.core.config import get_settings
 
@@ -117,11 +123,16 @@ async def _async_impact(
     from loomgraph.core.lightrag_client import LightRAGClient
 
     settings = get_settings()
+    ws = get_auto_workspace(workspace)
     client = LightRAGClient(
         base_url=settings.lightrag.api_url,
         timeout=settings.lightrag.api_timeout,
-        workspace=get_auto_workspace(workspace),
+        workspace=ws,
     )
+
+    # Resolve workspace with fallback to main branches
+    ws = await resolve_workspace_with_fallback(ws, client, allow_fallback=True)
+    client.workspace = ws
 
     analyzer = ImpactAnalyzer(
         lightrag_client=client,
@@ -169,11 +180,16 @@ async def _async_deps(depth: int, workspace: str | None = None) -> dict[str, Any
     from loomgraph.core.lightrag_client import LightRAGClient
 
     settings = get_settings()
+    ws = get_auto_workspace(workspace)
     client = LightRAGClient(
         base_url=settings.lightrag.api_url,
         timeout=settings.lightrag.api_timeout,
-        workspace=get_auto_workspace(workspace),
+        workspace=ws,
     )
+
+    # Resolve workspace with fallback to main branches
+    ws = await resolve_workspace_with_fallback(ws, client, allow_fallback=True)
+    client.workspace = ws
 
     analyzer = DepsAnalyzer(client=client, depth=depth)
     result = await analyzer.analyze()
@@ -209,11 +225,16 @@ async def _async_overview(
     from loomgraph.core.overview import OverviewAnalyzer
 
     settings = get_settings()
+    ws = get_auto_workspace(workspace)
     client = LightRAGClient(
         base_url=settings.lightrag.api_url,
         timeout=settings.lightrag.api_timeout,
-        workspace=get_auto_workspace(workspace),
+        workspace=ws,
     )
+
+    # Resolve workspace with fallback to main branches
+    ws = await resolve_workspace_with_fallback(ws, client, allow_fallback=True)
+    client.workspace = ws
 
     analyzer = OverviewAnalyzer(client=client, depth=depth)
     result = await analyzer.analyze(no_summary=no_summary)
@@ -255,11 +276,16 @@ async def _async_topology(
     from loomgraph.core.topology import TopologyAnalyzer
 
     settings = get_settings()
+    ws = get_auto_workspace(workspace)
     client = LightRAGClient(
         base_url=settings.lightrag.api_url,
         timeout=settings.lightrag.api_timeout,
-        workspace=get_auto_workspace(workspace),
+        workspace=ws,
     )
+
+    # Resolve workspace with fallback to main branches
+    ws = await resolve_workspace_with_fallback(ws, client, allow_fallback=True)
+    client.workspace = ws
 
     analyzer = TopologyAnalyzer(
         client=client,
@@ -303,11 +329,16 @@ async def _async_check(
     from loomgraph.core.lightrag_client import LightRAGClient
 
     settings = get_settings()
+    ws = get_auto_workspace(workspace)
     client = LightRAGClient(
         base_url=settings.lightrag.api_url,
         timeout=settings.lightrag.api_timeout,
-        workspace=get_auto_workspace(workspace),
+        workspace=ws,
     )
+
+    # Resolve workspace with fallback to main branches
+    ws = await resolve_workspace_with_fallback(ws, client, allow_fallback=True)
+    client.workspace = ws
 
     # Try server-side get_source_ids first, fallback to get_all_entities
     try:
@@ -362,3 +393,152 @@ async def _async_check(
         "stale_entries": stale_entries,
         "suggestion": suggestion,
     }
+
+
+@main.command("git-metrics")
+@click.argument("path", type=click.Path(exists=True), default=".")
+@click.option("--since", default="3 months", help="Time window (e.g., '3 months', '6 months', '1 year')")
+@click.option("--output", "-o", type=click.Path(), help="Save results to JSON file")
+def git_metrics(path: str, since: str, output: str | None) -> None:
+    """Analyze git history metrics for technical debt.
+
+    PATH: Repository root path (default: current directory)
+
+    Examples:
+        loomgraph git-metrics ./src               # Analyze src directory
+        loomgraph git-metrics --since "6 months"  # 6-month window
+        loomgraph git-metrics --output metrics.json  # Save to file
+    """
+    try:
+        from loomgraph.core.git_metrics import GitMetricsAnalyzer
+
+        analyzer = GitMetricsAnalyzer(Path(path), since=since)
+        result = analyzer.analyze()
+
+        # Convert to dict for JSON serialization
+        output_data = {
+            "repo_path": str(result.repo_path),
+            "since": result.since,
+            "analyzed_at": result.analyzed_at.isoformat(),
+            "summary": result.summary,
+            "hotspots": [
+                {
+                    "file": h.file,
+                    "change_freq": h.change_freq,
+                    "hotspot_score": h.hotspot_score,
+                    "rank": h.rank,
+                }
+                for h in result.hotspots
+            ],
+            "bus_factor": [
+                {
+                    "file": bf.file,
+                    "owner": bf.owner,
+                    "contributors": bf.contributors,
+                    "risk_level": bf.risk_level,
+                }
+                for bf in result.bus_factor
+            ],
+            "file_metrics": {
+                file_path: {
+                    "change_frequency": fm.change_frequency,
+                    "last_modified_days": fm.last_modified_days,
+                    "authors": fm.authors,
+                    "primary_author": fm.primary_author,
+                    "bug_fix_count": fm.bug_fix_count,
+                    "bug_fix_ratio": round(fm.bug_fix_ratio, 3),
+                    "churn": fm.churn,
+                    "age_days": fm.age_days,
+                }
+                for file_path, fm in result.file_metrics.items()
+            },
+        }
+
+        # Save to file if --output specified
+        if output:
+            import json
+
+            with open(output, "w") as f:
+                json.dump(output_data, f, indent=2)
+
+            output_success(
+                {
+                    "message": f"Git metrics saved to {output}",
+                    "hotspots": len(result.hotspots),
+                    "bus_factor_critical": result.summary.get("bus_factor_critical", 0),
+                }
+            )
+        else:
+            # Output to console
+            output_success(output_data)
+
+    except Exception as e:
+        output_error(f"Git metrics analysis failed: {e}", ErrorCode.OPERATION_FAILED)
+
+
+@main.command("trends")
+@click.option("--entity", "-e", required=True, help="Entity identifier (e.g., 'src/auth/user_service.py')")
+@click.option("--metric", "-m", default="complexity", help="Metric to analyze (default: complexity)")
+@click.option("--months", default=6, help="Number of months to analyze (default: 6)")
+@click.option("--workspace", "-w", default=None, help="Filter by workspace (default: all)")
+def trends(entity: str, metric: str, months: int, workspace: str | None) -> None:
+    """Analyze code complexity trends over time (EPIC-010 Feature 3).
+
+    Requires historical snapshots collected by running 'loomgraph debt' multiple times.
+
+    Examples:
+        loomgraph trends -e "src/auth/user_service.py"           # Analyze complexity trend
+        loomgraph trends -e "src/core/" -m "coupling" --months 12  # 12-month coupling trend
+        loomgraph trends -e "src/api/" -w "myproject:main"        # Workspace-specific trend
+    """
+    try:
+        from loomgraph.core.trends import TrendAnalyzer
+
+        analyzer = TrendAnalyzer()
+
+        # Analyze trend
+        result = analyzer.analyze(
+            entity=entity,
+            metric_name=metric,
+            months=months,
+            workspace=workspace,
+        )
+
+        # Format output
+        output_data = {
+            "entity": result.entity,
+            "entity_type": result.entity_type,
+            "metric_name": result.metric_name,
+            "time_range": result.time_range,
+            "regression": {
+                "slope": round(result.regression.slope, 4),
+                "intercept": round(result.regression.intercept, 2),
+                "r_squared": round(result.regression.r_squared, 3),
+                "trend_direction": result.regression.trend_direction,
+            },
+            "forecast": round(result.forecast, 2),
+            "alert": result.alert,
+            "data_points": [
+                {
+                    "timestamp": p.timestamp.isoformat(),
+                    "value": p.value,
+                    "label": p.label,
+                }
+                for p in result.data_points
+            ],
+            "chart": result.chart,
+        }
+
+        output_success(output_data)
+
+    except ValueError as e:
+        output_error(
+            code=ErrorCode.INVALID_INPUT,
+            message=str(e),
+            suggestion="Run 'loomgraph debt' multiple times over weeks/months to collect trend data.",
+        )
+    except Exception as e:
+        output_error(
+            code=ErrorCode.LIGHTRAG_ERROR,
+            message=f"Trend analysis failed: {e}",
+        )

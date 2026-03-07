@@ -109,9 +109,9 @@ def get_changed_files(
         return existing_paths
 
     except subprocess.TimeoutExpired:
-        raise GitError("git diff timed out")
+        raise GitError("git diff timed out") from None
     except FileNotFoundError:
-        raise GitError("git command not found")
+        raise GitError("git command not found") from None
 
 
 def get_staged_files(
@@ -156,9 +156,9 @@ def get_staged_files(
         return paths
 
     except subprocess.TimeoutExpired:
-        raise GitError("git diff timed out")
+        raise GitError("git diff timed out") from None
     except FileNotFoundError:
-        raise GitError("git command not found")
+        raise GitError("git command not found") from None
 
 
 def get_current_commit(repo_path: Path | str = ".") -> str:
@@ -188,9 +188,9 @@ def get_current_commit(repo_path: Path | str = ".") -> str:
         return result.stdout.strip()
 
     except subprocess.TimeoutExpired:
-        raise GitError("git rev-parse timed out")
+        raise GitError("git rev-parse timed out") from None
     except FileNotFoundError:
-        raise GitError("git command not found")
+        raise GitError("git command not found") from None
 
 
 def get_current_branch(repo_path: Path | str = ".") -> str:

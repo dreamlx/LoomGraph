@@ -57,8 +57,8 @@ class TestLightRAGClient:
     @pytest.mark.asyncio
     async def test_entity_creation_mock(self) -> None:
         """Test entity creation with mock client."""
-        from loomgraph.core.models import ParseResult, Symbol
         from loomgraph.core.injector import inject_parse_result
+        from loomgraph.core.models import ParseResult, Symbol
 
         # Create test data
         result = ParseResult(
@@ -106,6 +106,7 @@ class TestFullPipelineMock:
     ) -> None:
         """Test full pipeline: codeindex → adapter → injector."""
         from codeindex.parser import parse_file
+
         from loomgraph.core.adapter import adapt_parse_result
         from loomgraph.core.injector import inject_parse_result
 

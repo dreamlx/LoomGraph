@@ -546,6 +546,8 @@ embedding:
 | ADR-008 | 双向调度器（能力边界） | [ADR-008](docs/adr/ADR-008-bidirectional-orchestrator.md) |
 | ADR-009 | Workspace 即知识快照 | [ADR-009](docs/adr/ADR-009-workspace-as-knowledge-snapshot.md) |
 | ADR-010 | 搜索体系重构 (find/query/graph) | [ADR-010](docs/adr/ADR-010-search-architecture-redesign.md) |
+| ADR-011 | AI 迭代策略（外部 vs 内部） | [ADR-011](docs/adr/ADR-011-ai-iteration-strategy.md) |
+| ADR-012 | 技术债务分析标准化格式 | [ADR-012](docs/adr/ADR-012-technical-debt-analysis-format.md) |
 
 ## CLI 命令 (AI Agent 友好)
 
@@ -584,6 +586,32 @@ embedding:
 每次新开 Claude Code 窗口，先运行 `loomgraph status` 确认知识图谱状态：
 - `workspace.name`: 当前读取的 workspace（格式 `项目:分支`，如 `loomgraph:develop`）
 - `workspace.entities`: 实体数（0 = 需要先 `loomgraph index .`）
+
+### Workspace 自动降级
+
+查询命令（`find`、`query`、`graph`、`topology`、`check`、`impact`、`deps`、`overview`）在目标 workspace 为空时，**自动降级到主分支**：
+
+**降级链**: 当前分支 → main → develop → master
+
+**示例**：
+```bash
+# 场景：在 feature-A 分支，但未索引
+loomgraph find "UserService"
+# ℹ️  Workspace 'myproject:feature-A' not found, using 'myproject:main'
+# → 自动使用 main 分支的知识图谱
+```
+
+**多 workspace 比较命令**（`workspace compare`、`workspace similar`）**不降级**，必须显式指定两个 workspace：
+```bash
+# 必须两个 workspace 都存在
+loomgraph compare --ws1 myproject:main --ws2 myproject:feature-A
+```
+
+**禁用降级**（仅在特殊情况下使用）：
+```bash
+# 如果需要强制检查特定 workspace 是否存在，可在代码中设置 allow_fallback=False
+# 正常用户使用无需关注此选项
+```
 
 ## 开发命令
 
