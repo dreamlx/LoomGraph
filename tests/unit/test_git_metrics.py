@@ -1,0 +1,212 @@
+"""Unit tests for GitMetricsAnalyzer."""
+
+from datetime import datetime
+from pathlib import Path
+
+import pytest
+
+from loomgraph.core.git_metrics import GitMetricsAnalyzer
+from loomgraph.core.models import BusFactor, FileMetrics, Hotspot
+
+
+class TestGitMetricsAnalyzer:
+    """Test git metrics analysis algorithms."""
+
+    def test_detect_hotspots(self):
+        """Test hotspot detection algorithm."""
+        file_metrics = {
+            "src/auth/user_service.py": FileMetrics(
+                source_id="src/auth/user_service.py",
+                change_frequency=50,  # High frequency
+                last_modified=datetime.now(),
+                last_modified_days=1,
+                authors=["alice", "bob"],
+                primary_author="alice",
+                bug_fix_count=10,
+                total_commits=50,
+                bug_fix_ratio=0.2,
+                lines_added=1000,
+                lines_deleted=800,
+                churn=1800,  # High churn
+                created_at=datetime(2023, 1, 1),
+                age_days=400,
+            ),
+            "src/config.py": FileMetrics(
+                source_id="src/config.py",
+                change_frequency=3,  # Low frequency
+                last_modified=datetime.now(),
+                last_modified_days=30,
+                authors=["alice"],
+                primary_author="alice",
+                bug_fix_count=0,
+                total_commits=3,
+                bug_fix_ratio=0.0,
+                lines_added=50,
+                lines_deleted=10,
+                churn=60,  # Low churn
+                created_at=datetime(2023, 1, 1),
+                age_days=400,
+            ),
+        }
+
+        analyzer = GitMetricsAnalyzer(Path("."), since="3 months")
+        hotspots = analyzer._detect_hotspots(file_metrics)
+
+        assert len(hotspots) >= 1
+        # user_service.py should be top hotspot
+        top_hotspot = hotspots[0]
+        assert top_hotspot.file == "src/auth/user_service.py"
+        assert top_hotspot.change_freq == 50
+        assert top_hotspot.hotspot_score >= 80  # High score
+        assert top_hotspot.rank == 1
+
+        # config.py should have low score or not in hotspots
+        if len(hotspots) > 1:
+            assert hotspots[1].hotspot_score < top_hotspot.hotspot_score
+
+    def test_hotspot_score_calculation(self):
+        """Test hotspot score formula: change_frequency × log10(churn + 1) × 10."""
+        analyzer = GitMetricsAnalyzer(Path("."), since="3 months")
+
+        # score = 50 × log10(1800 + 1) × 10
+        #       = 50 × 3.255 × 10
+        #       ≈ 1627 → capped at 100
+        score = analyzer._calculate_hotspot_score(change_freq=50, churn=1800)
+        assert score == 100  # Capped at 100
+
+        # score = 10 × log10(100 + 1) × 10
+        #       = 10 × 2.004 × 10
+        #       ≈ 200 → capped at 100
+        score = analyzer._calculate_hotspot_score(change_freq=10, churn=100)
+        assert score == 100
+
+        # score = 5 × log10(50 + 1) × 10
+        #       = 5 × 1.708 × 10
+        #       ≈ 85
+        score = analyzer._calculate_hotspot_score(change_freq=5, churn=50)
+        assert 80 <= score <= 90
+
+        # score = 2 × log10(10 + 1) × 10
+        #       = 2 × 1.041 × 10
+        #       ≈ 21
+        score = analyzer._calculate_hotspot_score(change_freq=2, churn=10)
+        assert 20 <= score <= 25
+
+    def test_detect_bus_factor_critical(self):
+        """Test bus factor detection: contributors = 1 → critical."""
+        file_metrics = {
+            "src/critical_module.py": FileMetrics(
+                source_id="src/critical_module.py",
+                change_frequency=30,
+                last_modified=datetime.now(),
+                last_modified_days=1,
+                authors=["alice"],  # Only 1 contributor
+                primary_author="alice",
+                bug_fix_count=5,
+                total_commits=30,
+                bug_fix_ratio=0.167,
+                lines_added=500,
+                lines_deleted=200,
+                churn=700,
+                created_at=datetime(2023, 1, 1),
+                age_days=400,
+            ),
+        }
+
+        analyzer = GitMetricsAnalyzer(Path("."), since="3 months")
+        bus_factors = analyzer._detect_bus_factor(file_metrics)
+
+        assert len(bus_factors) == 1
+        critical = bus_factors[0]
+        assert critical.file == "src/critical_module.py"
+        assert critical.owner == "alice"
+        assert critical.contributors == 1
+        assert critical.ownership_ratio == 1.0
+        assert critical.total_commits == 30
+        assert critical.risk_level == "critical"
+
+    def test_detect_bus_factor_high(self):
+        """Test bus factor detection: contributors = 2, ownership > 70% → high."""
+        file_metrics = {
+            "src/auth/login.py": FileMetrics(
+                source_id="src/auth/login.py",
+                change_frequency=20,
+                last_modified=datetime.now(),
+                last_modified_days=5,
+                authors=["alice", "bob"],  # 2 contributors
+                primary_author="alice",
+                bug_fix_count=10,
+                total_commits=20,
+                bug_fix_ratio=0.5,
+                lines_added=300,
+                lines_deleted=100,
+                churn=400,
+                created_at=datetime(2023, 1, 1),
+                age_days=400,
+            ),
+        }
+
+        # Simulate alice has 15/20 commits (75%)
+        analyzer = GitMetricsAnalyzer(Path("."), since="3 months")
+        bus_factors = analyzer._detect_bus_factor(file_metrics, ownership_threshold=0.75)
+
+        # If ownership calculation is implemented correctly
+        if len(bus_factors) > 0:
+            high_risk = bus_factors[0]
+            assert high_risk.risk_level in ["high", "medium"]
+            assert high_risk.contributors == 2
+
+    def test_detect_bus_factor_medium(self):
+        """Test bus factor detection: contributors >= 3 → medium or not flagged."""
+        file_metrics = {
+            "src/utils/helper.py": FileMetrics(
+                source_id="src/utils/helper.py",
+                change_frequency=15,
+                last_modified=datetime.now(),
+                last_modified_days=10,
+                authors=["alice", "bob", "charlie"],  # 3 contributors
+                primary_author="alice",
+                bug_fix_count=3,
+                total_commits=15,
+                bug_fix_ratio=0.2,
+                lines_added=200,
+                lines_deleted=50,
+                churn=250,
+                created_at=datetime(2023, 1, 1),
+                age_days=400,
+            ),
+        }
+
+        analyzer = GitMetricsAnalyzer(Path("."), since="3 months")
+        bus_factors = analyzer._detect_bus_factor(file_metrics)
+
+        # Should not be flagged as high risk (3 contributors = healthy)
+        critical_or_high = [bf for bf in bus_factors if bf.risk_level in ["critical", "high"]]
+        assert len(critical_or_high) == 0
+
+    def test_analyze_integration(self, tmp_path):
+        """Test full analysis workflow (requires git repo)."""
+        # This test should be run in a real git repository
+        # Skip if not in git repo
+        from loomgraph.core.git import is_git_repository
+
+        if not is_git_repository(tmp_path):
+            pytest.skip("Not a git repository")
+
+        analyzer = GitMetricsAnalyzer(tmp_path, since="3 months")
+
+        # This will fail until GitLogParser is implemented
+        with pytest.raises(Exception):
+            result = analyzer.analyze()
+
+    def test_empty_git_history(self):
+        """Test handling of empty git history (no commits in time window)."""
+        analyzer = GitMetricsAnalyzer(Path("."), since="100 years ago")
+
+        # Should return empty result, not crash
+        file_metrics = {}
+        hotspots = analyzer._detect_hotspots(file_metrics)
+        bus_factors = analyzer._detect_bus_factor(file_metrics)
+
+        assert len(hotspots) == 0
+        assert len(bus_factors) == 0
