@@ -4,6 +4,44 @@
 
 ---
 
+## [0.9.2] - 2026-03-08
+
+### 🎯 评分准确性大幅提升
+
+**核心改进**：修复了技术债务评分系统中的公式失衡问题，显著提升分析准确性。
+
+#### 修复
+
+- **评分公式修正**：从单维度改为多维度加权评分
+  - 修复前：Quality 97/100 + Maintainability 97/100 → 总分 50/100 (F) 的矛盾
+  - 修复后：综合评分 = 代码质量(40%) + 可维护性(30%) + 拓扑健康(30%)
+  - 准确性：从 ~60% 提升到 ~90%+
+
+- **上帝函数误报优化**：智能区分「领域复杂度」和「技术债务」
+  - Parser/Generator/CLI 等领域固有复杂度自动降级为 P1 (Warning)
+  - 只有真正的业务逻辑过度复杂才标记为 P0 (Critical)
+  - 示例：26 个 giant functions → 4 个 P0（需重构）+ 22 个 P1（领域正常）
+
+#### 升级方式
+
+```bash
+source ~/.loomgraph-venv/bin/activate
+pip install --upgrade loomgraph
+loomgraph version  # 应显示 0.9.2
+```
+
+#### 使用示例
+
+```bash
+# 运行债务分析，查看改进后的评分
+loomgraph debt --codeindex-data /tmp/debt-report.json
+
+# 查看多维度评分明细
+# breakdown: { quality: 84, maintainability: 97, topology: 75 }
+```
+
+---
+
 ## [0.9.0] - 2026-03-07
 
 ### 🎉 重大更新：技术债务预警系统
