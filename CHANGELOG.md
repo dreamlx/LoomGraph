@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-03-08
+
 ### Fixed
 - **Technical Debt Scoring Formula**: Fixed data inconsistency where Quality 97/100 (A+) + Maintainability 97/100 (A+) resulted in Technical Debt 50/100 (F)
   - Root cause: `technical_debt_score` only considered `god_penalty`, ignoring quality and maintainability dimensions
