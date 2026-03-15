@@ -310,7 +310,7 @@ def _path_to_module_name(path: Path) -> str:
     parts = list(stem.parts)
 
     # For absolute paths, find 'src' or similar and start from there
-    # e.g., /Users/.../src/loomgraph/core -> loomgraph.core
+    # e.g., src/loomgraph/core -> loomgraph.core
     anchor_dirs = {"src", "lib", "app", "pkg", "packages"}
     for i, part in enumerate(parts):
         if part in anchor_dirs:

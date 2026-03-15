@@ -103,11 +103,6 @@ class Settings(BaseSettings):
     lightrag: LightRAGConfig = Field(default_factory=LightRAGConfig)
     retrieval: RetrievalConfig = Field(default_factory=RetrievalConfig)
 
-    def ensure_working_dir(self) -> Path:
-        """Ensure working directory exists and return it."""
-        self.working_dir.mkdir(parents=True, exist_ok=True)
-        return self.working_dir
-
 
 # Global settings instance (lazy loaded)
 _settings: Settings | None = None

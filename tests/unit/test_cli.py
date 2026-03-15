@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from click.testing import CliRunner
@@ -689,17 +689,11 @@ class TestQueryCommand:
 class TestAsyncQuery:
     """Tests for _async_query."""
 
-    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_graph_stats")
-    @patch("loomgraph.cli._search.get_settings")
-    @patch("loomgraph.core.lightrag_client.LightRAGClient.query")
-    async def test_async_query_hybrid(
-        self, mock_query: MagicMock, mock_settings: MagicMock, mock_stats: MagicMock,
-    ) -> None:
-        mock_query.return_value = {"response": "Auth uses JWT tokens."}
-        mock_stats.return_value = {"entity_count": 10}
-        mock_settings.return_value = MagicMock(
-            lightrag=MagicMock(api_url="http://test:3001", api_timeout=5.0)
-        )
+    @patch("loomgraph.cli._search.prepare_workspace_client")
+    async def test_async_query_hybrid(self, mock_prepare: MagicMock) -> None:
+        mock_client = AsyncMock()
+        mock_client.query.return_value = {"response": "Auth uses JWT tokens."}
+        mock_prepare.return_value = ("test-ws", mock_client)
         from loomgraph.cli._search import _async_query
 
         result = await _async_query("How does auth work?", "hybrid", "test-ws")
@@ -708,39 +702,27 @@ class TestAsyncQuery:
         assert result["mode"] == "hybrid"
         assert "JWT" in result["response"]
 
-    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_graph_stats")
-    @patch("loomgraph.cli._search.get_settings")
-    @patch("loomgraph.core.lightrag_client.LightRAGClient.query")
-    async def test_async_query_empty_response(
-        self, mock_query: MagicMock, mock_settings: MagicMock, mock_stats: MagicMock,
-    ) -> None:
-        mock_query.return_value = {"response": ""}
-        mock_stats.return_value = {"entity_count": 10}
-        mock_settings.return_value = MagicMock(
-            lightrag=MagicMock(api_url="http://test:3001", api_timeout=5.0)
-        )
+    @patch("loomgraph.cli._search.prepare_workspace_client")
+    async def test_async_query_empty_response(self, mock_prepare: MagicMock) -> None:
+        mock_client = AsyncMock()
+        mock_client.query.return_value = {"response": ""}
+        mock_prepare.return_value = ("test-ws", mock_client)
         from loomgraph.cli._search import _async_query
 
         result = await _async_query("nonexistent topic", "hybrid", "test-ws")
 
         assert "No relevant information" in result["response"]
 
-    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_graph_stats")
-    @patch("loomgraph.cli._search.get_settings")
-    @patch("loomgraph.core.lightrag_client.LightRAGClient.query")
-    async def test_async_query_mode_passed(
-        self, mock_query: MagicMock, mock_settings: MagicMock, mock_stats: MagicMock,
-    ) -> None:
-        mock_query.return_value = {"response": "Global patterns found."}
-        mock_stats.return_value = {"entity_count": 10}
-        mock_settings.return_value = MagicMock(
-            lightrag=MagicMock(api_url="http://test:3001", api_timeout=5.0)
-        )
+    @patch("loomgraph.cli._search.prepare_workspace_client")
+    async def test_async_query_mode_passed(self, mock_prepare: MagicMock) -> None:
+        mock_client = AsyncMock()
+        mock_client.query.return_value = {"response": "Global patterns found."}
+        mock_prepare.return_value = ("test-ws", mock_client)
         from loomgraph.cli._search import _async_query
 
         await _async_query("patterns?", "global", "test-ws")
 
-        mock_query.assert_called_once_with(query="patterns?", mode="global")
+        mock_client.query.assert_called_once_with(query="patterns?", mode="global")
 
 
 class TestGraphCommand:
@@ -1268,20 +1250,15 @@ class TestAsyncGraphQuery:
             {"entity_name": "handler", "entity_type": "function", "source_id": "src/handler.py"},
         ]
 
-    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_graph_stats")
-    @patch("loomgraph.cli._search.get_settings")
-    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_entities")
-    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_relations")
+    @patch("loomgraph.cli._search.prepare_workspace_client")
     async def test_both_directions(
-        self, mock_rels: MagicMock, mock_ents: MagicMock, mock_settings: MagicMock, mock_stats: MagicMock,
+        self, mock_prepare: MagicMock,
         mock_relations: list, mock_entities_for_graph: list,
     ) -> None:
-        mock_rels.return_value = mock_relations
-        mock_ents.return_value = mock_entities_for_graph
-        mock_stats.return_value = {"entity_count": 10}
-        mock_settings.return_value = MagicMock(
-            lightrag=MagicMock(api_url="http://test:3001", api_timeout=5.0)
-        )
+        mock_client = AsyncMock()
+        mock_client.get_all_relations.return_value = mock_relations
+        mock_client.get_all_entities.return_value = mock_entities_for_graph
+        mock_prepare.return_value = ("test-ws", mock_client)
         from loomgraph.cli._search import _async_graph_query
 
         result = await _async_graph_query("AuthService", "both", "all", "test-ws")
@@ -1290,24 +1267,18 @@ class TestAsyncGraphQuery:
         assert result["source_id"] == "src/auth/service.py"
         assert len(result["callers"]) == 2  # main, handler
         assert len(result["callees"]) == 2  # db.query, BaseService
-        # Verify callers have source_id
         for caller in result["callers"]:
             assert "source_id" in caller
 
-    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_graph_stats")
-    @patch("loomgraph.cli._search.get_settings")
-    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_entities")
-    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_relations")
+    @patch("loomgraph.cli._search.prepare_workspace_client")
     async def test_relation_type_filter(
-        self, mock_rels: MagicMock, mock_ents: MagicMock, mock_settings: MagicMock, mock_stats: MagicMock,
+        self, mock_prepare: MagicMock,
         mock_relations: list, mock_entities_for_graph: list,
     ) -> None:
-        mock_rels.return_value = mock_relations
-        mock_ents.return_value = mock_entities_for_graph
-        mock_stats.return_value = {"entity_count": 10}
-        mock_settings.return_value = MagicMock(
-            lightrag=MagicMock(api_url="http://test:3001", api_timeout=5.0)
-        )
+        mock_client = AsyncMock()
+        mock_client.get_all_relations.return_value = mock_relations
+        mock_client.get_all_entities.return_value = mock_entities_for_graph
+        mock_prepare.return_value = ("test-ws", mock_client)
         from loomgraph.cli._search import _async_graph_query
 
         result = await _async_graph_query("AuthService", "both", "INHERITS", "test-ws")
@@ -1317,21 +1288,14 @@ class TestAsyncGraphQuery:
         assert result["callees"][0]["entity"] == "BaseService"
         assert result["callees"][0]["source_id"] == "src/base.py"
 
-    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_graph_stats")
-    @patch("loomgraph.cli._search.get_settings")
-    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_entities")
-    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_relations")
-    async def test_no_matches(
-        self, mock_rels: MagicMock, mock_ents: MagicMock, mock_settings: MagicMock, mock_stats: MagicMock
-    ) -> None:
-        mock_rels.return_value = [
+    @patch("loomgraph.cli._search.prepare_workspace_client")
+    async def test_no_matches(self, mock_prepare: MagicMock) -> None:
+        mock_client = AsyncMock()
+        mock_client.get_all_relations.return_value = [
             {"src_id": "a", "tgt_id": "b", "keywords": "CALLS"},
         ]
-        mock_ents.return_value = []
-        mock_stats.return_value = {"entity_count": 10}
-        mock_settings.return_value = MagicMock(
-            lightrag=MagicMock(api_url="http://test:3001", api_timeout=5.0)
-        )
+        mock_client.get_all_entities.return_value = []
+        mock_prepare.return_value = ("test-ws", mock_client)
         from loomgraph.cli._search import _async_graph_query
 
         result = await _async_graph_query("NonExistent", "both", "all", "test-ws")
@@ -1340,25 +1304,19 @@ class TestAsyncGraphQuery:
         assert result["callees"] == []
         assert result["source_id"] == ""
 
-    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_graph_stats")
-    @patch("loomgraph.cli._search.get_settings")
-    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_entities")
-    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_relations")
+    @patch("loomgraph.cli._search.prepare_workspace_client")
     async def test_callers_sorted(
-        self, mock_rels: MagicMock, mock_ents: MagicMock, mock_settings: MagicMock, mock_stats: MagicMock,
+        self, mock_prepare: MagicMock,
         mock_relations: list, mock_entities_for_graph: list,
     ) -> None:
-        mock_rels.return_value = mock_relations
-        mock_ents.return_value = mock_entities_for_graph
-        mock_stats.return_value = {"entity_count": 10}
-        mock_settings.return_value = MagicMock(
-            lightrag=MagicMock(api_url="http://test:3001", api_timeout=5.0)
-        )
+        mock_client = AsyncMock()
+        mock_client.get_all_relations.return_value = mock_relations
+        mock_client.get_all_entities.return_value = mock_entities_for_graph
+        mock_prepare.return_value = ("test-ws", mock_client)
         from loomgraph.cli._search import _async_graph_query
 
         result = await _async_graph_query("AuthService", "callers", "all", "test-ws")
 
-        # Should be sorted by entity name
         names = [c["entity"] for c in result["callers"]]
         assert names == sorted(names)
 
@@ -1375,17 +1333,13 @@ class TestAsyncFind:
             {"entity_name": "db_connect", "entity_type": "function", "source_id": "db.py:1-20", "description": "Database connection"},
         ]
 
-    @patch("loomgraph.cli._search.get_settings")
-    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_graph_stats")
-    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_entities")
+    @patch("loomgraph.cli._search.prepare_workspace_client")
     async def test_exact_match(
-        self, mock_ents: MagicMock, mock_stats: MagicMock, mock_settings: MagicMock, mock_entities: list
+        self, mock_prepare: MagicMock, mock_entities: list
     ) -> None:
-        mock_ents.return_value = mock_entities
-        mock_stats.return_value = {"entity_count": 4}
-        mock_settings.return_value = MagicMock(
-            lightrag=MagicMock(api_url="http://test:3001", api_timeout=5.0)
-        )
+        mock_client = AsyncMock()
+        mock_client.get_all_entities.return_value = mock_entities
+        mock_prepare.return_value = ("test-ws", mock_client)
         from loomgraph.cli._search import _async_find
 
         result = await _async_find("AuthService", None, "test-ws", 20)
@@ -1394,17 +1348,13 @@ class TestAsyncFind:
         assert result["matches"][0]["entity"] == "AuthService"
         assert result["matches"][0]["score"] == 1.0
 
-    @patch("loomgraph.cli._search.get_settings")
-    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_graph_stats")
-    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_entities")
+    @patch("loomgraph.cli._search.prepare_workspace_client")
     async def test_substring_match(
-        self, mock_ents: MagicMock, mock_stats: MagicMock, mock_settings: MagicMock, mock_entities: list
+        self, mock_prepare: MagicMock, mock_entities: list
     ) -> None:
-        mock_ents.return_value = mock_entities
-        mock_stats.return_value = {"entity_count": 4}
-        mock_settings.return_value = MagicMock(
-            lightrag=MagicMock(api_url="http://test:3001", api_timeout=5.0)
-        )
+        mock_client = AsyncMock()
+        mock_client.get_all_entities.return_value = mock_entities
+        mock_prepare.return_value = ("test-ws", mock_client)
         from loomgraph.cli._search import _async_find
 
         result = await _async_find("auth", None, "test-ws", 20)
@@ -1414,17 +1364,13 @@ class TestAsyncFind:
         assert "AuthService" in names
         assert "authenticate" in names
 
-    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_graph_stats")
-    @patch("loomgraph.cli._search.get_settings")
-    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_entities")
+    @patch("loomgraph.cli._search.prepare_workspace_client")
     async def test_type_filter(
-        self, mock_ents: MagicMock, mock_settings: MagicMock, mock_stats: MagicMock, mock_entities: list
+        self, mock_prepare: MagicMock, mock_entities: list
     ) -> None:
-        mock_ents.return_value = mock_entities
-        mock_stats.return_value = {"entity_count": 10}
-        mock_settings.return_value = MagicMock(
-            lightrag=MagicMock(api_url="http://test:3001", api_timeout=5.0)
-        )
+        mock_client = AsyncMock()
+        mock_client.get_all_entities.return_value = mock_entities
+        mock_prepare.return_value = ("test-ws", mock_client)
         from loomgraph.cli._search import _async_find
 
         result = await _async_find("Service", "class", "test-ws", 20)
@@ -1432,51 +1378,39 @@ class TestAsyncFind:
         for m in result["matches"]:
             assert m["type"] == "class"
 
-    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_graph_stats")
-    @patch("loomgraph.cli._search.get_settings")
-    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_entities")
+    @patch("loomgraph.cli._search.prepare_workspace_client")
     async def test_limit(
-        self, mock_ents: MagicMock, mock_settings: MagicMock, mock_stats: MagicMock, mock_entities: list
+        self, mock_prepare: MagicMock, mock_entities: list
     ) -> None:
-        mock_ents.return_value = mock_entities
-        mock_stats.return_value = {"entity_count": 10}
-        mock_settings.return_value = MagicMock(
-            lightrag=MagicMock(api_url="http://test:3001", api_timeout=5.0)
-        )
+        mock_client = AsyncMock()
+        mock_client.get_all_entities.return_value = mock_entities
+        mock_prepare.return_value = ("test-ws", mock_client)
         from loomgraph.cli._search import _async_find
 
         result = await _async_find("a", None, "test-ws", 2)
 
         assert result["matches_count"] <= 2
 
-    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_graph_stats")
-    @patch("loomgraph.cli._search.get_settings")
-    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_entities")
+    @patch("loomgraph.cli._search.prepare_workspace_client")
     async def test_no_match(
-        self, mock_ents: MagicMock, mock_settings: MagicMock, mock_stats: MagicMock, mock_entities: list
+        self, mock_prepare: MagicMock, mock_entities: list
     ) -> None:
-        mock_ents.return_value = mock_entities
-        mock_stats.return_value = {"entity_count": 10}
-        mock_settings.return_value = MagicMock(
-            lightrag=MagicMock(api_url="http://test:3001", api_timeout=5.0)
-        )
+        mock_client = AsyncMock()
+        mock_client.get_all_entities.return_value = mock_entities
+        mock_prepare.return_value = ("test-ws", mock_client)
         from loomgraph.cli._search import _async_find
 
         result = await _async_find("zzzznonexistent", None, "test-ws", 20)
 
         assert result["matches_count"] == 0
 
-    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_graph_stats")
-    @patch("loomgraph.cli._search.get_settings")
-    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_entities")
+    @patch("loomgraph.cli._search.prepare_workspace_client")
     async def test_scores_descending(
-        self, mock_ents: MagicMock, mock_settings: MagicMock, mock_stats: MagicMock, mock_entities: list
+        self, mock_prepare: MagicMock, mock_entities: list
     ) -> None:
-        mock_ents.return_value = mock_entities
-        mock_stats.return_value = {"entity_count": 10}
-        mock_settings.return_value = MagicMock(
-            lightrag=MagicMock(api_url="http://test:3001", api_timeout=5.0)
-        )
+        mock_client = AsyncMock()
+        mock_client.get_all_entities.return_value = mock_entities
+        mock_prepare.return_value = ("test-ws", mock_client)
         from loomgraph.cli._search import _async_find
 
         result = await _async_find("auth", None, "test-ws", 20)
@@ -1508,20 +1442,15 @@ class TestFindWithRelations:
             {"src_id": "UserRepository", "tgt_id": "db_connect", "keywords": "CALLS"},
         ]
 
-    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_graph_stats")
-    @patch("loomgraph.cli._search.get_settings")
-    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_relations")
-    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_entities")
+    @patch("loomgraph.cli._search.prepare_workspace_client")
     async def test_with_relations_basic(
-        self, mock_ents: MagicMock, mock_rels: MagicMock, mock_settings: MagicMock, mock_stats: MagicMock,
+        self, mock_prepare: MagicMock,
         mock_entities: list, mock_relations: list,
     ) -> None:
-        mock_ents.return_value = mock_entities
-        mock_rels.return_value = mock_relations
-        mock_stats.return_value = {"entity_count": 10}
-        mock_settings.return_value = MagicMock(
-            lightrag=MagicMock(api_url="http://test:3001", api_timeout=5.0)
-        )
+        mock_client = AsyncMock()
+        mock_client.get_all_entities.return_value = mock_entities
+        mock_client.get_all_relations.return_value = mock_relations
+        mock_prepare.return_value = ("test-ws", mock_client)
         from loomgraph.cli._search import _async_find
 
         result = await _async_find("AuthService", None, "test-ws", 20, with_relations=True)
@@ -1539,21 +1468,16 @@ class TestFindWithRelations:
         assert "JwtProvider" in callee_names
         assert "BaseService" in callee_names
 
-    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_graph_stats")
-    @patch("loomgraph.cli._search.get_settings")
-    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_relations")
-    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_entities")
+    @patch("loomgraph.cli._search.prepare_workspace_client")
     async def test_with_relations_depth2(
-        self, mock_ents: MagicMock, mock_rels: MagicMock, mock_settings: MagicMock, mock_stats: MagicMock,
+        self, mock_prepare: MagicMock,
         mock_entities: list, mock_relations: list,
     ) -> None:
         """BFS depth=2 should reach 2-hop neighbors."""
-        mock_ents.return_value = mock_entities
-        mock_rels.return_value = mock_relations
-        mock_stats.return_value = {"entity_count": 10}
-        mock_settings.return_value = MagicMock(
-            lightrag=MagicMock(api_url="http://test:3001", api_timeout=5.0)
-        )
+        mock_client = AsyncMock()
+        mock_client.get_all_entities.return_value = mock_entities
+        mock_client.get_all_relations.return_value = mock_relations
+        mock_prepare.return_value = ("test-ws", mock_client)
         from loomgraph.cli._search import _async_find
 
         result = await _async_find("AuthService", None, "test-ws", 20, with_relations=True, depth=2)
@@ -1564,21 +1488,15 @@ class TestFindWithRelations:
         assert "UserRepository" in callee_names
         assert "db_connect" in callee_names  # 2-hop reachable
 
-    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_graph_stats")
-    @patch("loomgraph.cli._search.get_settings")
-    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_relations")
-    @patch("loomgraph.core.lightrag_client.LightRAGClient.get_all_entities")
+    @patch("loomgraph.cli._search.prepare_workspace_client")
     async def test_without_relations_no_callers(
-        self, mock_ents: MagicMock, mock_rels: MagicMock, mock_settings: MagicMock, mock_stats: MagicMock,
+        self, mock_prepare: MagicMock,
         mock_entities: list, mock_relations: list,
     ) -> None:
         """Without --with-relations, matches should not have callers/callees."""
-        mock_ents.return_value = mock_entities
-        mock_rels.return_value = mock_relations
-        mock_stats.return_value = {"entity_count": 10}
-        mock_settings.return_value = MagicMock(
-            lightrag=MagicMock(api_url="http://test:3001", api_timeout=5.0)
-        )
+        mock_client = AsyncMock()
+        mock_client.get_all_entities.return_value = mock_entities
+        mock_prepare.return_value = ("test-ws", mock_client)
         from loomgraph.cli._search import _async_find
 
         result = await _async_find("AuthService", None, "test-ws", 20, with_relations=False)

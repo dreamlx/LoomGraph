@@ -136,6 +136,67 @@ async def resolve_workspace_with_fallback(
 
 
 # ============================================
+# Client Factory (v0.9.2 — DRY refactor)
+# ============================================
+
+def create_client(
+    workspace: str | None = None,
+    api_url: str | None = None,
+) -> Any:
+    """Create a LightRAGClient with settings from config.
+
+    Args:
+        workspace: Optional workspace name (auto-detected if None)
+        api_url: Optional API URL override (uses config if None)
+
+    Returns:
+        Configured LightRAGClient instance
+    """
+    from loomgraph.core.config import get_settings
+    from loomgraph.core.lightrag_client import LightRAGClient
+
+    settings = get_settings()
+    url = api_url or settings.lightrag.api_url
+    ws = get_auto_workspace(workspace) if workspace is not None else None
+
+    return LightRAGClient(
+        base_url=url,
+        timeout=settings.lightrag.api_timeout,
+        workspace=ws,
+    )
+
+
+async def prepare_workspace_client(
+    workspace: str | None = None,
+) -> tuple[str, Any]:
+    """Create client and resolve workspace with fallback in one step.
+
+    Replaces the 8-line boilerplate pattern used in query commands.
+
+    Args:
+        workspace: Optional workspace name (auto-detected if None)
+
+    Returns:
+        Tuple of (resolved_workspace, configured_client)
+    """
+    from loomgraph.core.config import get_settings
+    from loomgraph.core.lightrag_client import LightRAGClient
+
+    settings = get_settings()
+    ws = get_auto_workspace(workspace)
+    client = LightRAGClient(
+        base_url=settings.lightrag.api_url,
+        timeout=settings.lightrag.api_timeout,
+        workspace=ws,
+    )
+
+    ws = await resolve_workspace_with_fallback(ws, client, allow_fallback=True)
+    client.workspace = ws
+
+    return ws, client
+
+
+# ============================================
 # Error Codes (from CLI_DESIGN.md)
 # ============================================
 
