@@ -87,21 +87,6 @@ class GitDiffParser:
         diff_output = self._run_git("diff", f"{base}..{head}", "--unified=0")
         return self._parse_diff(diff_output)
 
-    def get_file_diff(self, file_path: str, commit: str = "HEAD") -> list[ChangedFile]:
-        """Get diff for a specific file.
-
-        Args:
-            file_path: Path to file
-            commit: Commit reference (default: HEAD)
-
-        Returns:
-            List of ChangedFile objects (will have 0 or 1 element)
-        """
-        diff_output = self._run_git(
-            "diff", f"{commit}~1..{commit}", "--unified=0", "--", file_path
-        )
-        return self._parse_diff(diff_output)
-
     def _parse_diff(self, diff_output: str) -> list[ChangedFile]:
         """Parse git diff output into ChangedFile objects.
 
@@ -180,15 +165,6 @@ class GitDiffParser:
             files.append(current_file)
 
         return files
-
-    def has_changes(self) -> bool:
-        """Check if there are any uncommitted changes.
-
-        Returns:
-            True if there are changes, False otherwise
-        """
-        status = self._run_git("status", "--porcelain")
-        return bool(status.strip())
 
     def get_current_commit(self) -> str:
         """Get the current commit hash.

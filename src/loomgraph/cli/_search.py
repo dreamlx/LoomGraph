@@ -10,13 +10,11 @@ import click
 
 from loomgraph.cli._common import (
     ErrorCode,
-    get_auto_workspace,
     output_error,
     output_success,
-    resolve_workspace_with_fallback,
+    prepare_workspace_client,
 )
 from loomgraph.cli.main import main
-from loomgraph.core.config import get_settings
 
 
 @main.command()
@@ -89,19 +87,7 @@ async def _async_find(
     """
     from difflib import SequenceMatcher
 
-    from loomgraph.core.lightrag_client import LightRAGClient
-
-    settings = get_settings()
-    ws = get_auto_workspace(workspace)
-    client = LightRAGClient(
-        base_url=settings.lightrag.api_url,
-        timeout=settings.lightrag.api_timeout,
-        workspace=ws,
-    )
-
-    # Resolve workspace with fallback to main branches
-    ws = await resolve_workspace_with_fallback(ws, client, allow_fallback=True)
-    client.workspace = ws
+    ws, client = await prepare_workspace_client(workspace)
 
     entities = await client.get_all_entities()
 
@@ -271,19 +257,7 @@ async def _async_query(
     workspace: str | None = None,
 ) -> dict[str, Any]:
     """Run semantic query via LightRAG RAG engine."""
-    from loomgraph.core.lightrag_client import LightRAGClient
-
-    settings = get_settings()
-    ws = get_auto_workspace(workspace)
-    client = LightRAGClient(
-        base_url=settings.lightrag.api_url,
-        timeout=settings.lightrag.api_timeout,
-        workspace=ws,
-    )
-
-    # Resolve workspace with fallback to main branches
-    ws = await resolve_workspace_with_fallback(ws, client, allow_fallback=True)
-    client.workspace = ws
+    ws, client = await prepare_workspace_client(workspace)
 
     data = await client.query(query=question, mode=mode)
 
@@ -348,19 +322,7 @@ async def _async_graph_query(
     workspace: str | None = None,
 ) -> dict[str, Any]:
     """Run graph traversal via graph layer API (precise structural query)."""
-    from loomgraph.core.lightrag_client import LightRAGClient
-
-    settings = get_settings()
-    ws = get_auto_workspace(workspace)
-    client = LightRAGClient(
-        base_url=settings.lightrag.api_url,
-        timeout=settings.lightrag.api_timeout,
-        workspace=ws,
-    )
-
-    # Resolve workspace with fallback to main branches
-    ws = await resolve_workspace_with_fallback(ws, client, allow_fallback=True)
-    client.workspace = ws
+    ws, client = await prepare_workspace_client(workspace)
 
     relations = await client.get_all_relations()
     entities = await client.get_all_entities()
