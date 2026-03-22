@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.3] - 2026-03-22
+
+### Fixed
+- **Indexing timeout on large codebases**: Dynamic timeout calculation based on entity count (minimum 60s, scales with payload size)
+- **Timeout error message**: Now suggests increasing `api_timeout` or using smaller batch size
+
+### Changed
+- **Batch injection for large codebases**: Payloads exceeding 5000 entities are automatically split into multiple HTTP calls
+- **Indexing progress feedback**: Shows file collection progress (every 100 files), entity/relation counts, and per-batch upload status
+- **CLI boilerplate extraction**: `prepare_workspace_client()` helper replaces 8-line repeated pattern across 8 async functions (-141 lines)
+
+### Removed
+- Dead code: `Settings.ensure_working_dir()`, `GitDiffParser.get_file_diff()`, `GitDiffParser.has_changes()`
+
+### Improved
+- **Customer README template**: Updated CLI command reference, added feature prerequisite matrix, added post-install diagnostic checklist
+- **quickstart.sh**: Fixed codeindex wheel filename pattern, added post-install self-check with feature availability summary
+- **Packaging validation**: `package.py` now checks for stale version references and deprecated CLI commands before packaging
+
 ## [0.9.2] - 2026-03-08
 
 ### Fixed

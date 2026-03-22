@@ -630,6 +630,17 @@ ruff check src/ tests/
 mypy src/
 ```
 
+## 操作前必读清单（MUST READ）
+
+> **强制规则**：执行以下操作前，必须先读取对应文档。不读就做 = 信息不同步 = 客户拿到过时文档。
+
+| 当你准备... | 先读... | 同步检查 |
+|------------|---------|---------|
+| 打包/发布（`package.py`、`make release`） | `docs/PACKAGING.md` | 确认发布 checklist |
+| 新增/修改/删除 CLI 命令 | `customers/README.template.md` | 同步 CLI 命令表 + 前置条件列 |
+| bump 版本 | `customers/CHANGELOG.md` | 同步客户变更日志 |
+| 修改 `quickstart.sh` 或安装流程 | `customers/*/INSTALL.md` | 确认安装步骤一致 |
+
 ## 变更日志维护
 
 项目维护两份 CHANGELOG（详见 `docs/PACKAGING.md` "CHANGELOG 维护策略"）：

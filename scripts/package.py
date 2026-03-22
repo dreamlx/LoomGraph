@@ -166,6 +166,78 @@ def find_codeindex_wheel() -> Path | None:
     return None
 
 
+def get_cli_commands() -> set[str]:
+    """Extract real CLI command names from Click group definitions."""
+    cli_main = PROJECT_ROOT / "src" / "loomgraph" / "cli" / "main.py"
+    if not cli_main.exists():
+        return set()
+
+    content = cli_main.read_text()
+    # Match cli.add_command(xxx, "name") or @cli.command("name")
+    commands: set[str] = set()
+    for match in re.finditer(r'add_command\([^,]+,\s*"(\w+)"', content):
+        commands.add(match.group(1))
+    for match in re.finditer(r'@\w+\.command\(["\'](\w+)', content):
+        commands.add(match.group(1))
+    # Also match group names
+    for match in re.finditer(r'add_command\((\w+)_group', content):
+        commands.add(match.group(1).replace("_", "-"))
+    return commands
+
+
+def validate_docs(version: str) -> list[str]:
+    """Pre-packaging validation: check for stale references in customer docs.
+
+    Returns:
+        List of warning messages (empty = all good)
+    """
+    warnings: list[str] = []
+
+    # 1. Check README template for references to removed commands
+    readme_template = README_TEMPLATE
+    if readme_template.exists():
+        content = readme_template.read_text()
+        # Check for known deprecated command names
+        deprecated = ["loomgraph search", "loomgraph scan"]
+        for cmd in deprecated:
+            if cmd in content:
+                warnings.append(f"README.template.md references deprecated command: '{cmd}'")
+
+        # Check CLI commands in template vs actual Click definitions
+        cli_commands = get_cli_commands()
+        if cli_commands:
+            for match in re.finditer(r"`loomgraph (\w[\w-]*)`", content):
+                cmd_name = match.group(1)
+                # Skip meta-commands that aren't Click commands
+                if cmd_name in {"--help", "--version"}:
+                    continue
+                if cmd_name not in cli_commands and cmd_name + "-" not in {c[:len(cmd_name)+1] for c in cli_commands}:
+                    warnings.append(f"README.template.md references unknown CLI command: 'loomgraph {cmd_name}'")
+
+    # 2. Check VERSION file matches pyproject.toml
+    if VERSION_FILE.exists():
+        file_version = VERSION_FILE.read_text().strip()
+        if file_version != version:
+            warnings.append(f"VERSION file ({file_version}) != pyproject.toml ({version})")
+
+    # 3. Check quickstart.sh wheel filename patterns
+    quickstart = PROJECT_ROOT / "scripts" / "quickstart.sh"
+    if quickstart.exists():
+        qs_content = quickstart.read_text()
+        if "codeindex-*.whl" in qs_content and "ai_codeindex" not in qs_content:
+            warnings.append("quickstart.sh uses wrong codeindex wheel pattern (should be ai_codeindex-*.whl)")
+
+    # 4. Check INSTALL.md files for hardcoded old versions
+    for install_md in CUSTOMERS_DIR.glob("*/INSTALL.md"):
+        content = install_md.read_text()
+        for match in re.finditer(r"v(\d+\.\d+\.\d+)", content):
+            old_ver = match.group(1)
+            if old_ver != version and old_ver not in ("0.20.0",):  # 0.20.0 is codeindex min version
+                warnings.append(f"{install_md.relative_to(PROJECT_ROOT)} references old version v{old_ver}")
+
+    return warnings
+
+
 def package_customer(customer: str, customers_config: dict, mode: str = "demo") -> Path:
     """Package LoomGraph for a specific customer.
 
@@ -183,6 +255,19 @@ def package_customer(customer: str, customers_config: dict, mode: str = "demo") 
         sys.exit(1)
 
     version = get_version()
+
+    # Pre-packaging validation
+    doc_warnings = validate_docs(version)
+    if doc_warnings:
+        print(f"\n⚠️  Pre-packaging validation found {len(doc_warnings)} issue(s):")
+        for w in doc_warnings:
+            print(f"  - {w}")
+        print()
+        response = input("Continue packaging? [y/N] ").strip().lower()
+        if response != "y":
+            print("Aborted.")
+            sys.exit(1)
+
     package_name = f"loomgraph-{mode}-{customer}-v{version}"
 
     # Create temp directory for packaging

@@ -315,8 +315,8 @@ class TestInsertCustomKG:
             assert "Connection failed" in str(exc_info.value)
 
     @pytest.mark.asyncio
-    async def test_insert_custom_kg_uses_extended_timeout(self, client: LightRAGClient) -> None:
-        """Should use 3x timeout for large payloads."""
+    async def test_insert_custom_kg_uses_dynamic_timeout(self, client: LightRAGClient) -> None:
+        """Should use dynamic timeout based on entity count (minimum 60s)."""
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {"status": "success", "details": {}}
@@ -330,8 +330,44 @@ class TestInsertCustomKG:
 
             await client.insert_custom_kg([], [])
 
-            # Verify timeout is 3x the base timeout (5.0 * 3 = 15.0)
-            mock_client_class.assert_called_once_with(timeout=15.0, trust_env=False)
+            # Dynamic timeout: max(60.0, 30 + 0/200) = 60.0, max(60.0, 5*3=15) = 60.0
+            mock_client_class.assert_called_once_with(timeout=60.0, trust_env=False)
+
+    @pytest.mark.asyncio
+    async def test_insert_custom_kg_timeout_scales_with_entities(self, client: LightRAGClient) -> None:
+        """Timeout should scale with entity count for large payloads."""
+        # 10000 entities: max(60, 30 + 10000/200) = max(60, 80) = 80
+        # max(80, 5*3=15) = 80
+        assert client._calculate_timeout(10000) == 80.0
+        # 0 entities: max(60, 30) = 60, max(60, 15) = 60
+        assert client._calculate_timeout(0) == 60.0
+        # 20000 entities: max(60, 30 + 100) = 130, max(130, 15) = 130
+        assert client._calculate_timeout(20000) == 130.0
+
+    @pytest.mark.asyncio
+    async def test_insert_custom_kg_batching(self, client: LightRAGClient) -> None:
+        """Large payloads should be split into batches."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "status": "success",
+            "details": {"entities_count": 3, "relationships_count": 0},
+        }
+
+        with patch("httpx.AsyncClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client.__aenter__.return_value = mock_client
+            mock_client.__aexit__.return_value = None
+            mock_client.post.return_value = mock_response
+            mock_client_class.return_value = mock_client
+
+            entities = [{"entity_name": f"E{i}", "entity_type": "class"} for i in range(6)]
+            result = await client.insert_custom_kg(entities, [], batch_size=3)
+
+            # Should have made 2 HTTP calls (6 entities / 3 per batch)
+            assert mock_client.post.call_count == 2
+            assert result["batches"] == 2
+            assert result["details"]["entities_count"] == 6
 
 
 class TestCreateEntity:
