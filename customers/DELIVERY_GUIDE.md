@@ -15,13 +15,13 @@
 **安装命令**（pip）:
 ```bash
 export LOOMGRAPH_TOKEN="[REDACTED PAT]"
-pip install "loomgraph @ git+https://${LOOMGRAPH_TOKEN}@github.com/dreamlx/LoomGraph.git@v0.8.0"
+pip install "loomgraph @ git+https://${LOOMGRAPH_TOKEN}@github.com/dreamlx/LoomGraph.git@v0.9.2"
 ```
 
 **安装命令**（pipx）:
 ```bash
 export LOOMGRAPH_TOKEN="[REDACTED PAT]"
-pipx install "loomgraph @ git+https://${LOOMGRAPH_TOKEN}@github.com/dreamlx/LoomGraph.git@v0.8.0"
+pipx install "loomgraph @ git+https://${LOOMGRAPH_TOKEN}@github.com/dreamlx/LoomGraph.git@v0.9.2"
 ```
 
 **配置信息**:
@@ -40,13 +40,13 @@ pipx install "loomgraph @ git+https://${LOOMGRAPH_TOKEN}@github.com/dreamlx/Loom
 **安装命令**（pip）:
 ```bash
 export LOOMGRAPH_TOKEN="[REDACTED PAT]"
-pip install "loomgraph @ git+https://${LOOMGRAPH_TOKEN}@github.com/dreamlx/LoomGraph.git@v0.8.0"
+pip install "loomgraph @ git+https://${LOOMGRAPH_TOKEN}@github.com/dreamlx/LoomGraph.git@v0.9.2"
 ```
 
 **安装命令**（pipx）:
 ```bash
 export LOOMGRAPH_TOKEN="[REDACTED PAT]"
-pipx install "loomgraph @ git+https://${LOOMGRAPH_TOKEN}@github.com/dreamlx/LoomGraph.git@v0.8.0"
+pipx install "loomgraph @ git+https://${LOOMGRAPH_TOKEN}@github.com/dreamlx/LoomGraph.git@v0.9.2"
 ```
 
 **配置信息**:
@@ -65,13 +65,13 @@ pipx install "loomgraph @ git+https://${LOOMGRAPH_TOKEN}@github.com/dreamlx/Loom
 **安装命令**（pip）:
 ```bash
 export LOOMGRAPH_TOKEN="[REDACTED PAT]"
-pip install "loomgraph @ git+https://${LOOMGRAPH_TOKEN}@github.com/dreamlx/LoomGraph.git@v0.8.0"
+pip install "loomgraph @ git+https://${LOOMGRAPH_TOKEN}@github.com/dreamlx/LoomGraph.git@v0.9.2"
 ```
 
 **安装命令**（pipx）:
 ```bash
 export LOOMGRAPH_TOKEN="[REDACTED PAT]"
-pipx install "loomgraph @ git+https://${LOOMGRAPH_TOKEN}@github.com/dreamlx/LoomGraph.git@v0.8.0"
+pipx install "loomgraph @ git+https://${LOOMGRAPH_TOKEN}@github.com/dreamlx/LoomGraph.git@v0.9.2"
 ```
 
 **配置信息**:
@@ -167,7 +167,7 @@ python scripts/manage_tokens.py --check-expiry
 python scripts/manage_tokens.py --verify customer --token <TOKEN>
 
 # 重新生成安装命令
-python scripts/manage_tokens.py --generate-install customer --version v0.8.0
+python scripts/manage_tokens.py --generate-install customer --version v0.9.2
 ```
 
 ---

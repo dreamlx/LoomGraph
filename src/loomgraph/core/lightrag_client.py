@@ -306,20 +306,41 @@ class LightRAGClient:
             except httpx.RequestError as e:
                 raise LightRAGAPIError(f"Connection failed: {e}") from e
 
+    def _calculate_timeout(self, entity_count: int) -> float:
+        """Calculate dynamic timeout based on payload size.
+
+        Heuristic: base 30s + 1s per 200 entities, minimum 60s for any batch.
+
+        Args:
+            entity_count: Number of entities in the batch
+
+        Returns:
+            Timeout in seconds
+        """
+        dynamic = max(60.0, 30.0 + entity_count / 200.0)
+        # Never less than configured timeout × 3 (backward compatibility)
+        return max(dynamic, self.timeout * 3)
+
     async def insert_custom_kg(
         self,
         entities: list[dict[str, Any]],
         relationships: list[dict[str, Any]],
         chunks: list[dict[str, Any]] | None = None,
+        *,
+        batch_size: int = 5000,
+        progress_callback: Any | None = None,
     ) -> dict[str, Any]:
         """Batch insert custom knowledge graph data.
 
-        This is more efficient than individual create_entity/create_relation calls.
+        For large payloads (>batch_size entities), automatically splits into
+        multiple HTTP calls to avoid timeouts.
 
         Args:
             entities: List of entity dicts with entity_name, entity_type, description, source_id
             relationships: List of relation dicts with src_id, tgt_id, description, keywords
             chunks: Optional list of chunk dicts with content, source_id
+            batch_size: Max entities per HTTP call (default 5000)
+            progress_callback: Optional callable(batch_num, total_batches, entities_in_batch)
 
         Returns:
             Response with counts of inserted items
@@ -332,14 +353,93 @@ class LightRAGClient:
             >>> relations = [{"src_id": "MyClass", "tgt_id": "Base", "keywords": "INHERITS"}]
             >>> result = await client.insert_custom_kg(entities, relations)
         """
-        custom_kg = {
+        total_entities = len(entities)
+
+        # Small payload: single call (no splitting needed)
+        if total_entities <= batch_size:
+            return await self._insert_custom_kg_single(
+                entities, relationships, chunks, total_entities,
+            )
+
+        # Large payload: split into batches
+        logger.info(
+            f"Large payload ({total_entities} entities), splitting into "
+            f"batches of {batch_size}"
+        )
+
+        # Build entity name set per batch for relation routing
+        batches: list[tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]] | None]] = []
+        for i in range(0, total_entities, batch_size):
+            batch_entities = entities[i:i + batch_size]
+            batch_entity_names = {e.get("entity_name", "") for e in batch_entities}
+
+            # Route relations: include if src or tgt is in this batch
+            batch_relations = [
+                r for r in relationships
+                if r.get("src_id", "") in batch_entity_names
+                or r.get("tgt_id", "") in batch_entity_names
+            ]
+
+            # Route chunks: include if source_id matches any entity's source_id
+            batch_source_ids = {e.get("source_id", "") for e in batch_entities}
+            batch_chunks = None
+            if chunks:
+                batch_chunks = [
+                    c for c in chunks
+                    if c.get("source_id", "") in batch_source_ids
+                    or c.get("full_doc_id", "") in batch_source_ids
+                ]
+
+            batches.append((batch_entities, batch_relations, batch_chunks))
+
+        total_batches = len(batches)
+        combined_result: dict[str, Any] = {
+            "status": "success",
+            "details": {"entities_count": 0, "relationships_count": 0},
+            "batches": total_batches,
+        }
+
+        for batch_num, (b_entities, b_relations, b_chunks) in enumerate(batches, 1):
+            if progress_callback:
+                progress_callback(batch_num, total_batches, len(b_entities))
+
+            logger.info(
+                f"Batch {batch_num}/{total_batches}: "
+                f"{len(b_entities)} entities, {len(b_relations)} relations"
+            )
+
+            result = await self._insert_custom_kg_single(
+                b_entities, b_relations, b_chunks, len(b_entities),
+            )
+            details = result.get("details", {})
+            combined_result["details"]["entities_count"] += details.get(
+                "entities_count", len(b_entities)
+            )
+            combined_result["details"]["relationships_count"] += details.get(
+                "relationships_count", len(b_relations)
+            )
+
+        return combined_result
+
+    async def _insert_custom_kg_single(
+        self,
+        entities: list[dict[str, Any]],
+        relationships: list[dict[str, Any]],
+        chunks: list[dict[str, Any]] | None,
+        entity_count: int,
+    ) -> dict[str, Any]:
+        """Execute a single insert_custom_kg HTTP call."""
+        custom_kg: dict[str, Any] = {
             "entities": entities,
             "relationships": relationships,
         }
         if chunks:
             custom_kg["chunks"] = chunks
 
-        async with httpx.AsyncClient(timeout=self.timeout * 3, trust_env=False) as client:
+        timeout = self._calculate_timeout(entity_count)
+        logger.debug(f"insert_custom_kg timeout: {timeout:.0f}s for {entity_count} entities")
+
+        async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
             try:
                 response = await client.post(
                     f"{self.base_url}/documents/insert_custom_kg",
@@ -362,6 +462,11 @@ class LightRAGClient:
                 )
                 return data
 
+            except httpx.ReadTimeout as e:
+                raise LightRAGAPIError(
+                    f"Timeout after {timeout:.0f}s inserting {entity_count} entities. "
+                    f"Try increasing api_timeout in .loomgraph.yaml or use a smaller batch.",
+                ) from e
             except httpx.RequestError as e:
                 raise LightRAGAPIError(f"Connection failed: {e}") from e
 

@@ -88,7 +88,7 @@ def index(repo_path: str, clear: bool, workspace: str | None) -> None:
         return
 
     # Step 3: Run embed + inject asynchronously
-    click.echo("[3/3] Injecting into LightRAG (entities → relations)...", err=True)
+    click.echo("[3/3] Injecting into LightRAG...", err=True)
     try:
         result = asyncio.run(_async_index_pipeline(parse_results, clear, workspace, repo_path=repo))
     except Exception as e:
@@ -163,7 +163,14 @@ async def _async_index_pipeline(
     results = parse_results.get("results", [])
     files_scanned = len(results)
 
-    for file_result in results:
+    for i, file_result in enumerate(results, 1):
+        # Progress feedback every 100 files
+        if i % 100 == 0 or i == files_scanned:
+            click.echo(
+                f"       Collecting: {i}/{files_scanned} files, "
+                f"{len(all_entities)} entities...",
+                err=True,
+            )
         path = Path(file_result.get("path", ""))
 
         # Convert absolute path to relative (for clean source_id in graph)
@@ -249,15 +256,31 @@ async def _async_index_pipeline(
     all_entities.extend(stubs)
     external_stubs = len(stubs)
 
-    # Step 3: Single insert_custom_kg call
+    # Step 3: Batch insert_custom_kg call(s)
     entities_created = 0
     relations_created = 0
     injection_errors: list[str] = []
 
     if all_entities or all_relations:
+        total = len(all_entities)
+        click.echo(
+            f"       Uploading {total} entities, "
+            f"{len(all_relations)} relations, "
+            f"{len(all_chunks)} chunks...",
+            err=True,
+        )
+
+        def _progress(batch_num: int, total_batches: int, count: int) -> None:
+            click.echo(
+                f"       Batch {batch_num}/{total_batches} "
+                f"({count} entities)...",
+                err=True,
+            )
+
         try:
             kg_result = await client.insert_custom_kg(
                 all_entities, all_relations, all_chunks,
+                progress_callback=_progress,
             )
             details = kg_result.get("details", {})
             entities_created = details.get("entities_count", len(all_entities))
@@ -798,7 +821,7 @@ async def _async_warm_update(
             relations_created = details.get("relationships_count", len(all_relations))
         except LightRAGAPIError as e:
             errors.append(f"insert_custom_kg failed: {e.message}")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             errors.append(f"insert_custom_kg failed: {e}")
 
     result: dict[str, Any] = {
