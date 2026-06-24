@@ -12,7 +12,9 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from .lightrag_client import LightRAGAPIError, LightRAGClient
+from loomgraph.storage.base import GraphStore
+
+from .lightrag_client import LightRAGAPIError
 from .mapper import (
     detect_language,
     map_call_to_relation,
@@ -168,7 +170,7 @@ def create_external_stubs(
 
 
 async def inject_parse_result(
-    client: LightRAGClient,
+    client: GraphStore,
     result: ParseResult,
 ) -> InjectResult:
     """Inject codeindex parse result into LightRAG via HTTP API.
@@ -177,15 +179,15 @@ async def inject_parse_result(
     and relations, then calls the LightRAG HTTP API.
 
     Args:
-        client: LightRAGClient instance for HTTP API calls
+        client: GraphStore instance (any backend)
         result: ParseResult from codeindex
 
     Returns:
         InjectResult with counts of injected entities and relations
 
     Example:
-        >>> from loomgraph.core.lightrag_client import LightRAGClient
-        >>> client = LightRAGClient("http://internal.example.invalid:3001")
+        >>> from loomgraph.storage import create_graph_store
+        >>> client = await create_graph_store(workspace="myproj")
         >>> result = codeindex.parse_file("src/auth/service.py")
         >>> inject_result = await inject_parse_result(client, result)
         >>> print(f"Injected {inject_result.entities} entities")
@@ -329,13 +331,13 @@ def _path_to_module_name(path: Path) -> str:
 
 
 async def inject_parse_results_batch(
-    client: LightRAGClient,
+    client: GraphStore,
     results: list[ParseResult],
 ) -> list[InjectResult]:
     """Inject multiple parse results into LightRAG.
 
     Args:
-        client: LightRAGClient instance
+        client: GraphStore instance
         results: List of ParseResult from codeindex
 
     Returns:

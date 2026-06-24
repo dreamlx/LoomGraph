@@ -126,7 +126,6 @@ async def _async_index_pipeline(
         repo_path: Repo root path; if set, file paths are stored as relative paths
     """
     from loomgraph.core.injector import build_chunks, collect_kg_data, create_external_stubs
-    from loomgraph.core.lightrag_client import LightRAGAPIError, LightRAGClient
     from loomgraph.core.models import (
         Call,
         Import,
@@ -134,21 +133,17 @@ async def _async_index_pipeline(
         ParseResult,
         Symbol,
     )
+    from loomgraph.storage.factory import create_graph_store
 
-    settings = get_settings()
-    client = LightRAGClient(
-        base_url=settings.lightrag.api_url,
-        timeout=settings.lightrag.api_timeout,
-        workspace=get_auto_workspace(workspace),
-    )
+    store = await create_graph_store(workspace=get_auto_workspace(workspace))
 
     # Step 0: Clear existing data if requested (Cold Rebuild)
     cleared = False
     if clear:
         try:
-            await client.delete_all()
+            await store.delete_all()
             cleared = True
-        except LightRAGAPIError:
+        except Exception:
             pass  # Will be reported in result
 
     # Step 1: Collect all entities, relations, and chunks from all files
@@ -278,15 +273,14 @@ async def _async_index_pipeline(
             )
 
         try:
-            kg_result = await client.insert_custom_kg(
+            await store.insert_custom_kg(
                 all_entities, all_relations, all_chunks,
                 progress_callback=_progress,
             )
-            details = kg_result.get("details", {})
-            entities_created = details.get("entities_count", len(all_entities))
-            relations_created = details.get("relationships_count", len(all_relations))
-        except LightRAGAPIError as e:
-            injection_errors.append(f"insert_custom_kg failed: {e.message}")
+            # GraphStore contract returns None — count is the input size
+            # since insert_custom_kg upserts every supplied row.
+            entities_created = len(all_entities)
+            relations_created = len(all_relations)
         except Exception as e:
             injection_errors.append(f"insert_custom_kg failed: {e}")
 
@@ -671,7 +665,6 @@ async def _async_warm_update(
     3. Re-inject via single insert_custom_kg call
     """
     from loomgraph.core.injector import build_chunks, collect_kg_data, create_external_stubs
-    from loomgraph.core.lightrag_client import LightRAGAPIError, LightRAGClient
     from loomgraph.core.models import (
         Call,
         Import,
@@ -679,15 +672,26 @@ async def _async_warm_update(
         ParseResult,
         Symbol,
     )
+    from loomgraph.storage.factory import create_graph_store
 
     settings = get_settings()
-    # Use provided URLs or fall back to config
-    api_url = lightrag_url if lightrag_url else settings.lightrag.api_url
-    client = LightRAGClient(
-        base_url=api_url,
-        timeout=settings.lightrag.api_timeout,
-        workspace=get_auto_workspace(workspace),
-    )
+    ws = get_auto_workspace(workspace)
+    if lightrag_url:
+        # Explicit URL override forces the LightRAG path regardless of
+        # storage.backend (used by automation hooks pointing at non-default
+        # LightRAG instances).
+        from loomgraph.core.lightrag_client import LightRAGClient
+        from loomgraph.storage.lightrag_store import LightRAGGraphStore
+
+        store = LightRAGGraphStore(
+            LightRAGClient(
+                base_url=lightrag_url,
+                timeout=settings.lightrag.api_timeout,
+                workspace=ws,
+            )
+        )
+    else:
+        store = await create_graph_store(workspace=ws)
 
     files_indexed = 0
     files_skipped = 0
@@ -797,10 +801,8 @@ async def _async_warm_update(
     # Step 2: Delete old data for changed files
     if source_ids:
         try:
-            await client.delete_by_source(source_ids)
-        except LightRAGAPIError as e:
-            errors.append(f"delete_by_source failed: {e.message}")
-        except Exception as e:
+            await store.delete_by_source(source_ids)
+        except Exception as e:  # noqa: BLE001
             errors.append(f"delete_by_source failed: {e}")
 
     # Step 3: Create external stubs + single insert_custom_kg call
@@ -813,14 +815,12 @@ async def _async_warm_update(
 
     if all_entities or all_relations:
         try:
-            kg_result = await client.insert_custom_kg(
+            await store.insert_custom_kg(
                 all_entities, all_relations, all_chunks,
             )
-            details = kg_result.get("details", {})
-            entities_created = details.get("entities_count", len(all_entities))
-            relations_created = details.get("relationships_count", len(all_relations))
-        except LightRAGAPIError as e:
-            errors.append(f"insert_custom_kg failed: {e.message}")
+            # GraphStore contract returns None; upsert count == input count.
+            entities_created = len(all_entities)
+            relations_created = len(all_relations)
         except Exception as e:  # noqa: BLE001
             errors.append(f"insert_custom_kg failed: {e}")
 
