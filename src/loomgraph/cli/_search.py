@@ -10,9 +10,10 @@ import click
 
 from loomgraph.cli._common import (
     ErrorCode,
+    create_llm_client_for_workspace,
     output_error,
     output_success,
-    prepare_workspace_client,
+    prepare_workspace_store,
 )
 from loomgraph.cli.main import main
 
@@ -87,9 +88,9 @@ async def _async_find(
     """
     from difflib import SequenceMatcher
 
-    ws, client = await prepare_workspace_client(workspace)
+    ws, store = await prepare_workspace_store(workspace)
 
-    entities = await client.get_all_entities()
+    entities = await store.get_all_entities()
 
     query_lower = query.lower()
     scored: list[tuple[float, dict[str, Any]]] = []
@@ -139,7 +140,7 @@ async def _async_find(
 
     # Attach relations if requested
     if with_relations and matches:
-        relations = await client.get_all_relations()
+        relations = await store.get_all_relations()
         _attach_relations(matches, relations, depth)
 
     return {
@@ -257,12 +258,18 @@ async def _async_query(
     workspace: str | None = None,
 ) -> dict[str, Any]:
     """Run semantic query via LightRAG RAG engine."""
-    ws, client = await prepare_workspace_client(workspace)
+    ws, store = await prepare_workspace_store(workspace)
 
-    data = await client.query(query=question, mode=mode)
+    # `loomgraph query` uses the LLM-backed completion path (Phase 1: still
+    # LightRAG-backed; Phase 4 swaps to a direct LLM provider). The mode kwarg
+    # only applies on the LightRAG backend; for now we set the adapter mode
+    # via a fresh LLMClient bound to the resolved workspace.
+    from loomgraph.llm.lightrag_llm import LightRAGLLMClient
 
-    # LightRAG returns {"response": "..."} or similar structure
-    response_text = data.get("response", "") if isinstance(data, dict) else str(data)
+    llm = create_llm_client_for_workspace(ws)
+    if isinstance(llm, LightRAGLLMClient):
+        llm.mode = mode
+    response_text = await llm.complete(question)
 
     if not response_text or response_text.strip() == "":
         return {
@@ -322,10 +329,10 @@ async def _async_graph_query(
     workspace: str | None = None,
 ) -> dict[str, Any]:
     """Run graph traversal via graph layer API (precise structural query)."""
-    ws, client = await prepare_workspace_client(workspace)
+    ws, store = await prepare_workspace_store(workspace)
 
-    relations = await client.get_all_relations()
-    entities = await client.get_all_entities()
+    relations = await store.get_all_relations()
+    entities = await store.get_all_entities()
 
     # Build entity name → source_id lookup
     source_id_map: dict[str, str] = {}

@@ -10,7 +10,6 @@ from loomgraph.core.git import (
 )
 from loomgraph.core.indexer import index_file, index_repository, scan_code_files
 from loomgraph.core.injector import inject_parse_result, inject_parse_results_batch
-from loomgraph.core.lightrag_client import LightRAGAPIError, LightRAGClient
 from loomgraph.core.mapper import (
     detect_language,
     map_call_to_relation,
@@ -59,9 +58,6 @@ __all__ = [
     # Injector
     "inject_parse_result",
     "inject_parse_results_batch",
-    # LightRAG Client
-    "LightRAGClient",
-    "LightRAGAPIError",
     # Indexer
     "scan_code_files",
     "index_repository",
