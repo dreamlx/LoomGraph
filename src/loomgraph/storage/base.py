@@ -128,3 +128,22 @@ class GraphStore(ABC):
         module_depth: int = 2,
     ) -> dict[str, Any]:
         """Entity/relation counts and cross-module coupling density."""
+
+    # ----- Vector search (Phase 2) -----
+
+    async def search_similar(
+        self,
+        embedding: list[float],
+        k: int = 10,
+        source_prefix: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """KNN search over entity-description embeddings.
+
+        Returns a list of `{entity_name, source_id, distance}` dicts,
+        ascending distance (closest first). Default implementation raises
+        `NotImplementedError` — backends without vector support should
+        leave this method alone. Concrete vector backends override.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not implement search_similar()"
+        )

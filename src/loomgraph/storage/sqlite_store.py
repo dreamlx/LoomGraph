@@ -1,8 +1,16 @@
-"""SqliteGraphStore — SQLite single-file backend.
+"""SqliteGraphStore — SQLite + sqlite-vec single-file backend.
 
-Phase 1 (EPIC-011 / ADR-013): pure SQLite (stdlib sqlite3) backing for
-all GraphStore methods. No vector column yet — sqlite-vec virtual table
-is added in Phase 2.
+EPIC-011 / ADR-013: full GraphStore implementation backed by stdlib sqlite3.
+
+- Phase 1: schema + CRUD + analytics (entities / relations / file_hashes)
+- Phase 2: sqlite-vec vec0 virtual tables for vector KNN
+    * vec_node_descriptions(embedding float[768], +entity_name, +source_id)
+    * vec_code_snippets(embedding float[768], +chunk_id, +source_id)
+
+Embeddings are caller-provided: when `entity_data["embedding"]` is a
+list of floats matching the configured dimension, it's written to vec0.
+Otherwise the vector tables stay empty (no automatic embedding HTTP call —
+keeps the store in-process; the caller decides when to embed).
 
 Threading: stdlib sqlite3.Connection isn't safe for concurrent use,
 so a single persistent connection is opened with `check_same_thread=False`
@@ -19,14 +27,25 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, TypeVar
 
+import sqlite_vec
+
 from loomgraph.storage.base import GraphStore
 
 _T = TypeVar("_T")
 
+# Embedding column dimension for vec0 virtual tables. Matches Jina Code V2.
+VECTOR_DIM = 768
+
 # Promoted columns are the high-traffic query fields. Everything else is
 # round-tripped in properties_json so callers can stash arbitrary attrs
-# without schema changes.
-_ENTITY_PROMOTED = {"entity_name", "entity_type", "description", "source_id"}
+# without schema changes. `embedding` is excluded: it goes to vec0.
+_ENTITY_PROMOTED = {
+    "entity_name",
+    "entity_type",
+    "description",
+    "source_id",
+    "embedding",
+}
 _RELATION_PROMOTED = {
     "src_id",
     "source",
@@ -37,7 +56,7 @@ _RELATION_PROMOTED = {
     "source_id",
 }
 
-SCHEMA_SQL = """
+SCHEMA_SQL = f"""
 CREATE TABLE IF NOT EXISTS entities (
     entity_name     TEXT PRIMARY KEY,
     entity_type     TEXT,
@@ -66,7 +85,23 @@ CREATE TABLE IF NOT EXISTS meta (
     key   TEXT PRIMARY KEY,
     value TEXT
 );
-INSERT OR IGNORE INTO meta(key, value) VALUES('schema_version', '1');
+INSERT OR IGNORE INTO meta(key, value) VALUES('schema_version', '2');
+
+-- sqlite-vec vec0 virtual tables. `+` prefix marks auxiliary columns
+-- stored in shadow tables (not in the vector index). entity_name /
+-- source_id are duplicated so DELETE-by-name and DELETE-by-source can
+-- run without joining out to the entities table.
+CREATE VIRTUAL TABLE IF NOT EXISTS vec_node_descriptions USING vec0(
+    embedding float[{VECTOR_DIM}],
+    +entity_name TEXT,
+    +source_id TEXT
+);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS vec_code_snippets USING vec0(
+    embedding float[{VECTOR_DIM}],
+    +chunk_id TEXT,
+    +source_id TEXT
+);
 """
 
 
@@ -95,6 +130,9 @@ class SqliteGraphStore(GraphStore):
         def _open() -> sqlite3.Connection:
             conn = sqlite3.connect(self._db_path, check_same_thread=False)
             conn.row_factory = sqlite3.Row
+            conn.enable_load_extension(True)
+            sqlite_vec.load(conn)
+            conn.enable_load_extension(False)
             conn.execute("PRAGMA foreign_keys = ON")
             conn.executescript(SCHEMA_SQL)
             conn.commit()
@@ -170,12 +208,49 @@ class SqliteGraphStore(GraphStore):
         result.update(extras)
         return result
 
+    # ----- Embedding helpers -----
+
+    @staticmethod
+    def _valid_embedding(value: Any) -> list[float] | None:
+        """Return the embedding as a list of floats, or None if invalid."""
+        if value is None:
+            return None
+        if not isinstance(value, (list, tuple)):
+            return None
+        if len(value) != VECTOR_DIM:
+            return None
+        try:
+            return [float(x) for x in value]
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _write_node_embedding(
+        conn: sqlite3.Connection,
+        entity_name: str,
+        source_id: str | None,
+        embedding: list[float],
+    ) -> None:
+        # vec0 has no UPSERT; idempotent via DELETE-then-INSERT keyed by name.
+        conn.execute(
+            "DELETE FROM vec_node_descriptions WHERE entity_name = ?",
+            (entity_name,),
+        )
+        conn.execute(
+            """
+            INSERT INTO vec_node_descriptions (embedding, entity_name, source_id)
+            VALUES (?, ?, ?)
+            """,
+            (sqlite_vec.serialize_float32(embedding), entity_name, source_id),
+        )
+
     # ----- Entity CRUD -----
 
     async def create_entity(
         self, entity_name: str, entity_data: dict[str, Any]
     ) -> None:
         etype, desc, source_id, extras_json = self._split_entity(entity_data)
+        embedding = self._valid_embedding(entity_data.get("embedding"))
 
         def _exec(conn: sqlite3.Connection) -> None:
             conn.execute(
@@ -191,6 +266,8 @@ class SqliteGraphStore(GraphStore):
                 """,
                 (entity_name, etype, desc, source_id, extras_json),
             )
+            if embedding is not None:
+                self._write_node_embedding(conn, entity_name, source_id, embedding)
             conn.commit()
 
         await self._run(_exec)
@@ -280,12 +357,16 @@ class SqliteGraphStore(GraphStore):
         entity_rows: list[
             tuple[str, str | None, str | None, str | None, str]
         ] = []
+        embedding_rows: list[tuple[str, str | None, list[float]]] = []
         for e in entities:
             name = e.get("entity_name", "")
             if not name:
                 continue
             etype, desc, source_id, extras_json = self._split_entity(e)
             entity_rows.append((name, etype, desc, source_id, extras_json))
+            emb = self._valid_embedding(e.get("embedding"))
+            if emb is not None:
+                embedding_rows.append((name, source_id, emb))
 
         relation_rows: list[
             tuple[str, str, str, str | None, str | None, str]
@@ -331,6 +412,8 @@ class SqliteGraphStore(GraphStore):
                         """,
                         relation_rows,
                     )
+                for name, sid, emb in embedding_rows:
+                    self._write_node_embedding(conn, name, sid, emb)
 
         await self._run(_exec)
 
@@ -341,6 +424,8 @@ class SqliteGraphStore(GraphStore):
             with conn:
                 conn.execute("DELETE FROM entities")
                 conn.execute("DELETE FROM relations")
+                conn.execute("DELETE FROM vec_node_descriptions")
+                conn.execute("DELETE FROM vec_code_snippets")
 
         await self._run(_exec)
 
@@ -357,6 +442,14 @@ class SqliteGraphStore(GraphStore):
                 )
                 conn.execute(
                     f"DELETE FROM relations WHERE source_id IN ({placeholders})",
+                    source_ids,
+                )
+                conn.execute(
+                    f"DELETE FROM vec_node_descriptions WHERE source_id IN ({placeholders})",
+                    source_ids,
+                )
+                conn.execute(
+                    f"DELETE FROM vec_code_snippets WHERE source_id IN ({placeholders})",
                     source_ids,
                 )
 
@@ -459,6 +552,55 @@ class SqliteGraphStore(GraphStore):
                 entity["degree"] = r["degree"]
                 result.append(entity)
             return result
+
+        return await self._run(_query)
+
+    # ----- Vector search -----
+
+    async def search_similar(
+        self,
+        embedding: list[float],
+        k: int = 10,
+        source_prefix: str | None = None,
+    ) -> list[dict[str, Any]]:
+        emb = self._valid_embedding(embedding)
+        if emb is None:
+            raise ValueError(
+                f"embedding must be a list of {VECTOR_DIM} floats"
+            )
+        serialized = sqlite_vec.serialize_float32(emb)
+        # sqlite-vec rejects WHERE constraints on vec0 aux columns inside
+        # the KNN query. We over-fetch and filter in Python instead. The
+        # multiplier is a best-effort heuristic; callers with very sparse
+        # prefixes should pass a larger k.
+        fetch_k = k * 5 if source_prefix else k
+
+        def _query(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+            rows = conn.execute(
+                """
+                SELECT entity_name, source_id, distance
+                FROM vec_node_descriptions
+                WHERE embedding MATCH ? AND k = ?
+                ORDER BY distance
+                """,
+                (serialized, fetch_k),
+            ).fetchall()
+            results: list[dict[str, Any]] = []
+            for r in rows:
+                if source_prefix and not (r["source_id"] or "").startswith(
+                    source_prefix
+                ):
+                    continue
+                results.append(
+                    {
+                        "entity_name": r["entity_name"],
+                        "source_id": r["source_id"],
+                        "distance": float(r["distance"]),
+                    }
+                )
+                if len(results) >= k:
+                    break
+            return results
 
         return await self._run(_query)
 
