@@ -8,11 +8,13 @@ test files run the same suite via parametrization (Phase 1+).
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import AsyncIterator
 from typing import Any
 
 import pytest
 
 from loomgraph.storage.base import GraphStore
+from loomgraph.storage.sqlite_store import SqliteGraphStore
 
 
 class FakeGraphStore(GraphStore):
@@ -205,9 +207,27 @@ class FakeGraphStore(GraphStore):
         }
 
 
-@pytest.fixture
-def store() -> GraphStore:
-    return FakeGraphStore()
+@pytest.fixture(
+    params=[
+        pytest.param("fake", id="fake"),
+        pytest.param("sqlite", id="sqlite"),
+    ]
+)
+async def store(request: pytest.FixtureRequest) -> AsyncIterator[GraphStore]:
+    """Parametrized GraphStore — every contract test runs against each backend."""
+    backend: str = request.param
+    if backend == "fake":
+        yield FakeGraphStore()
+        return
+    if backend == "sqlite":
+        s = SqliteGraphStore(db_path=":memory:")
+        await s.initialize()
+        try:
+            yield s
+        finally:
+            await s.close()
+        return
+    raise AssertionError(f"unknown backend {backend!r}")
 
 
 # ---------- Entity CRUD ----------
