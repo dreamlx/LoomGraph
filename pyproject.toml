@@ -30,6 +30,7 @@ dependencies = [
     # Database
     "asyncpg>=0.29",
     "pgvector>=0.2",
+    "sqlite-vec>=0.1.9",
 
     # CLI
     "click>=8.0",
