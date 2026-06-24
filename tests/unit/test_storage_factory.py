@@ -43,7 +43,14 @@ class TestDBPathResolution:
 
 
 class TestGraphStoreFactory:
-    async def test_default_backend_is_lightrag(self) -> None:
+    async def test_default_backend_is_lightrag(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Explicitly clear any env override so "default" actually means
+        # the in-code default rather than whatever the dev shell injected.
+        monkeypatch.delenv("LOOMGRAPH_STORAGE__BACKEND", raising=False)
+        monkeypatch.delenv("LOOMGRAPH_STORAGE__DB_PATH", raising=False)
+        reset_settings()
         store = await create_graph_store(workspace="ws1")
         assert isinstance(store, LightRAGGraphStore)
 
