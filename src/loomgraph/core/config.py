@@ -69,6 +69,19 @@ class LightRAGConfig(BaseSettings):
     default_query_mode: Literal["local", "global", "hybrid", "naive"] = "hybrid"
 
 
+class StorageConfig(BaseSettings):
+    """Storage backend selection (EPIC-011 / ADR-013).
+
+    Phase 1 default remains `lightrag` so existing deployments are unaffected.
+    Phase 2 flips the default to `sqlite`; Phase 5 removes the lightrag option.
+    """
+
+    backend: Literal["lightrag", "sqlite"] = "lightrag"
+    # For sqlite: filesystem path template. `{workspace}` is substituted at
+    # runtime with the resolved workspace name. `~` is expanded.
+    db_path: str = "~/.loomgraph/{workspace}.db"
+
+
 class RetrievalConfig(BaseSettings):
     """Retrieval configuration."""
 
@@ -102,6 +115,7 @@ class Settings(BaseSettings):
     embedding: EmbeddingConfig = Field(default_factory=EmbeddingConfig)
     lightrag: LightRAGConfig = Field(default_factory=LightRAGConfig)
     retrieval: RetrievalConfig = Field(default_factory=RetrievalConfig)
+    storage: StorageConfig = Field(default_factory=StorageConfig)
 
 
 # Global settings instance (lazy loaded)
