@@ -251,6 +251,13 @@ async def _async_index_pipeline(
     all_entities.extend(stubs)
     external_stubs = len(stubs)
 
+    # Step 2b: Attach embeddings for sqlite vec0 (no-op on lightrag backend)
+    from loomgraph.cli._common import maybe_embed_entities
+
+    embedded_count = await maybe_embed_entities(all_entities)
+    if embedded_count:
+        click.echo(f"       Embedded {embedded_count} entity descriptions", err=True)
+
     # Step 3: Batch insert_custom_kg call(s)
     entities_created = 0
     relations_created = 0
@@ -809,6 +816,11 @@ async def _async_warm_update(
     stubs = create_external_stubs(all_entities, all_relations)
     all_entities.extend(stubs)
     external_stubs = len(stubs)
+
+    # Attach embeddings for sqlite vec0 (no-op on lightrag backend)
+    from loomgraph.cli._common import maybe_embed_entities
+
+    await maybe_embed_entities(all_entities)
 
     entities_created = 0
     relations_created = 0

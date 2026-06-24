@@ -1,0 +1,209 @@
+"""SqliteGraphStore vec0 tests — embedding writes, KNN search, cascade deletes.
+
+EPIC-011 Phase 2. Verifies that caller-provided embeddings round-trip
+through the vec0 virtual table and KNN returns the right neighbors with
+the right metadata.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+import pytest
+
+from loomgraph.storage.lightrag_store import LightRAGGraphStore
+from loomgraph.storage.sqlite_store import VECTOR_DIM, SqliteGraphStore
+
+# ---------- Helpers ----------
+
+
+def _vec(seed: float) -> list[float]:
+    """Build a deterministic VECTOR_DIM-length vector for tests."""
+    return [seed] + [0.0] * (VECTOR_DIM - 1)
+
+
+def _vec_normalized(idx: int) -> list[float]:
+    """Build a unit-length vector pointing along the `idx`-th axis."""
+    v = [0.0] * VECTOR_DIM
+    v[idx] = 1.0
+    return v
+
+
+@pytest.fixture
+async def store() -> Any:
+    s = SqliteGraphStore(db_path=":memory:")
+    await s.initialize()
+    try:
+        yield s
+    finally:
+        await s.close()
+
+
+# ---------- Embedding write path ----------
+
+
+class TestEmbeddingWrite:
+    async def test_create_entity_with_embedding(self, store: SqliteGraphStore) -> None:
+        await store.create_entity(
+            "Foo",
+            {
+                "entity_type": "class",
+                "source_id": "src/foo.py",
+                "embedding": _vec(0.5),
+            },
+        )
+        # Entity row preserved without embedding leaking into properties_json
+        entities = await store.get_all_entities()
+        assert len(entities) == 1
+        assert "embedding" not in entities[0]
+
+        # vec0 has the embedding
+        result = await store.search_similar(_vec(0.5), k=1)
+        assert len(result) == 1
+        assert result[0]["entity_name"] == "Foo"
+        assert result[0]["source_id"] == "src/foo.py"
+        assert result[0]["distance"] == pytest.approx(0.0, abs=1e-5)
+
+    async def test_create_entity_without_embedding(
+        self, store: SqliteGraphStore
+    ) -> None:
+        await store.create_entity("Foo", {"entity_type": "class"})
+        # KNN should find no neighbors
+        result = await store.search_similar(_vec(0.5), k=10)
+        assert result == []
+
+    async def test_invalid_embedding_dim_ignored(
+        self, store: SqliteGraphStore
+    ) -> None:
+        await store.create_entity(
+            "Foo", {"embedding": [0.1, 0.2, 0.3]}
+        )  # too short
+        result = await store.search_similar(_vec(0.5), k=10)
+        assert result == []
+
+    async def test_embedding_upsert(self, store: SqliteGraphStore) -> None:
+        # Insert with embedding A, then upsert with embedding B —
+        # vec0 should only contain B.
+        await store.create_entity("Foo", {"embedding": _vec_normalized(0)})
+        await store.create_entity("Foo", {"embedding": _vec_normalized(1)})
+        # Querying along axis 1 should hit Foo at distance 0
+        result = await store.search_similar(_vec_normalized(1), k=1)
+        assert len(result) == 1
+        assert result[0]["distance"] == pytest.approx(0.0, abs=1e-5)
+
+
+# ---------- Bulk insert ----------
+
+
+class TestBulkEmbeddingWrite:
+    async def test_insert_custom_kg_with_mixed_embeddings(
+        self, store: SqliteGraphStore
+    ) -> None:
+        entities = [
+            {
+                "entity_name": "A",
+                "source_id": "f1.py",
+                "embedding": _vec_normalized(0),
+            },
+            {
+                "entity_name": "B",
+                "source_id": "f2.py",
+                "embedding": _vec_normalized(1),
+            },
+            {"entity_name": "NoVec", "source_id": "f3.py"},
+        ]
+        await store.insert_custom_kg(entities, [])
+        assert len(await store.get_all_entities()) == 3
+
+        # KNN finds A and B, not NoVec
+        result = await store.search_similar(_vec_normalized(0), k=10)
+        names = [r["entity_name"] for r in result]
+        assert "A" in names
+        assert "B" in names
+        assert "NoVec" not in names
+
+
+# ---------- KNN search ----------
+
+
+class TestKNNSearch:
+    async def _seed(self, store: SqliteGraphStore) -> None:
+        await store.insert_custom_kg(
+            [
+                {"entity_name": f"E{i}", "source_id": f"src/m{i % 2}/f.py",
+                 "embedding": _vec_normalized(i)}
+                for i in range(5)
+            ],
+            [],
+        )
+
+    async def test_k_limits_results(self, store: SqliteGraphStore) -> None:
+        await self._seed(store)
+        result = await store.search_similar(_vec_normalized(0), k=2)
+        assert len(result) == 2
+
+    async def test_results_sorted_by_distance(
+        self, store: SqliteGraphStore
+    ) -> None:
+        await self._seed(store)
+        result = await store.search_similar(_vec_normalized(0), k=5)
+        # First result is the exact match
+        assert result[0]["entity_name"] == "E0"
+        # Distances non-decreasing
+        for i in range(len(result) - 1):
+            assert result[i]["distance"] <= result[i + 1]["distance"]
+
+    async def test_source_prefix_filter(self, store: SqliteGraphStore) -> None:
+        await self._seed(store)
+        # m0 modules: E0, E2, E4
+        result = await store.search_similar(
+            _vec_normalized(0), k=10, source_prefix="src/m0/"
+        )
+        names = sorted(r["entity_name"] for r in result)
+        assert names == ["E0", "E2", "E4"]
+
+    async def test_invalid_query_dim_raises(
+        self, store: SqliteGraphStore
+    ) -> None:
+        with pytest.raises(ValueError, match=str(VECTOR_DIM)):
+            await store.search_similar([0.1, 0.2, 0.3], k=5)
+
+
+# ---------- Cascade deletes ----------
+
+
+class TestCascadeDelete:
+    async def test_delete_by_source_cascades_to_vec0(
+        self, store: SqliteGraphStore
+    ) -> None:
+        await store.create_entity(
+            "A", {"source_id": "f1.py", "embedding": _vec_normalized(0)}
+        )
+        await store.create_entity(
+            "B", {"source_id": "f2.py", "embedding": _vec_normalized(1)}
+        )
+        await store.delete_by_source(["f1.py"])
+        result = await store.search_similar(_vec_normalized(0), k=10)
+        names = [r["entity_name"] for r in result]
+        assert "A" not in names
+        assert "B" in names
+
+    async def test_delete_all_cascades_to_vec0(
+        self, store: SqliteGraphStore
+    ) -> None:
+        await store.create_entity("A", {"embedding": _vec_normalized(0)})
+        await store.delete_all()
+        result = await store.search_similar(_vec_normalized(0), k=10)
+        assert result == []
+
+
+# ---------- Backend without vector support ----------
+
+
+class TestUnsupportedBackends:
+    async def test_lightrag_adapter_raises(self) -> None:
+        from unittest.mock import AsyncMock
+
+        store = LightRAGGraphStore(client=AsyncMock())
+        with pytest.raises(NotImplementedError):
+            await store.search_similar(_vec_normalized(0), k=1)
