@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Any
 
 from loomgraph.core.impact.extractor import ChangedSymbolExtractor
 from loomgraph.core.impact.git_parser import GitDiffParser
@@ -14,9 +14,6 @@ from loomgraph.core.impact.models import (
     ImpactResult,
 )
 
-if TYPE_CHECKING:
-    from loomgraph.core.lightrag_client import LightRAGClient
-
 
 @dataclass
 class ImpactAnalyzer:
@@ -24,11 +21,20 @@ class ImpactAnalyzer:
 
     Combines git diff parsing, symbol extraction, and graph queries
     to determine what parts of the codebase are affected by changes.
+
+    Args:
+        lightrag_client: GraphStore (or legacy LightRAGClient). Field name
+            kept for backward compatibility; type accepts both.
+        llm_client: Optional LLMClient for caller inference. When None and
+            lightrag_client lacks `.query`, caller queries return empty.
+        repo_path: Repository root for git operations.
+        max_depth: Maximum caller traversal depth.
     """
 
-    lightrag_client: LightRAGClient
+    lightrag_client: Any  # GraphStore
     repo_path: Path = Path(".")
     max_depth: int = 2
+    llm_client: Any | None = None  # LLMClient
 
     async def analyze_commit(self, commit: str = "HEAD") -> ImpactResult:
         """Analyze impact of a specific commit.
@@ -196,16 +202,24 @@ class ImpactAnalyzer:
             List of caller dicts
         """
         try:
-            # Use LightRAG graph query to find callers
+            # Use LLM to find callers — Phase 1 supports llm_client (preferred)
+            # or legacy lightrag_client.query (fallback). Phase 4 makes
+            # llm_client mandatory.
             query = f"What functions or methods call {symbol_name}?"
-            result = await self.lightrag_client.query(
-                query=query,
-                mode="local",  # Use local mode for relationship queries
-            )
-
-            # Parse the response to extract caller information
-            # LightRAG returns natural language, we need to parse it
-            return self._parse_caller_response(result)
+            if self.llm_client is not None:
+                response = await self.llm_client.complete(query)
+            elif hasattr(self.lightrag_client, "query"):
+                result = await self.lightrag_client.query(
+                    query=query, mode="local"
+                )
+                response = (
+                    result.get("response", "")
+                    if isinstance(result, dict)
+                    else str(result)
+                )
+            else:
+                return []
+            return self._parse_caller_response(response)
 
         except Exception:
             # If query fails, return empty list

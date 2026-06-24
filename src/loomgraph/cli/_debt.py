@@ -16,9 +16,7 @@ from loomgraph.cli._common import (
     output_success,
 )
 from loomgraph.cli.main import main
-from loomgraph.core.config import get_settings
 from loomgraph.core.debt_analyzer import DebtAnalyzer
-from loomgraph.core.lightrag_client import LightRAGClient
 
 
 @main.command()
@@ -144,19 +142,16 @@ async def _async_debt(
         with open(codeindex_data_path) as f:
             codeindex_data = json.load(f)
 
-    # Initialize LightRAG client for topology analysis (unless skipped)
-    client = None
+    # Initialize GraphStore for topology analysis (unless skipped)
+    store = None
     if not skip_topology:
-        settings = get_settings()
+        from loomgraph.storage.factory import create_graph_store
+
         workspace_name = get_auto_workspace(workspace)
-        client = LightRAGClient(
-            base_url=settings.lightrag.api_url,
-            timeout=settings.lightrag.api_timeout,
-            workspace=workspace_name,
-        )
+        store = await create_graph_store(workspace=workspace_name)
 
     # Analyze debt
-    analyzer = DebtAnalyzer(client=client)
+    analyzer = DebtAnalyzer(client=store)
     report = await analyzer.analyze(
         codeindex_data=codeindex_data,
         module=module,

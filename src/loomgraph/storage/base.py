@@ -8,7 +8,11 @@ Implementations:
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from typing import Any
+
+ProgressCallback = Callable[[int, int, int], None]
+"""Progress reporter: (batch_num, total_batches, entities_in_batch)."""
 
 
 class GraphStore(ABC):
@@ -61,8 +65,16 @@ class GraphStore(ABC):
         entities: list[dict[str, Any]],
         relationships: list[dict[str, Any]],
         chunks: list[dict[str, Any]] | None = None,
+        *,
+        batch_size: int = 5000,
+        progress_callback: ProgressCallback | None = None,
     ) -> None:
-        """Batch insert entities/relations/chunks. Implementation may batch."""
+        """Batch insert entities/relations/chunks.
+
+        `batch_size` and `progress_callback` are honored by network-backed
+        implementations to avoid HTTP timeouts on large payloads. In-process
+        backends (SQLite) may ignore them or use them for progress display.
+        """
 
     # ----- Delete -----
 

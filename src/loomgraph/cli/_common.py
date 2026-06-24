@@ -63,36 +63,23 @@ def get_auto_workspace(workspace: str | None) -> str | None:
 
 async def resolve_workspace_with_fallback(
     workspace: str,
-    client: Any,  # LightRAGClient
+    store: Any,  # GraphStore (or LightRAGClient — duck-typed via get_graph_stats)
     allow_fallback: bool = True,
 ) -> str:
     """Resolve workspace with fallback to main branches.
 
     Workflow:
-    1. Check if target workspace exists (entity_count > 0)
+    1. Check if target workspace has data (entity_count > 0)
     2. If not and allow_fallback=True, try main/develop/master
     3. Raise error if no valid workspace found
 
-    Args:
-        workspace: Target workspace (e.g. "myproject:feature-A")
-        client: LightRAG client instance
-        allow_fallback: Enable fallback to default branches (default: True)
-
-    Returns:
-        Resolved workspace name (may be different from input if fallback occurred)
-
-    Raises:
-        click.ClickException: No valid workspace found
-
-    Example:
-        >>> ws = await resolve_workspace_with_fallback("myproject:feature-A", client)
-        ℹ️  Workspace 'myproject:feature-A' not found, using 'myproject:main'
-        >>> ws
-        'myproject:main'
+    The `store` parameter accepts any object exposing
+    `await store.get_graph_stats()` — both GraphStore implementations and the
+    legacy LightRAGClient satisfy this.
     """
     # Check if target workspace has data
     try:
-        stats = await client.get_graph_stats()
+        stats = await store.get_graph_stats()
         entity_count = stats.get("entity_count") or stats.get("total_entities", 0)
 
         if entity_count > 0:
@@ -117,7 +104,7 @@ async def resolve_workspace_with_fallback(
                 continue  # skip if already tried
 
             try:
-                stats = await client.get_graph_stats()
+                stats = await store.get_graph_stats()
                 entity_count = stats.get("entity_count") or stats.get("total_entities", 0)
                 if entity_count > 0:
                     click.echo(
@@ -194,6 +181,44 @@ async def prepare_workspace_client(
     client.workspace = ws
 
     return ws, client
+
+
+async def prepare_workspace_store(
+    workspace: str | None = None,
+) -> tuple[str, Any]:
+    """Create GraphStore + resolve workspace with fallback.
+
+    Backend-agnostic counterpart to `prepare_workspace_client`. The store
+    is built per `settings.storage.backend`, then workspace is resolved
+    via fallback (re-creating the store if the workspace changed so the
+    underlying connection is bound to the right workspace).
+
+    Returns:
+        (resolved_workspace, GraphStore)
+    """
+    from loomgraph.storage.factory import create_graph_store
+
+    ws = get_auto_workspace(workspace)
+    if ws is None:
+        ws = ""
+    store = await create_graph_store(workspace=ws)
+
+    resolved = await resolve_workspace_with_fallback(ws, store, allow_fallback=True)
+    if resolved != ws:
+        # Re-create store bound to the fallback workspace
+        close = getattr(store, "close", None)
+        if close is not None:
+            await close()
+        store = await create_graph_store(workspace=resolved)
+
+    return resolved, store
+
+
+def create_llm_client_for_workspace(workspace: str | None = None) -> Any:
+    """Create an `LLMClient` bound to `workspace`."""
+    from loomgraph.storage.factory import create_llm_client
+
+    return create_llm_client(workspace=workspace)
 
 
 # ============================================

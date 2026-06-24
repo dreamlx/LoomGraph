@@ -61,8 +61,17 @@ class LightRAGGraphStore(GraphStore):
         entities: list[dict[str, Any]],
         relationships: list[dict[str, Any]],
         chunks: list[dict[str, Any]] | None = None,
+        *,
+        batch_size: int = 5000,
+        progress_callback: Any | None = None,
     ) -> None:
-        await self.client.insert_custom_kg(entities, relationships, chunks)
+        await self.client.insert_custom_kg(
+            entities,
+            relationships,
+            chunks,
+            batch_size=batch_size,
+            progress_callback=progress_callback,
+        )
 
     # ----- Delete -----
 

@@ -64,7 +64,11 @@ class FakeGraphStore(GraphStore):
         entities: list[dict[str, Any]],
         relationships: list[dict[str, Any]],
         chunks: list[dict[str, Any]] | None = None,
+        *,
+        batch_size: int = 5000,
+        progress_callback: Any | None = None,
     ) -> None:
+        del chunks, batch_size, progress_callback
         for e in entities:
             name = e.get("entity_name", "")
             if name:

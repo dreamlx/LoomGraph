@@ -17,8 +17,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from loomgraph.core.injector import inject_parse_result
-from loomgraph.core.lightrag_client import LightRAGClient
 from loomgraph.core.models import IndexResult, ParseResult
+from loomgraph.storage.base import GraphStore
 
 if TYPE_CHECKING:
     pass
@@ -132,7 +132,7 @@ def scan_code_files(
 
 async def index_repository(
     repo_path: str | Path,
-    client: LightRAGClient,
+    client: GraphStore,
     parse_file: Callable[[Path], ParseResult],
     *,
     clear_existing: bool = True,
@@ -148,7 +148,7 @@ async def index_repository(
 
     Args:
         repo_path: Path to the repository
-        client: LightRAGClient for HTTP API calls
+        client: GraphStore (any backend)
         parse_file: Function to parse a file (from codeindex)
         clear_existing: Whether to delete existing data first (not implemented in MVP)
         batch_size: Number of files to process before progress callback
@@ -158,9 +158,9 @@ async def index_repository(
         IndexResult with counts and any errors
 
     Example:
-        >>> from loomgraph.core import LightRAGClient
+        >>> from loomgraph.storage import create_graph_store
         >>> from codeindex import parse_file
-        >>> client = LightRAGClient("http://localhost:3001")
+        >>> client = await create_graph_store(workspace="myproj")
         >>> result = await index_repository("/repo", client, parse_file)
         >>> print(f"Indexed {result.entities} entities")
     """
@@ -228,7 +228,7 @@ async def index_repository(
 
 async def index_file(
     file_path: str | Path,
-    client: LightRAGClient,
+    client: GraphStore,
     parse_file: Callable[[Path], ParseResult],
 ) -> IndexResult:
     """Index a single file.
@@ -237,7 +237,7 @@ async def index_file(
 
     Args:
         file_path: Path to the file
-        client: LightRAGClient for HTTP API
+        client: GraphStore (any backend)
         parse_file: Parse function
 
     Returns:

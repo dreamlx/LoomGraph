@@ -11,9 +11,10 @@ import click
 
 from loomgraph.cli._common import (
     ErrorCode,
+    create_llm_client_for_workspace,
     output_error,
     output_success,
-    prepare_workspace_client,
+    prepare_workspace_store,
 )
 from loomgraph.cli.main import main
 
@@ -119,12 +120,14 @@ async def _async_impact(
     """Run async impact analysis."""
     from loomgraph.core.impact import ImpactAnalyzer
 
-    ws, client = await prepare_workspace_client(workspace)
+    ws, store = await prepare_workspace_store(workspace)
+    llm = create_llm_client_for_workspace(ws)
 
     analyzer = ImpactAnalyzer(
-        lightrag_client=client,
+        lightrag_client=store,
         repo_path=Path("."),
         max_depth=depth,
+        llm_client=llm,
     )
 
     if staged:
@@ -165,9 +168,9 @@ async def _async_deps(depth: int, workspace: str | None = None) -> dict[str, Any
     """Run async dependency analysis."""
     from loomgraph.core.deps import DepsAnalyzer
 
-    ws, client = await prepare_workspace_client(workspace)
+    ws, store = await prepare_workspace_store(workspace)
 
-    analyzer = DepsAnalyzer(client=client, depth=depth)
+    analyzer = DepsAnalyzer(client=store, depth=depth)
     result = await analyzer.analyze()
     return result.to_dict()
 
@@ -199,9 +202,10 @@ async def _async_overview(
     """Run async overview analysis."""
     from loomgraph.core.overview import OverviewAnalyzer
 
-    ws, client = await prepare_workspace_client(workspace)
+    ws, store = await prepare_workspace_store(workspace)
+    llm = create_llm_client_for_workspace(ws)
 
-    analyzer = OverviewAnalyzer(client=client, depth=depth)
+    analyzer = OverviewAnalyzer(client=store, depth=depth, llm_client=llm)
     result = await analyzer.analyze(no_summary=no_summary)
     return result.to_dict()
 
@@ -239,10 +243,10 @@ async def _async_topology(
     """Run async topology analysis."""
     from loomgraph.core.topology import TopologyAnalyzer
 
-    ws, client = await prepare_workspace_client(workspace)
+    ws, store = await prepare_workspace_store(workspace)
 
     analyzer = TopologyAnalyzer(
-        client=client,
+        client=store,
         hub_threshold=hub_threshold,
         god_threshold=god_threshold,
         module=module,
@@ -280,13 +284,13 @@ async def _async_check(
     workspace: str | None = None,
 ) -> dict[str, Any]:
     """Run async index freshness check."""
-    ws, client = await prepare_workspace_client(workspace)
+    ws, store = await prepare_workspace_store(workspace)
 
     # Try server-side get_source_ids first, fallback to get_all_entities
     try:
-        source_ids = await client.get_source_ids()
+        source_ids = await store.get_source_ids()
     except Exception:
-        entities = await client.get_all_entities()
+        entities = await store.get_all_entities()
         source_ids = list({e.get("source_id", "") for e in entities if e.get("source_id")})
 
     base = Path(repo_path)
