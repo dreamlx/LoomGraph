@@ -21,7 +21,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from loomgraph.core.lightrag_client import LightRAGClient
+from loomgraph.storage.base import GraphStore
 
 logger = logging.getLogger(__name__)
 
@@ -97,20 +97,18 @@ class DebtAnalyzer:
     to provide comprehensive technical debt analysis.
 
     Usage:
-        from loomgraph.core.lightrag_client import LightRAGClient
-        from loomgraph.core.config import get_settings
+        from loomgraph.storage import create_graph_store
 
-        settings = get_settings()
-        client = LightRAGClient(settings.lightrag.api_url)
-        analyzer = DebtAnalyzer(client=client)
+        store = await create_graph_store(workspace="myproj")
+        analyzer = DebtAnalyzer(client=store)
         result = await analyzer.analyze(codeindex_data=codeindex_json)
     """
 
-    def __init__(self, client: LightRAGClient | None = None) -> None:
+    def __init__(self, client: GraphStore | None = None) -> None:
         """Initialize DebtAnalyzer.
 
         Args:
-            client: Optional LightRAG client for topology analysis.
+            client: Optional GraphStore for topology analysis.
                    If None, topology analysis will be skipped.
         """
         self.client = client

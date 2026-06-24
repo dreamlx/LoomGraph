@@ -689,11 +689,19 @@ class TestQueryCommand:
 class TestAsyncQuery:
     """Tests for _async_query."""
 
-    @patch("loomgraph.cli._search.prepare_workspace_client")
-    async def test_async_query_hybrid(self, mock_prepare: MagicMock) -> None:
-        mock_client = AsyncMock()
-        mock_client.query.return_value = {"response": "Auth uses JWT tokens."}
-        mock_prepare.return_value = ("test-ws", mock_client)
+    @patch("loomgraph.cli._search.create_llm_client_for_workspace")
+    @patch("loomgraph.cli._search.prepare_workspace_store")
+    async def test_async_query_hybrid(
+        self,
+        mock_prepare: MagicMock,
+        mock_llm_factory: MagicMock,
+    ) -> None:
+        from loomgraph.llm.lightrag_llm import LightRAGLLMClient
+
+        mock_prepare.return_value = ("test-ws", AsyncMock())
+        mock_llm = AsyncMock(spec=LightRAGLLMClient)
+        mock_llm.complete.return_value = "Auth uses JWT tokens."
+        mock_llm_factory.return_value = mock_llm
         from loomgraph.cli._search import _async_query
 
         result = await _async_query("How does auth work?", "hybrid", "test-ws")
@@ -701,28 +709,46 @@ class TestAsyncQuery:
         assert result["query"] == "How does auth work?"
         assert result["mode"] == "hybrid"
         assert "JWT" in result["response"]
+        assert mock_llm.mode == "hybrid"
 
-    @patch("loomgraph.cli._search.prepare_workspace_client")
-    async def test_async_query_empty_response(self, mock_prepare: MagicMock) -> None:
-        mock_client = AsyncMock()
-        mock_client.query.return_value = {"response": ""}
-        mock_prepare.return_value = ("test-ws", mock_client)
+    @patch("loomgraph.cli._search.create_llm_client_for_workspace")
+    @patch("loomgraph.cli._search.prepare_workspace_store")
+    async def test_async_query_empty_response(
+        self,
+        mock_prepare: MagicMock,
+        mock_llm_factory: MagicMock,
+    ) -> None:
+        from loomgraph.llm.lightrag_llm import LightRAGLLMClient
+
+        mock_prepare.return_value = ("test-ws", AsyncMock())
+        mock_llm = AsyncMock(spec=LightRAGLLMClient)
+        mock_llm.complete.return_value = ""
+        mock_llm_factory.return_value = mock_llm
         from loomgraph.cli._search import _async_query
 
         result = await _async_query("nonexistent topic", "hybrid", "test-ws")
 
         assert "No relevant information" in result["response"]
 
-    @patch("loomgraph.cli._search.prepare_workspace_client")
-    async def test_async_query_mode_passed(self, mock_prepare: MagicMock) -> None:
-        mock_client = AsyncMock()
-        mock_client.query.return_value = {"response": "Global patterns found."}
-        mock_prepare.return_value = ("test-ws", mock_client)
+    @patch("loomgraph.cli._search.create_llm_client_for_workspace")
+    @patch("loomgraph.cli._search.prepare_workspace_store")
+    async def test_async_query_mode_passed(
+        self,
+        mock_prepare: MagicMock,
+        mock_llm_factory: MagicMock,
+    ) -> None:
+        from loomgraph.llm.lightrag_llm import LightRAGLLMClient
+
+        mock_prepare.return_value = ("test-ws", AsyncMock())
+        mock_llm = AsyncMock(spec=LightRAGLLMClient)
+        mock_llm.complete.return_value = "Global patterns found."
+        mock_llm_factory.return_value = mock_llm
         from loomgraph.cli._search import _async_query
 
         await _async_query("patterns?", "global", "test-ws")
 
-        mock_client.query.assert_called_once_with(query="patterns?", mode="global")
+        mock_llm.complete.assert_awaited_once_with("patterns?")
+        assert mock_llm.mode == "global"
 
 
 class TestGraphCommand:
@@ -1250,7 +1276,7 @@ class TestAsyncGraphQuery:
             {"entity_name": "handler", "entity_type": "function", "source_id": "src/handler.py"},
         ]
 
-    @patch("loomgraph.cli._search.prepare_workspace_client")
+    @patch("loomgraph.cli._search.prepare_workspace_store")
     async def test_both_directions(
         self, mock_prepare: MagicMock,
         mock_relations: list, mock_entities_for_graph: list,
@@ -1270,7 +1296,7 @@ class TestAsyncGraphQuery:
         for caller in result["callers"]:
             assert "source_id" in caller
 
-    @patch("loomgraph.cli._search.prepare_workspace_client")
+    @patch("loomgraph.cli._search.prepare_workspace_store")
     async def test_relation_type_filter(
         self, mock_prepare: MagicMock,
         mock_relations: list, mock_entities_for_graph: list,
@@ -1288,7 +1314,7 @@ class TestAsyncGraphQuery:
         assert result["callees"][0]["entity"] == "BaseService"
         assert result["callees"][0]["source_id"] == "src/base.py"
 
-    @patch("loomgraph.cli._search.prepare_workspace_client")
+    @patch("loomgraph.cli._search.prepare_workspace_store")
     async def test_no_matches(self, mock_prepare: MagicMock) -> None:
         mock_client = AsyncMock()
         mock_client.get_all_relations.return_value = [
@@ -1304,7 +1330,7 @@ class TestAsyncGraphQuery:
         assert result["callees"] == []
         assert result["source_id"] == ""
 
-    @patch("loomgraph.cli._search.prepare_workspace_client")
+    @patch("loomgraph.cli._search.prepare_workspace_store")
     async def test_callers_sorted(
         self, mock_prepare: MagicMock,
         mock_relations: list, mock_entities_for_graph: list,
@@ -1333,7 +1359,7 @@ class TestAsyncFind:
             {"entity_name": "db_connect", "entity_type": "function", "source_id": "db.py:1-20", "description": "Database connection"},
         ]
 
-    @patch("loomgraph.cli._search.prepare_workspace_client")
+    @patch("loomgraph.cli._search.prepare_workspace_store")
     async def test_exact_match(
         self, mock_prepare: MagicMock, mock_entities: list
     ) -> None:
@@ -1348,7 +1374,7 @@ class TestAsyncFind:
         assert result["matches"][0]["entity"] == "AuthService"
         assert result["matches"][0]["score"] == 1.0
 
-    @patch("loomgraph.cli._search.prepare_workspace_client")
+    @patch("loomgraph.cli._search.prepare_workspace_store")
     async def test_substring_match(
         self, mock_prepare: MagicMock, mock_entities: list
     ) -> None:
@@ -1364,7 +1390,7 @@ class TestAsyncFind:
         assert "AuthService" in names
         assert "authenticate" in names
 
-    @patch("loomgraph.cli._search.prepare_workspace_client")
+    @patch("loomgraph.cli._search.prepare_workspace_store")
     async def test_type_filter(
         self, mock_prepare: MagicMock, mock_entities: list
     ) -> None:
@@ -1378,7 +1404,7 @@ class TestAsyncFind:
         for m in result["matches"]:
             assert m["type"] == "class"
 
-    @patch("loomgraph.cli._search.prepare_workspace_client")
+    @patch("loomgraph.cli._search.prepare_workspace_store")
     async def test_limit(
         self, mock_prepare: MagicMock, mock_entities: list
     ) -> None:
@@ -1391,7 +1417,7 @@ class TestAsyncFind:
 
         assert result["matches_count"] <= 2
 
-    @patch("loomgraph.cli._search.prepare_workspace_client")
+    @patch("loomgraph.cli._search.prepare_workspace_store")
     async def test_no_match(
         self, mock_prepare: MagicMock, mock_entities: list
     ) -> None:
@@ -1404,7 +1430,7 @@ class TestAsyncFind:
 
         assert result["matches_count"] == 0
 
-    @patch("loomgraph.cli._search.prepare_workspace_client")
+    @patch("loomgraph.cli._search.prepare_workspace_store")
     async def test_scores_descending(
         self, mock_prepare: MagicMock, mock_entities: list
     ) -> None:
@@ -1442,7 +1468,7 @@ class TestFindWithRelations:
             {"src_id": "UserRepository", "tgt_id": "db_connect", "keywords": "CALLS"},
         ]
 
-    @patch("loomgraph.cli._search.prepare_workspace_client")
+    @patch("loomgraph.cli._search.prepare_workspace_store")
     async def test_with_relations_basic(
         self, mock_prepare: MagicMock,
         mock_entities: list, mock_relations: list,
@@ -1468,7 +1494,7 @@ class TestFindWithRelations:
         assert "JwtProvider" in callee_names
         assert "BaseService" in callee_names
 
-    @patch("loomgraph.cli._search.prepare_workspace_client")
+    @patch("loomgraph.cli._search.prepare_workspace_store")
     async def test_with_relations_depth2(
         self, mock_prepare: MagicMock,
         mock_entities: list, mock_relations: list,
@@ -1488,7 +1514,7 @@ class TestFindWithRelations:
         assert "UserRepository" in callee_names
         assert "db_connect" in callee_names  # 2-hop reachable
 
-    @patch("loomgraph.cli._search.prepare_workspace_client")
+    @patch("loomgraph.cli._search.prepare_workspace_store")
     async def test_without_relations_no_callers(
         self, mock_prepare: MagicMock,
         mock_entities: list, mock_relations: list,

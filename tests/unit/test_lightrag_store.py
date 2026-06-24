@@ -101,7 +101,11 @@ class TestBulkInsertForwarding:
             [{"entity_name": "A"}], [{"src_id": "A", "tgt_id": "B"}]
         )
         mock_client.insert_custom_kg.assert_awaited_once_with(
-            [{"entity_name": "A"}], [{"src_id": "A", "tgt_id": "B"}], None
+            [{"entity_name": "A"}],
+            [{"src_id": "A", "tgt_id": "B"}],
+            None,
+            batch_size=5000,
+            progress_callback=None,
         )
 
     async def test_with_chunks(
@@ -116,6 +120,19 @@ class TestBulkInsertForwarding:
             [{"entity_name": "A"}],
             [],
             [{"content": "...", "source_id": "f.py"}],
+            batch_size=5000,
+            progress_callback=None,
+        )
+
+    async def test_forwards_batch_and_callback(
+        self, store: GraphStore, mock_client: AsyncMock
+    ) -> None:
+        callback = lambda b, t, e: None  # noqa: E731
+        await store.insert_custom_kg(
+            [], [], None, batch_size=100, progress_callback=callback
+        )
+        mock_client.insert_custom_kg.assert_awaited_once_with(
+            [], [], None, batch_size=100, progress_callback=callback
         )
 
     async def test_returns_none(self, store: GraphStore) -> None:

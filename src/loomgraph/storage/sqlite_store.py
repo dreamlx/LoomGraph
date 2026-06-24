@@ -264,10 +264,18 @@ class SqliteGraphStore(GraphStore):
         entities: list[dict[str, Any]],
         relationships: list[dict[str, Any]],
         chunks: list[dict[str, Any]] | None = None,
+        *,
+        batch_size: int = 5000,
+        progress_callback: Any | None = None,
     ) -> None:
         # chunks are accepted for contract symmetry; persistence of code
         # snippet text comes in Phase 2 with the vec0 virtual table.
-        del chunks
+        # batch_size / progress_callback are honored on the LightRAG path
+        # for HTTP timeout protection; SQLite is in-process so a single
+        # transaction is fine. Progress is reported once (one logical batch).
+        del chunks, batch_size
+        if progress_callback is not None:
+            progress_callback(1, 1, len(entities))
 
         entity_rows: list[
             tuple[str, str | None, str | None, str | None, str]
