@@ -1,9 +1,16 @@
 # ADR-011: AI Iteration Strategy - External vs Internal
 
-**Status**: Accepted
+**Status**: ⚠️ Superseded by [ADR-013](ADR-013-sqlite-vec-replace-lightrag.md) (2026-06-25)
 **Date**: 2026-02-24
 **Deciders**: Core Team
 **Related**: ADR-010 (Search Architecture), EPIC-008 (Search Refactoring)
+
+> **v0.10.0 update**: This ADR assumed `loomgraph query` would be the
+> central AI iteration surface. v0.10.0 removed `query` because
+> Claude Code / Codex / Cursor now handle natural-language code Q&A
+> better than a LightRAG-backed RAG. The iteration strategy is now:
+> external agents drive iteration; LoomGraph supplies deterministic
+> structural primitives (`find` / `graph` / `topology`). See ADR-013.
 
 ## Context
 

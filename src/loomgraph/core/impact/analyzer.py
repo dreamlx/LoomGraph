@@ -192,38 +192,46 @@ class ImpactAnalyzer:
         return direct_callers, indirect_callers
 
     async def _query_callers(self, symbol_name: str, depth: int = 1) -> list[dict]:
-        """Query LightRAG for callers of a symbol.
+        """Find callers of a symbol via deterministic graph traversal.
 
-        Args:
-            symbol_name: Name of the symbol
-            depth: Query depth
-
-        Returns:
-            List of caller dicts
+        codeindex extracts CALLS edges at parse time; the knowledge graph
+        already holds the ground truth, so we simply filter relations by
+        keyword=CALLS and tgt_id=symbol. This replaces the Phase 1 LLM-driven
+        path (asking the model "what calls X?") which was both slower and
+        approximate. `llm_client` is no longer required by impact analysis
+        and is kept on the dataclass only for backward compatibility until
+        Phase 5 (#36).
         """
         try:
-            # Use LLM to find callers — Phase 1 supports llm_client (preferred)
-            # or legacy lightrag_client.query (fallback). Phase 4 makes
-            # llm_client mandatory.
-            query = f"What functions or methods call {symbol_name}?"
-            if self.llm_client is not None:
-                response = await self.llm_client.complete(query)
-            elif hasattr(self.lightrag_client, "query"):
-                result = await self.lightrag_client.query(
-                    query=query, mode="local"
-                )
-                response = (
-                    result.get("response", "")
-                    if isinstance(result, dict)
-                    else str(result)
-                )
-            else:
-                return []
-            return self._parse_caller_response(response)
-
+            relations = await self.lightrag_client.get_all_relations()
         except Exception:
-            # If query fails, return empty list
             return []
+
+        callers: list[dict] = []
+        for r in relations:
+            keywords = r.get("keywords", "")
+            tgt = r.get("tgt_id", "") or r.get("target", "")
+            src = r.get("src_id", "") or r.get("source", "")
+            if tgt == symbol_name and keywords == "CALLS" and src:
+                source_id = r.get("source_id", "") or ""
+                file_path, line = self._split_source_id(source_id)
+                callers.append(
+                    {"name": src, "file": file_path, "line": line}
+                )
+        return callers
+
+    @staticmethod
+    def _split_source_id(source_id: str) -> tuple[str, int]:
+        """Best-effort `file:line` parse; returns (file, 0) if no line suffix."""
+        if not source_id:
+            return "", 0
+        if ":" in source_id:
+            file_part, _, line_part = source_id.rpartition(":")
+            try:
+                return file_part, int(line_part.split("-")[0])
+            except ValueError:
+                return source_id, 0
+        return source_id, 0
 
     def _parse_caller_response(self, response: str) -> list[dict]:
         """Parse LightRAG response to extract caller information.

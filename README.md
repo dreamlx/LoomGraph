@@ -204,9 +204,6 @@ loomgraph index .
 # 结构化搜索
 loomgraph find "UserService"
 
-# 语义问答
-loomgraph query "用户认证流程是怎么工作的？"
-
 # 调用关系
 loomgraph graph "UserService.login"
 
@@ -217,6 +214,8 @@ loomgraph debt --with-git
 loomgraph trends --entity "src/auth/user.py" --metric complexity
 ```
 
+> **v0.10.0 起 `loomgraph query` 已移除**。自然语言代码问答交给通用 agent（Claude Code / Codex / Cursor），LoomGraph 聚焦结构精确的 `find` / `graph` / `topology` 能力。
+
 **配置用户项目**（在项目的 `CLAUDE.md` 中添加）：
 
 ```markdown
@@ -225,7 +224,6 @@ loomgraph trends --entity "src/auth/user.py" --metric complexity
 本项目已用 LoomGraph 索引，可使用以下命令：
 
 - `loomgraph find "<名称>"` - 结构化实体搜索
-- `loomgraph query "<问题>"` - 语义知识问答
 - `loomgraph graph "<实体>"` - 查询调用关系
 - `loomgraph debt --with-git` - 技术债务分析
 - `loomgraph trends --entity X` - 趋势预测
@@ -237,13 +235,14 @@ loomgraph trends --entity "src/auth/user.py" --metric complexity
 
 ## 💡 核心功能
 
-### 1. 三命令搜索体系
+### 1. 结构化搜索体系
 
 | 命令 | 适用场景 | 示例 | 性能 |
 |------|---------|------|------|
 | **find** | 精确定位实体（类/函数/方法） | `find "UserService"` | <2s |
-| **query** | 语义理解（RAG） | `query "认证流程怎么工作"` | <3s |
 | **graph** | 调用关系遍历 | `graph "login" --depth 2` | <2s |
+
+> 自然语言问答交给通用 agent（Claude Code 等），v0.10.0 起 `query` 命令移除。
 
 ### 2. 技术债务预警
 
@@ -276,7 +275,6 @@ loomgraph trends --entity "src/auth/user.py" --metric complexity
 | `loomgraph index <path>` | 索引代码库（首次/全量） | ~5-10s/1000 文件 |
 | `loomgraph update` | 增量更新（基于 git 变更） | <3s/10 文件 |
 | `loomgraph find <query>` | 结构化实体搜索 | <2s |
-| `loomgraph query <question>` | 语义知识问答（RAG） | <3s |
 | `loomgraph graph <entity>` | 查询调用关系 | <2s |
 | `loomgraph git-metrics` | Git 历史度量分析 | <3s/200 文件 |
 | `loomgraph debt` | 技术债务分析 | <5s |

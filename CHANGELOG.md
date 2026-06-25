@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — EPIC-011 SQLite + sqlite-vec backend (Phase 1-4)
+- `GraphStore` ABC + `LightRAGGraphStore` adapter + `SqliteGraphStore` with vec0 KNN (Phase 1-2)
+- `storage.factory.create_graph_store(workspace)` per `settings.storage.backend`
+- `LLMClient` ABC + `DirectLLMClient` (OpenAI-compatible chat completions) supporting GLM / OpenRouter / vLLM (Phase 4)
+- `storage.backend` config (`lightrag` | `sqlite`, default `lightrag` through Phase 4)
+- `llm.provider` config (`lightrag` | `glm` | `openrouter` | `vllm`)
+- `scripts/bench_backends.py` cross-backend latency benchmarks
+- `scripts/diff_backends.py` cross-backend analytics consistency diff
+- ADR-013: SQLite + sqlite-vec replace LightRAG (supersedes ADR-001, ADR-002; partial ADR-010, ADR-011)
+
+### Changed
+- `ImpactAnalyzer._query_callers` now uses deterministic graph traversal (CALLS edges) instead of LLM inference — faster and exact
+
+### Removed (Breaking) — v0.10.0
+- **`loomgraph query` command removed**. Natural-language code Q&A is now handled by general-purpose agents (Claude Code / Codex / Cursor). LoomGraph focuses on deterministic `find` / `graph` / `topology`.
+- `core/__init__` no longer re-exports `LightRAGClient` / `LightRAGAPIError` (use `loomgraph.storage` factory instead)
+
 ## [0.9.3] - 2026-03-22
 
 ### Fixed
