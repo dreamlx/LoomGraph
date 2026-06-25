@@ -261,9 +261,11 @@ loomgraph find <query> [options]
 
 ---
 
-### 4.5. `loomgraph query` - 语义知识问答
+### 4.5. `loomgraph query` - 语义知识问答 (v0.10.0 已移除)
 
-**用途**: 用自然语言提问，RAG 引擎从知识图谱生成回答
+> **已移除（v0.10.0, EPIC-011 Phase 4）**: 自然语言代码问答让位给 Claude Code / Codex / Cursor 等通用 agent，LoomGraph 聚焦结构精确的 `find` / `graph` / `topology`。本节保留作为历史参考。详见 [ADR-013](../adr/ADR-013-sqlite-vec-replace-lightrag.md)。
+
+**用途**（历史）: 用自然语言提问，RAG 引擎从知识图谱生成回答
 
 ```bash
 loomgraph query <question> [options]

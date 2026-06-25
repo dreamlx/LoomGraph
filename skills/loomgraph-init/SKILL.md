@@ -17,7 +17,6 @@ disable-model-invocation: true
 
 - `loomgraph find "<实体名>"` - 结构化实体发现（类、函数、模块）
 - `loomgraph find "<实体名>" --with-relations` - 实体 + 调用关系一次返回
-- `loomgraph query "<问题>"` - 语义知识问答（如"认证流程怎么工作的？"）
 - `loomgraph graph "<实体名>"` - 精确关系遍历（callers/callees）
 - `loomgraph deps` - 模块依赖分析
 - `loomgraph overview` - 项目模块概览

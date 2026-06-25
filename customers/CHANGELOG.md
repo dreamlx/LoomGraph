@@ -4,6 +4,39 @@
 
 ---
 
+## [Unreleased] — v0.10.0（即将发布，**Breaking Change**）
+
+### ⚠️ 重大变更
+
+**LightRAG 后端将被替换为本地 SQLite + sqlite-vec**（EPIC-011 / ADR-013）。
+
+#### 客户影响
+- v0.10.0 起 LightRAG 后端不再官方支持（Phase 5 完成后），客户需 `loomgraph index --clear .` 重建知识图谱（Cold Rebuild）。
+- 部署门槛降低：不再需要 LightRAG API service，单文件 `~/.loomgraph/<workspace>.db` 替代。
+- 已部署客户可 pin `loomgraph==0.9.x` 暂缓升级；v0.9.x 不再接受 backport。
+
+#### `loomgraph query` 已移除
+自然语言代码问答让位给通用 agent（Claude Code / Codex / Cursor）。LoomGraph 现聚焦：
+- `loomgraph find "<名称>"` — 结构化实体搜索
+- `loomgraph graph "<实体>"` — 调用关系遍历
+- `loomgraph topology` / `debt` / `impact` — 图谱分析
+
+### 新增（Phase 1-4 已完成）
+- SQLite + sqlite-vec 后端（可显式 `storage.backend=sqlite` 切换；Phase 5 翻为 default）
+- 多 LLM provider 支持（GLM-4.7 / OpenRouter / vLLM）通过 `llm.provider` 配置
+- vec0 向量 KNN 搜索（768 维 Jina Code V2 embedding）
+- 跨后端 diff / benchmark 脚本
+
+### 升级路径预告
+v0.10.0 完整发布时（Phase 5），客户操作：
+```bash
+pipx install --upgrade ai-codeindex loomgraph
+loomgraph index --clear .   # Cold rebuild
+loomgraph find "<某类名>"   # 验证
+```
+
+---
+
 ## [0.9.3] - 2026-03-22
 
 ### 🚀 大代码库索引优化

@@ -10,7 +10,6 @@ import click
 
 from loomgraph.cli._common import (
     ErrorCode,
-    create_llm_client_for_workspace,
     output_error,
     output_success,
     prepare_workspace_store,
@@ -215,76 +214,6 @@ def _bfs_collect(
             break
 
     return result
-
-
-@main.command()
-@click.argument("question")
-@click.option(
-    "--mode",
-    type=click.Choice(["hybrid", "local", "global", "naive"]),
-    default="hybrid",
-    help="Query mode: hybrid (default), local, global, or naive",
-)
-@click.option("--workspace", "-w", default=None, help="Workspace name (default: current directory name)")
-def query(question: str, mode: str, workspace: str | None) -> None:
-    """Ask a natural language question about the codebase.
-
-    QUESTION: A natural language question (e.g. "How does authentication work?").
-    Uses LightRAG's RAG engine to generate answers from the knowledge graph.
-
-    Modes: hybrid (graph+vector+LLM), local (entity-centric), global (topic extraction), naive (vector only).
-    """
-    try:
-        result = asyncio.run(_async_query(question, mode, workspace))
-        output_success(result)
-    except Exception as e:
-        error_msg = str(e)
-        if "Connection" in error_msg or "connect" in error_msg.lower():
-            suggestion = "LLM service may be unavailable. Check H200 status, or use 'loomgraph find' for structural search."
-        elif "timeout" in error_msg.lower() or "timed out" in error_msg.lower():
-            suggestion = "Query timed out. Try a simpler question, or use --mode naive for faster results."
-        else:
-            suggestion = "Check LightRAG status with: loomgraph status. Use 'loomgraph find' as fallback."
-        output_error(
-            code=ErrorCode.LIGHTRAG_ERROR,
-            message=f"Query failed: {e}",
-            suggestion=suggestion,
-        )
-
-
-async def _async_query(
-    question: str,
-    mode: str = "hybrid",
-    workspace: str | None = None,
-) -> dict[str, Any]:
-    """Run semantic query via LightRAG RAG engine."""
-    ws, store = await prepare_workspace_store(workspace)
-
-    # `loomgraph query` uses the LLM-backed completion path (Phase 1: still
-    # LightRAG-backed; Phase 4 swaps to a direct LLM provider). The mode kwarg
-    # only applies on the LightRAG backend; for now we set the adapter mode
-    # via a fresh LLMClient bound to the resolved workspace.
-    from loomgraph.llm.lightrag_llm import LightRAGLLMClient
-
-    llm = create_llm_client_for_workspace(ws)
-    if isinstance(llm, LightRAGLLMClient):
-        llm.mode = mode
-    response_text = await llm.complete(question)
-
-    if not response_text or response_text.strip() == "":
-        return {
-            "query": question,
-            "mode": mode,
-            "response": "No relevant information found in the knowledge graph for this question.",
-            "workspace": ws,
-        }
-
-    return {
-        "query": question,
-        "mode": mode,
-        "response": response_text,
-        "workspace": ws,
-    }
 
 
 @main.command()
