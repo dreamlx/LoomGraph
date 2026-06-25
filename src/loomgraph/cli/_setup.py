@@ -85,7 +85,7 @@ def status() -> None:
         "config": {
             "storage_backend": settings.storage.backend,
             "db_path_template": settings.storage.db_path,
-            "embedding_url": settings.embedding.base_url,
+            "embedding_url": settings.embedding.api_url,
             "llm_provider": settings.llm.provider,
         },
         "dependencies": dependencies,

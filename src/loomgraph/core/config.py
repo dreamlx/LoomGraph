@@ -43,15 +43,32 @@ class IndexingConfig(BaseSettings):
 
 
 class EmbeddingConfig(BaseSettings):
-    """Jina Code V2 embedding configuration."""
+    """Embedding provider configuration (EPIC-012 / Phase 6).
 
-    provider: Literal["jina", "openai", "local"] = "jina"
-    model: str = "jinaai/jina-embeddings-v2-base-code"
-    # Default: H200 TEI Jina Code V2 service
-    base_url: str = "http://117.131.45.179:3002"
+    Default off — pipx install gives you a usable LoomGraph without any
+    external embedding service. Turn on by setting `enabled: true` and
+    pointing `api_url` at any OpenAI-compatible `/v1/embeddings` endpoint.
+
+    Built-in provider conventions (just defaults for api_url + model):
+    - `ollama`  — local Ollama on `http://localhost:11434/v1`, `nomic-embed-text`
+    - `openai`  — `https://api.openai.com/v1`, `text-embedding-3-small`
+    - `voyage`  — `https://api.voyageai.com/v1`, `voyage-code-2`
+    - `glm`     — H200 `:3000`, `embedding-3`
+    - `custom`  — caller fills api_url / model
+
+    Vector dimension must match the model. If you change it after indexing,
+    SqliteGraphStore will refuse to open the existing `.db` and instruct
+    you to `loomgraph index --clear`.
+    """
+
+    enabled: bool = False
+    provider: Literal["ollama", "openai", "voyage", "glm", "custom"] = "ollama"
+    api_url: str = "http://localhost:11434/v1"
+    api_key: str = ""
+    model: str = "nomic-embed-text"
+    dimension: int = 768
     batch_size: int = 32
     max_length: int = 8192
-    dimension: int = 768
     timeout: float = 30.0
 
 

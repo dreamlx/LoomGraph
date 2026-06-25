@@ -33,8 +33,33 @@ from loomgraph.storage.base import GraphStore
 
 _T = TypeVar("_T")
 
-# Embedding column dimension for vec0 virtual tables. Matches Jina Code V2.
-VECTOR_DIM = 768
+# Legacy default embedding dimension. Phase 6 makes this configurable via
+# `SqliteGraphStore(dimension=...)`; kept as a default for callers that
+# don't pass one explicitly (matches Jina Code V2 and nomic-embed-text).
+DEFAULT_VECTOR_DIM = 768
+VECTOR_DIM = DEFAULT_VECTOR_DIM  # backward-compat alias
+
+
+class SqliteDimensionMismatchError(RuntimeError):
+    """Raised when an existing .db's vec0 dimension differs from the config."""
+
+    def __init__(self, expected: int, found: int, db_path: str) -> None:
+        super().__init__(
+            f"vec0 dimension mismatch in {db_path}: expected {expected}, "
+            f"found {found}. Run `loomgraph index --clear .` to rebuild "
+            f"with the new dimension."
+        )
+        self.expected = expected
+        self.found = found
+        self.db_path = db_path
+
+
+def _extract_vec_dim(create_sql: str) -> int | None:
+    """Pull the vec0 column dimension out of a vec0 CREATE VIRTUAL TABLE SQL."""
+    import re
+
+    m = re.search(r"embedding\s+float\[(\d+)\]", create_sql, re.IGNORECASE)
+    return int(m.group(1)) if m else None
 
 # Promoted columns are the high-traffic query fields. Everything else is
 # round-tripped in properties_json so callers can stash arbitrary attrs
@@ -56,7 +81,8 @@ _RELATION_PROMOTED = {
     "source_id",
 }
 
-SCHEMA_SQL = f"""
+def _schema_sql(dim: int) -> str:
+    return f"""
 CREATE TABLE IF NOT EXISTS entities (
     entity_name     TEXT PRIMARY KEY,
     entity_type     TEXT,
@@ -92,13 +118,13 @@ INSERT OR IGNORE INTO meta(key, value) VALUES('schema_version', '2');
 -- source_id are duplicated so DELETE-by-name and DELETE-by-source can
 -- run without joining out to the entities table.
 CREATE VIRTUAL TABLE IF NOT EXISTS vec_node_descriptions USING vec0(
-    embedding float[{VECTOR_DIM}],
+    embedding float[{dim}],
     +entity_name TEXT,
     +source_id TEXT
 );
 
 CREATE VIRTUAL TABLE IF NOT EXISTS vec_code_snippets USING vec0(
-    embedding float[{VECTOR_DIM}],
+    embedding float[{dim}],
     +chunk_id TEXT,
     +source_id TEXT
 );
@@ -118,23 +144,49 @@ class SqliteGraphStore(GraphStore):
         db_path: str | Path = ":memory:",
         *,
         workspace_root: Path | None = None,
+        dimension: int = DEFAULT_VECTOR_DIM,
     ) -> None:
         self._db_path = str(db_path)
         self._workspace_root = workspace_root
+        self._dimension = dimension
         self._conn: sqlite3.Connection | None = None
         self._lock = asyncio.Lock()
+
+    @property
+    def dimension(self) -> int:
+        return self._dimension
 
     # ----- Lifecycle -----
 
     async def initialize(self) -> None:
+        dim = self._dimension
+        db_path = self._db_path
+
         def _open() -> sqlite3.Connection:
-            conn = sqlite3.connect(self._db_path, check_same_thread=False)
+            conn = sqlite3.connect(db_path, check_same_thread=False)
             conn.row_factory = sqlite3.Row
             conn.enable_load_extension(True)
             sqlite_vec.load(conn)
             conn.enable_load_extension(False)
             conn.execute("PRAGMA foreign_keys = ON")
-            conn.executescript(SCHEMA_SQL)
+
+            # Detect existing vec0 dim before creating — vec0 silently keeps
+            # the original column type, so CREATE-IF-NOT-EXISTS would mask
+            # a mismatch and corrupt KNN. Bail before any write.
+            existing = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' "
+                "AND name='vec_node_descriptions'"
+            ).fetchone()
+            if existing is not None:
+                row = conn.execute(
+                    "SELECT sql FROM sqlite_master WHERE name='vec_node_descriptions'"
+                ).fetchone()
+                found_dim = _extract_vec_dim(row["sql"]) if row else None
+                if found_dim is not None and found_dim != dim:
+                    conn.close()
+                    raise SqliteDimensionMismatchError(dim, found_dim, db_path)
+
+            conn.executescript(_schema_sql(dim))
             conn.commit()
             return conn
 
@@ -210,14 +262,13 @@ class SqliteGraphStore(GraphStore):
 
     # ----- Embedding helpers -----
 
-    @staticmethod
-    def _valid_embedding(value: Any) -> list[float] | None:
+    def _valid_embedding(self, value: Any) -> list[float] | None:
         """Return the embedding as a list of floats, or None if invalid."""
         if value is None:
             return None
         if not isinstance(value, (list, tuple)):
             return None
-        if len(value) != VECTOR_DIM:
+        if len(value) != self._dimension:
             return None
         try:
             return [float(x) for x in value]
@@ -566,7 +617,7 @@ class SqliteGraphStore(GraphStore):
         emb = self._valid_embedding(embedding)
         if emb is None:
             raise ValueError(
-                f"embedding must be a list of {VECTOR_DIM} floats"
+                f"embedding must be a list of {self._dimension} floats"
             )
         serialized = sqlite_vec.serialize_float32(emb)
         # sqlite-vec rejects WHERE constraints on vec0 aux columns inside

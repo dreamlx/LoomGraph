@@ -162,14 +162,21 @@ def create_llm_client_for_workspace(workspace: str | None = None) -> Any:
 
 
 async def maybe_embed_entities(entities: list[dict[str, Any]]) -> int:
-    """Attach Jina Code V2 embeddings to entity dicts in place.
+    """Attach OpenAI-compatible embeddings to entity dicts in place.
 
-    Skipped on entities lacking a description or already carrying an
-    `embedding` field. Embedding failure (service down, timeout, ...)
-    logs a warning and returns 0 — entity rows still write, the vector
-    column just stays empty. Returns count of embeddings attached.
+    Gated on `settings.embedding.enabled` (default False) — pipx install
+    yields a fully usable LoomGraph with no embedding service running.
+    When enabled, embedding failure logs a warning and returns 0 —
+    entity rows still write, the vec0 column just stays empty.
+    Returns count of embeddings attached.
     """
     import logging
+
+    from loomgraph.core.config import get_settings
+
+    settings = get_settings()
+    if not settings.embedding.enabled:
+        return 0
 
     targets: list[tuple[int, dict[str, Any]]] = [
         (i, e)
@@ -182,9 +189,9 @@ async def maybe_embed_entities(entities: list[dict[str, Any]]) -> int:
     texts = [e["description"] for _, e in targets]
 
     try:
-        from loomgraph.embedding.jina import JinaEmbeddingClient
+        from loomgraph.storage.factory import create_embedding_client
 
-        async with JinaEmbeddingClient() as client:
+        async with create_embedding_client() as client:
             result = await client.embed(texts)
     except Exception as ex:
         logging.getLogger(__name__).warning(
