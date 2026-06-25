@@ -8,5 +8,12 @@ RAG pipeline. Phase 1 ships the ABC + LightRAG adapter; Phase 4 adds
 from __future__ import annotations
 
 from loomgraph.llm.base import LLMClient
+from loomgraph.llm.direct import DirectLLMClient, LLMAPIError
+from loomgraph.llm.lightrag_llm import LightRAGLLMClient
 
-__all__ = ["LLMClient"]
+__all__ = [
+    "LLMClient",
+    "LightRAGLLMClient",
+    "DirectLLMClient",
+    "LLMAPIError",
+]
