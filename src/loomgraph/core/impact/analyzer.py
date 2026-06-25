@@ -1,4 +1,4 @@
-"""Impact analyzer using LightRAG knowledge graph."""
+"""Impact analyzer using the knowledge graph (deterministic CALLS traversal)."""
 
 from __future__ import annotations
 
@@ -23,18 +23,14 @@ class ImpactAnalyzer:
     to determine what parts of the codebase are affected by changes.
 
     Args:
-        lightrag_client: GraphStore (or legacy LightRAGClient). Field name
-            kept for backward compatibility; type accepts both.
-        llm_client: Optional LLMClient for caller inference. When None and
-            lightrag_client lacks `.query`, caller queries return empty.
+        store: GraphStore providing CALLS edges (deterministic traversal).
         repo_path: Repository root for git operations.
         max_depth: Maximum caller traversal depth.
     """
 
-    lightrag_client: Any  # GraphStore
+    store: Any  # GraphStore
     repo_path: Path = Path(".")
     max_depth: int = 2
-    llm_client: Any | None = None  # LLMClient
 
     async def analyze_commit(self, commit: str = "HEAD") -> ImpactResult:
         """Analyze impact of a specific commit.
@@ -195,15 +191,11 @@ class ImpactAnalyzer:
         """Find callers of a symbol via deterministic graph traversal.
 
         codeindex extracts CALLS edges at parse time; the knowledge graph
-        already holds the ground truth, so we simply filter relations by
-        keyword=CALLS and tgt_id=symbol. This replaces the Phase 1 LLM-driven
-        path (asking the model "what calls X?") which was both slower and
-        approximate. `llm_client` is no longer required by impact analysis
-        and is kept on the dataclass only for backward compatibility until
-        Phase 5 (#36).
+        already holds the ground truth, so we filter relations by
+        keyword=CALLS and tgt_id=symbol. No LLM inference involved.
         """
         try:
-            relations = await self.lightrag_client.get_all_relations()
+            relations = await self.store.get_all_relations()
         except Exception:
             return []
 

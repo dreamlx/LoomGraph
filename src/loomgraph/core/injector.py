@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING, Any
 
 from loomgraph.storage.base import GraphStore
 
-from .lightrag_client import LightRAGAPIError
 from .mapper import (
     detect_language,
     map_call_to_relation,
@@ -199,7 +198,8 @@ async def inject_parse_result(
     # Module name for import relations (derive from file path)
     module_name = _path_to_module_name(result.path)
 
-    # 0. Create module entity first (needed for import relations)
+    # 0. Create module entity first (needed for import relations).
+    # SQLite upsert is idempotent so "already exists" is no longer a special case.
     try:
         module_data = {
             "entity_type": "module",
@@ -209,10 +209,6 @@ async def inject_parse_result(
         }
         await client.create_entity(module_name, module_data)
         logger.debug(f"Created module entity: {module_name}")
-    except LightRAGAPIError as e:
-        # Module might already exist, that's OK
-        if "already exists" not in str(e.message).lower():
-            logger.warning(f"Failed to create module entity {module_name}: {e.message}")
     except Exception as e:
         logger.warning(f"Failed to create module entity {module_name}: {e}")
 
@@ -221,15 +217,8 @@ async def inject_parse_result(
     for symbol in result.symbols:
         try:
             entity = map_symbol_to_entity(symbol, file_path, language)
-
             await client.create_entity(entity.entity_name, entity.entity_data)
             entity_count += 1
-            logger.debug(f"Injected entity: {entity.entity_name}")
-
-        except LightRAGAPIError as e:
-            error_msg = f"Failed to inject entity {symbol.name}: {e.message}"
-            logger.warning(error_msg)
-            errors.append(error_msg)
         except Exception as e:
             error_msg = f"Failed to inject entity {symbol.name}: {e}"
             logger.warning(error_msg)
@@ -242,12 +231,6 @@ async def inject_parse_result(
             rel = map_call_to_relation(call, file_path)
             await client.create_relation(rel.src_id, rel.tgt_id, rel.edge_data)
             relation_count += 1
-            logger.debug(f"Injected CALLS relation: {rel.src_id} -> {rel.tgt_id}")
-
-        except LightRAGAPIError as e:
-            error_msg = f"Failed to inject call {call.caller}->{call.callee}: {e.message}"
-            logger.warning(error_msg)
-            errors.append(error_msg)
         except Exception as e:
             error_msg = f"Failed to inject call {call.caller}->{call.callee}: {e}"
             logger.warning(error_msg)
@@ -259,12 +242,6 @@ async def inject_parse_result(
             rel = map_inheritance_to_relation(inh, file_path)
             await client.create_relation(rel.src_id, rel.tgt_id, rel.edge_data)
             relation_count += 1
-            logger.debug(f"Injected INHERITS relation: {rel.src_id} -> {rel.tgt_id}")
-
-        except LightRAGAPIError as e:
-            error_msg = f"Failed to inject inheritance {inh.child}->{inh.parent}: {e.message}"
-            logger.warning(error_msg)
-            errors.append(error_msg)
         except Exception as e:
             error_msg = f"Failed to inject inheritance {inh.child}->{inh.parent}: {e}"
             logger.warning(error_msg)
@@ -277,12 +254,6 @@ async def inject_parse_result(
             for rel in rels:
                 await client.create_relation(rel.src_id, rel.tgt_id, rel.edge_data)
                 relation_count += 1
-                logger.debug(f"Injected IMPORTS relation: {rel.src_id} -> {rel.tgt_id}")
-
-        except LightRAGAPIError as e:
-            error_msg = f"Failed to inject import {imp.module}: {e.message}"
-            logger.warning(error_msg)
-            errors.append(error_msg)
         except Exception as e:
             error_msg = f"Failed to inject import {imp.module}: {e}"
             logger.warning(error_msg)

@@ -4,7 +4,7 @@ Unit tests for DebtAnalyzer topology integration (Phase 3)
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -200,7 +200,7 @@ class TestTopologyIntegration:
     ):
         """Test god function matching whitelist is downgraded to P1 (v0.9.2)."""
         from loomgraph.core import topology
-        from loomgraph.core.topology import TopologyResult, CouplingMetrics
+        from loomgraph.core.topology import CouplingMetrics, TopologyResult
 
         # Mock topology result with Parser domain god function
         mock_result = TopologyResult(

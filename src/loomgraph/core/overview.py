@@ -37,10 +37,8 @@ class OverviewAnalyzer:
     """Generates a project module overview from the knowledge graph.
 
     Args:
-        client: GraphStore (or any object with get_all_entities/relations).
-            Name kept for backward compatibility; type accepts the new
-            GraphStore abstraction and the legacy LightRAGClient.
-        depth: Directory depth for module grouping
+        client: GraphStore providing get_all_entities / get_all_relations.
+        depth: Directory depth for module grouping.
         llm_client: Optional LLMClient for module summary generation.
             When None, summaries are skipped regardless of no_summary kwarg.
     """
@@ -126,7 +124,7 @@ class OverviewAnalyzer:
             modules_list.append(module_info)
 
         # Generate LLM summaries if requested
-        if not no_summary:
+        if not no_summary and self.llm_client is not None:
             for module_info in modules_list:
                 try:
                     prompt = (
@@ -136,14 +134,7 @@ class OverviewAnalyzer:
                         f"Files: {', '.join(module_info['files'][:5])}. "
                         f"One sentence summary."
                     )
-                    if self.llm_client is not None:
-                        module_info["summary"] = await self.llm_client.complete(prompt)
-                    elif hasattr(self.client, "query"):
-                        # Legacy path: LightRAGClient.query() returns {"response": ...}
-                        resp = await self.client.query(prompt, mode="local")
-                        module_info["summary"] = resp.get("response", "") if isinstance(resp, dict) else str(resp)
-                    else:
-                        module_info["summary"] = ""
+                    module_info["summary"] = await self.llm_client.complete(prompt)
                 except Exception:
                     logger.warning("Failed to generate summary for %s", module_info["name"])
                     module_info["summary"] = ""

@@ -44,9 +44,9 @@ def find(
         output_success(result)
     except Exception as e:
         output_error(
-            code=ErrorCode.LIGHTRAG_ERROR,
+            code=ErrorCode.STORAGE_ERROR,
             message=f"Find failed: {e}",
-            suggestion="Check LightRAG status with: loomgraph status",
+            suggestion="Check service status with: loomgraph status",
         )
 
 
@@ -66,9 +66,9 @@ def search(query: str, entity_type: str | None, workspace: str | None, limit: in
         output_success(result)
     except Exception as e:
         output_error(
-            code=ErrorCode.LIGHTRAG_ERROR,
+            code=ErrorCode.STORAGE_ERROR,
             message=f"Search failed: {e}",
-            suggestion="Check LightRAG status with: loomgraph status",
+            suggestion="Check service status with: loomgraph status",
         )
 
 
@@ -245,9 +245,9 @@ def graph(entity_name: str, direction: str, depth: int, relation_type: str, work
         output_success(result)
     except Exception as e:
         output_error(
-            code=ErrorCode.LIGHTRAG_ERROR,
+            code=ErrorCode.STORAGE_ERROR,
             message=f"Graph query failed: {e}",
-            suggestion="Check LightRAG status with: loomgraph status",
+            suggestion="Check service status with: loomgraph status",
         )
 
 

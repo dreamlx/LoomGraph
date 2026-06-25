@@ -47,7 +47,7 @@ from loomgraph.cli._common import (  # noqa: E402, F401
 from loomgraph.cli._deps_check import (  # noqa: E402, F401
     check_codeindex,
     check_embedding,
-    check_lightrag_api,
+    check_storage,
 )
 
 if __name__ == "__main__":

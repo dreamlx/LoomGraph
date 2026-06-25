@@ -11,7 +11,7 @@ from typing import Any
 
 import pytest
 
-from loomgraph.storage.lightrag_store import LightRAGGraphStore
+from loomgraph.storage.base import GraphStore
 from loomgraph.storage.sqlite_store import VECTOR_DIM, SqliteGraphStore
 
 # ---------- Helpers ----------
@@ -201,9 +201,52 @@ class TestCascadeDelete:
 
 
 class TestUnsupportedBackends:
-    async def test_lightrag_adapter_raises(self) -> None:
-        from unittest.mock import AsyncMock
+    async def test_abc_default_raises_not_implemented(self) -> None:
+        """Backends that don't implement vec0 should fall back to ABC default."""
 
-        store = LightRAGGraphStore(client=AsyncMock())
+        class NoVecStore(GraphStore):
+            async def create_entity(self, name, data):
+                return None
+
+            async def entity_exists(self, name):
+                return False
+
+            async def get_all_entities(self):
+                return []
+
+            async def create_relation(self, src, tgt, data):
+                return None
+
+            async def get_all_relations(self):
+                return []
+
+            async def insert_custom_kg(
+                self, entities, relationships, chunks=None,
+                *, batch_size=5000, progress_callback=None,
+            ):
+                return None
+
+            async def delete_all(self):
+                return None
+
+            async def delete_by_source(self, source_ids):
+                return None
+
+            async def get_source_ids(self, source_prefix=None):
+                return []
+
+            async def list_workspaces(self):
+                return []
+
+            async def get_orphan_entities(self, exclude_types=None, source_prefix=None):
+                return []
+
+            async def get_degree_distribution(self, direction="in", min_degree=5, source_prefix=None):
+                return []
+
+            async def get_graph_stats(self, source_prefix=None, module_depth=2):
+                return {}
+
+        store = NoVecStore()
         with pytest.raises(NotImplementedError):
             await store.search_similar(_vec_normalized(0), k=1)

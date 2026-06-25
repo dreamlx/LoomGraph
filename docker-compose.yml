@@ -1,28 +1,11 @@
 version: '3.8'
 
-services:
-  # PostgreSQL with pgvector (LightRAG storage backend)
-  postgres:
-    image: pgvector/pgvector:pg16
-    container_name: lightrag-postgres
-    environment:
-      POSTGRES_DB: loomgraph
-      POSTGRES_USER: loomgraph
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-loomgraph_dev}
-    ports:
-      - "5432:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U loomgraph -d loomgraph"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
+# LoomGraph v0.10.0: PostgreSQL was removed (LightRAG backend is gone).
+# Storage is now a single SQLite + sqlite-vec file at ~/.loomgraph/<workspace>.db.
+# Only the embedding service remains for local dev; production points
+# `embedding.base_url` at a Jina Code V2 endpoint (H200 or hosted).
 
-  # Jina Embedding Service (CPU mode for local dev)
-  # For H200 production, use GPU image with --gpus all
+services:
   embedding:
     image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.5
     container_name: loomgraph-embedding
@@ -33,12 +16,8 @@ services:
       - HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN:-}
     volumes:
       - embedding_cache:/data
-    profiles:
-      - full  # Only start with: docker compose --profile full up
     restart: unless-stopped
 
 volumes:
-  pgdata:
-    name: loomgraph_pgdata
   embedding_cache:
     name: loomgraph_embedding_cache
