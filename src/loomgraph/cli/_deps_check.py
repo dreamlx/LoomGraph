@@ -62,12 +62,12 @@ def check_embedding(settings: Any) -> dict[str, Any]:
 
         # trust_env=False to bypass system proxy (H200 is internal)
         with httpx.Client(timeout=5.0, trust_env=False) as client:
-            response = client.get(f"{settings.embedding.base_url}/health")
+            response = client.get(f"{settings.embedding.api_url}/health")
         if response.status_code == 200:
             return {
                 "connected": True,
                 "model": settings.embedding.model,
-                "url": settings.embedding.base_url,
+                "url": settings.embedding.api_url,
             }
         return {"connected": False, "error": f"HTTP {response.status_code}"}
     except ImportError:

@@ -4,6 +4,70 @@
 
 ---
 
+## [0.11.0] - 2026-06-25 — Embedding 默认本地 (Breaking)
+
+### ⚠️ 主要变化
+
+LoomGraph 现在**完全可本地跑**——pipx 装完不主动连接任何远端服务。
+embedding 服务从 H200 Jina 解耦,改用 OpenAI-compatible 协议,user
+自配 provider。
+
+#### 默认行为变化
+
+- `embedding.enabled: false` (默认) → 不调用任何 embedding API,vec0 列空
+- 想要语义向量搜索 → 设 `enabled: true` + 配 provider
+
+#### 配置示例 (`.loomgraph.yaml`)
+
+**最小化(完全本地,不需要任何服务):**
+```yaml
+storage:
+  backend: sqlite
+embedding:
+  enabled: false
+```
+
+**配本地 Ollama:**
+```bash
+# 先装 Ollama: https://ollama.com
+ollama pull nomic-embed-text
+```
+```yaml
+embedding:
+  enabled: true
+  provider: ollama
+  api_url: http://localhost:11434/v1
+  model: nomic-embed-text
+  dimension: 768
+```
+
+**配 OpenAI:**
+```yaml
+embedding:
+  enabled: true
+  provider: openai
+  api_url: https://api.openai.com/v1
+  api_key: sk-...
+  model: text-embedding-3-small
+  dimension: 1536
+```
+
+#### 升级步骤
+
+```bash
+pipx install --upgrade loomgraph
+# 旧的 .loomgraph.yaml 中 embedding.base_url 改为 api_url
+# 旧的 provider: jina 改为 provider: ollama (本地默认)
+loomgraph index --clear .   # 仅当切换了 dimension 才需要
+```
+
+#### Dimension 切换提示
+
+如果换了 embedding 模型导致维度变化 (e.g., 768 → 1536),启动时会报
+`SqliteDimensionMismatch`,按提示跑 `loomgraph index --clear .` 即可。
+
+---
+
 ## [0.10.0] - 2026-06-25 — **Breaking Change**
 
 ### ⚠️ 重大变更

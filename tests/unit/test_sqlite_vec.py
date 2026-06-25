@@ -12,7 +12,13 @@ from typing import Any
 import pytest
 
 from loomgraph.storage.base import GraphStore
-from loomgraph.storage.sqlite_store import VECTOR_DIM, SqliteGraphStore
+from loomgraph.storage.sqlite_store import (
+    DEFAULT_VECTOR_DIM as VECTOR_DIM,
+)
+from loomgraph.storage.sqlite_store import (
+    SqliteDimensionMismatchError,
+    SqliteGraphStore,
+)
 
 # ---------- Helpers ----------
 
@@ -198,6 +204,42 @@ class TestCascadeDelete:
 
 
 # ---------- Backend without vector support ----------
+
+
+class TestDimensionParametrization:
+    async def test_custom_dimension_stored_in_schema(
+        self, tmp_path: Any
+    ) -> None:
+        path = tmp_path / "custom.db"
+        s = SqliteGraphStore(db_path=path, dimension=1024)
+        await s.initialize()
+        try:
+            assert s.dimension == 1024
+            # Write a 1024-dim embedding and read it back via KNN
+            await s.create_entity(
+                "X",
+                {
+                    "source_id": "f.py",
+                    "embedding": [1.0] + [0.0] * 1023,
+                },
+            )
+            result = await s.search_similar([1.0] + [0.0] * 1023, k=1)
+            assert result and result[0]["entity_name"] == "X"
+        finally:
+            await s.close()
+
+    async def test_dimension_mismatch_raises(self, tmp_path: Any) -> None:
+        path = tmp_path / "mixed.db"
+        # First open with 768
+        a = SqliteGraphStore(db_path=path, dimension=768)
+        await a.initialize()
+        await a.close()
+        # Reopen with 1024 — should bail before any write
+        b = SqliteGraphStore(db_path=path, dimension=1024)
+        with pytest.raises(SqliteDimensionMismatchError) as exc:
+            await b.initialize()
+        assert exc.value.expected == 1024
+        assert exc.value.found == 768
 
 
 class TestUnsupportedBackends:
