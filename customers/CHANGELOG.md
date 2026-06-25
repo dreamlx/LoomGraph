@@ -4,7 +4,7 @@
 
 ---
 
-## [Unreleased] — v0.10.0（即将发布，**Breaking Change**）
+## [0.10.0] - 2026-06-25 — **Breaking Change**
 
 ### ⚠️ 重大变更
 

@@ -8,12 +8,10 @@ from __future__ import annotations
 
 from loomgraph.storage.base import GraphStore
 from loomgraph.storage.factory import create_graph_store, create_llm_client
-from loomgraph.storage.lightrag_store import LightRAGGraphStore
 from loomgraph.storage.sqlite_store import SqliteGraphStore
 
 __all__ = [
     "GraphStore",
-    "LightRAGGraphStore",
     "SqliteGraphStore",
     "create_graph_store",
     "create_llm_client",

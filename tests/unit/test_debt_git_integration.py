@@ -11,8 +11,8 @@ from loomgraph.core.models import BusFactor, FileMetrics, GitMetricsResult, Hots
 
 
 @pytest.fixture
-def mock_lightrag_client():
-    """Mock LightRAG client."""
+def mock_store():
+    """Mock GraphStore."""
     client = MagicMock()
     client.get_all_entities = AsyncMock(return_value=[])
     client.get_degree = AsyncMock(return_value=[])
@@ -113,9 +113,9 @@ class TestDebtAnalyzerGitIntegration:
     """Test DebtAnalyzer with git metrics integration."""
 
     @pytest.mark.asyncio
-    async def test_analyze_with_git_enabled(self, mock_lightrag_client, sample_git_metrics):
+    async def test_analyze_with_git_enabled(self, mock_store, sample_git_metrics):
         """Test analyze() with --with-git flag."""
-        analyzer = DebtAnalyzer(client=mock_lightrag_client)
+        analyzer = DebtAnalyzer(client=mock_store)
 
         with patch("loomgraph.core.git_metrics.GitMetricsAnalyzer") as mock_git_analyzer_class:
             # Mock GitMetricsAnalyzer.analyze() to return sample data
@@ -151,9 +151,9 @@ class TestDebtAnalyzerGitIntegration:
             assert result["overall_health"]["total_score"] == expected_total
 
     @pytest.mark.asyncio
-    async def test_analyze_without_git(self, mock_lightrag_client):
+    async def test_analyze_without_git(self, mock_store):
         """Test analyze() without --with-git (backward compatibility)."""
-        analyzer = DebtAnalyzer(client=mock_lightrag_client)
+        analyzer = DebtAnalyzer(client=mock_store)
 
         result = await analyzer.analyze(
             codeindex_data=None,
@@ -172,12 +172,12 @@ class TestDebtAnalyzerGitIntegration:
         assert result["overall_health"]["total_score"] == expected_total
 
     @pytest.mark.asyncio
-    async def test_detect_critical_hotspot(self, mock_lightrag_client, sample_git_metrics):
+    async def test_detect_critical_hotspot(self, mock_store, sample_git_metrics):
         """Test detection of critical_hotspot issue (P0)."""
-        analyzer = DebtAnalyzer(client=mock_lightrag_client)
+        analyzer = DebtAnalyzer(client=mock_store)
 
         # Mock topology to return high in_degree for hotspot file
-        mock_lightrag_client.get_degree.return_value = [
+        mock_store.get_degree.return_value = [
             {
                 "entity": "src/auth/user_service.py",
                 "in_degree": 120,  # High coupling
@@ -207,9 +207,9 @@ class TestDebtAnalyzerGitIntegration:
             assert "⚠️ Critical hotspot" in hotspot["suggestion"]
 
     @pytest.mark.asyncio
-    async def test_detect_knowledge_silo(self, mock_lightrag_client, sample_git_metrics):
+    async def test_detect_knowledge_silo(self, mock_store, sample_git_metrics):
         """Test detection of knowledge_silo issue (P1)."""
-        analyzer = DebtAnalyzer(client=mock_lightrag_client)
+        analyzer = DebtAnalyzer(client=mock_store)
 
         with patch("loomgraph.core.git_metrics.GitMetricsAnalyzer") as mock_git_analyzer_class:
             mock_git_instance = MagicMock()
@@ -232,9 +232,9 @@ class TestDebtAnalyzerGitIntegration:
             assert "bus factor = 1" in silo["suggestion"].lower()
 
     @pytest.mark.asyncio
-    async def test_enrich_orphan_with_confidence(self, mock_lightrag_client, sample_git_metrics):
+    async def test_enrich_orphan_with_confidence(self, mock_store, sample_git_metrics):
         """Test orphan_entity enrichment with confidence field."""
-        analyzer = DebtAnalyzer(client=mock_lightrag_client)
+        analyzer = DebtAnalyzer(client=mock_store)
 
         # Add an orphan issue first
         from loomgraph.core.debt_analyzer import DebtIssue
@@ -274,9 +274,9 @@ class TestDebtAnalyzerGitIntegration:
                 assert "1 year+ no changes" in orphan["suggestion"]
 
     @pytest.mark.asyncio
-    async def test_enrich_god_function_with_hotspot(self, mock_lightrag_client, sample_git_metrics):
+    async def test_enrich_god_function_with_hotspot(self, mock_store, sample_git_metrics):
         """Test god_function enrichment with is_hotspot marker."""
-        analyzer = DebtAnalyzer(client=mock_lightrag_client)
+        analyzer = DebtAnalyzer(client=mock_store)
 
         # Add a god_function issue first
         from loomgraph.core.debt_analyzer import DebtIssue
@@ -319,9 +319,9 @@ class TestDebtAnalyzerGitIntegration:
                 assert "50 changes" in god["suggestion"]
 
     @pytest.mark.asyncio
-    async def test_git_analysis_graceful_fallback(self, mock_lightrag_client):
+    async def test_git_analysis_graceful_fallback(self, mock_store):
         """Test graceful fallback when git analysis fails."""
-        analyzer = DebtAnalyzer(client=mock_lightrag_client)
+        analyzer = DebtAnalyzer(client=mock_store)
 
         with patch("loomgraph.core.git_metrics.GitMetricsAnalyzer") as mock_git_analyzer_class:
             # Mock GitMetricsAnalyzer to raise GitError

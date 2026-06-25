@@ -2,7 +2,7 @@
 LoomGraph: Enterprise Code Intelligence Engine
 
 A high-performance code understanding and retrieval system optimized for
-NVIDIA H200, combining LightRAG graph technology with Jina Code V2 embeddings.
+NVIDIA H200, SQLite + sqlite-vec knowledge graph with Jina Code V2 embeddings.
 
 Usage:
     from loomgraph import Settings, index_repository

@@ -88,12 +88,12 @@ def index(repo_path: str, clear: bool, workspace: str | None) -> None:
         return
 
     # Step 3: Run embed + inject asynchronously
-    click.echo("[3/3] Injecting into LightRAG...", err=True)
+    click.echo("[3/3] Injecting into knowledge graph...", err=True)
     try:
         result = asyncio.run(_async_index_pipeline(parse_results, clear, workspace, repo_path=repo))
     except Exception as e:
         output_error(
-            code=ErrorCode.LIGHTRAG_ERROR,
+            code=ErrorCode.STORAGE_ERROR,
             message=f"Pipeline error: {e}",
         )
         return
@@ -251,7 +251,7 @@ async def _async_index_pipeline(
     all_entities.extend(stubs)
     external_stubs = len(stubs)
 
-    # Step 2b: Attach embeddings for sqlite vec0 (no-op on lightrag backend)
+    # Step 2b: Attach embeddings for sqlite vec0
     from loomgraph.cli._common import maybe_embed_entities
 
     embedded_count = await maybe_embed_entities(all_entities)
@@ -364,7 +364,6 @@ def embed(input_json: str, output: str | None, batch_size: int) -> None:
 
 async def _async_embed(parse_results: dict[str, Any], batch_size: int) -> dict[str, Any]:
     """Run async embedding."""
-    from loomgraph.core.config import get_settings
     from loomgraph.embedding.jina import JinaEmbeddingClient
 
     settings = get_settings()
@@ -409,7 +408,7 @@ async def _async_embed(parse_results: dict[str, Any], batch_size: int) -> dict[s
 @click.argument("embeddings_json", type=click.Path(exists=True))
 @click.option("--clear/--no-clear", default=False, help="Clear old data first")
 def inject(parse_json: str, embeddings_json: str, clear: bool) -> None:
-    """Inject ParseResult + Embeddings into LightRAG.
+    """Inject ParseResult + Embeddings into knowledge graph.
 
     PARSE_JSON: codeindex scan output
     EMBEDDINGS_JSON: embed command output
@@ -443,7 +442,7 @@ def inject(parse_json: str, embeddings_json: str, clear: bool) -> None:
         result = asyncio.run(_async_inject(parse_results, embeddings, clear))
     except Exception as e:
         output_error(
-            code=ErrorCode.LIGHTRAG_ERROR,
+            code=ErrorCode.STORAGE_ERROR,
             message=f"Injection failed: {e}",
             suggestion="Check database connection with: loomgraph status",
         )
@@ -457,12 +456,12 @@ async def _async_inject(
     embeddings: dict[str, list[float]],
     clear: bool,
 ) -> dict[str, Any]:
-    """Run async injection into LightRAG."""
+    """Run async injection into knowledge graph."""
     import time
 
     start_time = time.time()
 
-    # Note: Full LightRAG integration pending
+    # Note: Full SQLite integration via storage abstraction
     # For now, count what would be injected
     entities_created = 0
     relations_created = 0
@@ -491,14 +490,12 @@ async def _async_inject(
 @click.option("--since", default="HEAD~1", help="Git ref to compare from (default: HEAD~1)")
 @click.option("--workspace", "-w", default=None, help="Workspace name (default: current directory name)")
 @click.option("--files", default=None, help="Comma-separated list of files to update (skips git detection)")
-@click.option("--lightrag-url", default=None, help="Override LightRAG API URL from config")
 @click.option("--embedding-url", default=None, help="Override embedding API URL from config")
 @click.option("--use-affected", is_flag=True, help="Use 'codeindex affected' instead of 'git diff' (smarter detection)")
 def update(
     since: str,
     workspace: str | None,
     files: str | None,
-    lightrag_url: str | None,
     embedding_url: str | None,
     use_affected: bool,
 ) -> None:
@@ -637,13 +634,12 @@ def update(
                 changed_files,
                 repo_path,
                 workspace,
-                lightrag_url=lightrag_url,
                 embedding_url=embedding_url,
             )
         )
     except Exception as e:
         output_error(
-            code=ErrorCode.LIGHTRAG_ERROR,
+            code=ErrorCode.STORAGE_ERROR,
             message=f"Warm update failed: {e}",
         )
         return
@@ -661,7 +657,6 @@ async def _async_warm_update(
     changed_files: list[Path],
     repo_path: Path,
     workspace: str | None,
-    lightrag_url: str | None = None,
     embedding_url: str | None = None,
 ) -> dict[str, Any]:
     """Run async warm update pipeline via delete_by_source + insert_custom_kg.
@@ -681,24 +676,8 @@ async def _async_warm_update(
     )
     from loomgraph.storage.factory import create_graph_store
 
-    settings = get_settings()
     ws = get_auto_workspace(workspace)
-    if lightrag_url:
-        # Explicit URL override forces the LightRAG path regardless of
-        # storage.backend (used by automation hooks pointing at non-default
-        # LightRAG instances).
-        from loomgraph.core.lightrag_client import LightRAGClient
-        from loomgraph.storage.lightrag_store import LightRAGGraphStore
-
-        store = LightRAGGraphStore(
-            LightRAGClient(
-                base_url=lightrag_url,
-                timeout=settings.lightrag.api_timeout,
-                workspace=ws,
-            )
-        )
-    else:
-        store = await create_graph_store(workspace=ws)
+    store = await create_graph_store(workspace=ws)
 
     files_indexed = 0
     files_skipped = 0
@@ -817,7 +796,7 @@ async def _async_warm_update(
     all_entities.extend(stubs)
     external_stubs = len(stubs)
 
-    # Attach embeddings for sqlite vec0 (no-op on lightrag backend)
+    # Attach embeddings for sqlite vec0
     from loomgraph.cli._common import maybe_embed_entities
 
     await maybe_embed_entities(all_entities)

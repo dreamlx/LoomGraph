@@ -1,7 +1,7 @@
 """Data models for LoomGraph.
 
 These models define the internal data structures used for mapping
-between codeindex output and LightRAG input.
+between codeindex output and knowledge-graph payloads.
 """
 
 from dataclasses import dataclass, field
@@ -76,7 +76,7 @@ class ParseResult:
 
 @dataclass
 class InjectResult:
-    """Result of injecting a parse result into LightRAG."""
+    """Result of injecting a parse result into the knowledge graph."""
 
     file_path: str
     entities: int
@@ -97,13 +97,13 @@ class IndexResult:
 
 
 # ============================================
-# Mapped Types (for LightRAG)
+# Mapped Types (for the knowledge graph)
 # ============================================
 
 
 @dataclass
 class EntityData:
-    """Entity data prepared for LightRAG acreate_entity()."""
+    """Entity data prepared for GraphStore.create_entity()."""
 
     entity_name: str
     entity_data: dict[str, Any]
@@ -111,7 +111,7 @@ class EntityData:
 
 @dataclass
 class RelationData:
-    """Relation data prepared for LightRAG acreate_relation()."""
+    """Relation data prepared for GraphStore.create_relation()."""
 
     src_id: str
     tgt_id: str

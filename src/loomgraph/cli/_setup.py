@@ -17,7 +17,7 @@ from loomgraph.cli._common import (
     output_partial_error,
     output_success,
 )
-from loomgraph.cli._deps_check import check_codeindex, check_embedding, check_lightrag_api
+from loomgraph.cli._deps_check import check_codeindex, check_embedding, check_storage
 from loomgraph.cli.main import main
 from loomgraph.core.config import get_settings
 
@@ -28,51 +28,54 @@ def status() -> None:
 
     Returns status of all required dependencies:
     - codeindex: Code parsing tool
-    - lightrag: LightRAG API service
-    - embedding: Vector embedding service (optional, managed by LightRAG)
+    - storage: SQLite + sqlite-vec local backend
+    - embedding: Jina Code V2 embedding service (optional, only needed for vec0)
     """
     settings = get_settings()
 
-    # Check all dependencies
     codeindex_status = check_codeindex()
-    lightrag_status = check_lightrag_api(settings)
+    storage_status = check_storage(settings)
     embedding_status = check_embedding(settings)
 
     dependencies = {
         "codeindex": codeindex_status,
-        "lightrag_api": lightrag_status,
+        "storage": storage_status,
         "embedding": embedding_status,
     }
 
-    # Collect suggestions for missing dependencies
     suggestions: list[str] = []
     if not codeindex_status.get("installed"):
-        suggestions.append("Install codeindex: pip install matrix-codeindex")
-    if not lightrag_status.get("connected"):
-        suggestions.append(f"Check LightRAG API at {settings.lightrag.api_url}")
+        suggestions.append("Install codeindex: pip install ai-codeindex")
+    if not storage_status.get("connected"):
+        suggestions.append(
+            "Storage backend unavailable; check sqlite-vec install"
+        )
     if not embedding_status.get("connected"):
-        suggestions.append("Embedding service not reachable (may be managed by LightRAG)")
+        suggestions.append(
+            "Embedding service not reachable (semantic search vec0 will be empty)"
+        )
 
-    # Workspace context
+    # Workspace context: pull stats from local SqliteGraphStore if available.
     current_ws = get_auto_workspace(None)
     ws_context: dict[str, Any] = {"name": current_ws}
-
-    if lightrag_status.get("connected"):
+    if storage_status.get("connected"):
         try:
-            import httpx
+            import asyncio
 
-            with httpx.Client(timeout=5.0, trust_env=False) as http:
-                headers: dict[str, str] = {}
-                if current_ws:
-                    headers["LIGHTRAG-WORKSPACE"] = current_ws
-                resp = http.get(
-                    f"{settings.lightrag.api_url}/graph/stats",
-                    headers=headers,
-                )
-                if resp.status_code == 200:
-                    stats = resp.json()
-                    ws_context["entities"] = stats.get("entity_count", 0)
-                    ws_context["relations"] = stats.get("relation_count", 0)
+            from loomgraph.storage.factory import create_graph_store
+
+            async def _stats() -> dict[str, Any]:
+                store = await create_graph_store(workspace=current_ws)
+                try:
+                    return await store.get_graph_stats()
+                finally:
+                    close = getattr(store, "close", None)
+                    if close is not None:
+                        await close()
+
+            stats = asyncio.run(_stats())
+            ws_context["entities"] = stats.get("entity_count", 0)
+            ws_context["relations"] = stats.get("relation_count", 0)
         except Exception:
             ws_context["entities"] = "unknown"
 
@@ -80,21 +83,22 @@ def status() -> None:
         "version": __version__,
         "workspace": ws_context,
         "config": {
-            "lightrag_url": settings.lightrag.api_url,
+            "storage_backend": settings.storage.backend,
+            "db_path_template": settings.storage.db_path,
             "embedding_url": settings.embedding.base_url,
+            "llm_provider": settings.llm.provider,
         },
         "dependencies": dependencies,
     }
 
-    if not lightrag_status.get("connected"):
+    if not storage_status.get("connected"):
         output_partial_error(
             code=ErrorCode.DEPENDENCIES_MISSING,
-            message="LightRAG API not available",
+            message="Storage backend unavailable",
             suggestions=suggestions,
             data=data,
         )
     elif suggestions:
-        # Non-critical issues
         data["warnings"] = suggestions
         output_success(data)
     else:
