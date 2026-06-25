@@ -6,18 +6,22 @@ on:
       - "v*"
 
 permissions:
-  contents: write
+  contents: write    # GitHub Release upload
+  id-token: write    # PyPI Trusted Publisher (OIDC)
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
@@ -37,9 +41,11 @@ jobs:
           source .venv/bin/activate
           pytest tests/unit/ -v --tb=short
 
-  release:
+  build:
     needs: test
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.VERSION }}
     steps:
       - uses: actions/checkout@v4
 
@@ -48,30 +54,67 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-
-      - name: Build wheel
+      - name: Install build + twine
         run: |
-          uv venv
-          uv pip install build
-          source .venv/bin/activate
-          python -m build
+          python -m pip install --upgrade pip
+          pip install build twine
+
+      - name: Build wheel + sdist
+        run: python -m build
+
+      - name: Inspect distribution metadata
+        run: twine check dist/*
 
       - name: Extract version from tag
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/*
+
+  publish-pypi:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/loomgraph/${{ needs.build.outputs.version }}/
+    permissions:
+      id-token: write    # Trusted Publisher OIDC
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        # OIDC — no API token; project must be configured as a Trusted Publisher
+        # at https://pypi.org/manage/project/loomgraph/settings/publishing/
+
+  github-release:
+    needs: [build, publish-pypi]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
       - name: Extract changelog for this version
         id: changelog
         run: |
-          # Extract section for this version from CHANGELOG.md
-          VERSION=${{ steps.version.outputs.VERSION }}
+          VERSION=${{ needs.build.outputs.version }}
           CHANGELOG=$(sed -n "/^## \[${VERSION}\]/,/^## \[/p" CHANGELOG.md | head -n -1)
           if [ -z "$CHANGELOG" ]; then
             CHANGELOG="Release v${VERSION}"
           fi
-          # Use delimiter for multi-line output
           echo "BODY<<EOF" >> $GITHUB_OUTPUT
           echo "$CHANGELOG" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
