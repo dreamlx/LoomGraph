@@ -1,16 +1,15 @@
 """
 LoomGraph: Enterprise Code Intelligence Engine
 
-A high-performance code understanding and retrieval system optimized for
-NVIDIA H200, SQLite + sqlite-vec knowledge graph with Jina Code V2 embeddings.
+Code understanding + retrieval over a local SQLite + sqlite-vec knowledge
+graph, with pluggable OpenAI-compatible LLM and embedding providers.
 
 Usage:
-    from loomgraph import Settings, index_repository
-    from loomgraph.embedding import JinaEmbeddingClient
+    from loomgraph import Settings
+    from loomgraph.storage import create_graph_store
 
-    settings = Settings()
-    embedding_client = JinaEmbeddingClient(settings.embedding)
-    result = await index_repository(repo_path, rag, embedding_client, parse_file)
+    store = await create_graph_store(workspace="myproj")
+    # ... use store.get_all_entities() / search_similar() / ...
 """
 
 from importlib.metadata import version as _pkg_version
