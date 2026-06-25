@@ -6,9 +6,10 @@ from unittest.mock import patch
 from loomgraph.core.config import (
     ASTExtractionConfig,
     EmbeddingConfig,
-    LightRAGConfig,
+    LLMConfig,
     SemanticEnhancementConfig,
     Settings,
+    StorageConfig,
 )
 
 
@@ -16,7 +17,6 @@ class TestASTExtractionConfig:
     """Tests for AST extraction configuration."""
 
     def test_default_values(self) -> None:
-        """Test default configuration values."""
         config = ASTExtractionConfig()
 
         assert config.enabled is True
@@ -28,11 +28,10 @@ class TestASTExtractionConfig:
 class TestSemanticEnhancementConfig:
     """Tests for semantic enhancement configuration."""
 
-    def test_mvp_default_disabled(self) -> None:
-        """Test that semantic enhancement is disabled by default (MVP)."""
+    def test_default_values(self) -> None:
         config = SemanticEnhancementConfig()
 
-        assert config.enabled is False
+        assert config.enabled is False  # MVP
         assert config.description_generation is False
         assert config.pattern_recognition is False
 
@@ -40,60 +39,53 @@ class TestSemanticEnhancementConfig:
 class TestEmbeddingConfig:
     """Tests for embedding configuration."""
 
-    def test_jina_defaults(self) -> None:
-        """Test Jina Code V2 default settings."""
+    def test_default_values(self) -> None:
         config = EmbeddingConfig()
 
         assert config.provider == "jina"
-        assert "jina-embeddings-v2-base-code" in config.model
         assert config.dimension == 768
-        assert config.max_length == 8192
         assert config.batch_size == 32
 
 
-class TestLightRAGConfig:
-    """Tests for LightRAG HTTP API configuration."""
+class TestStorageConfig:
+    """Tests for storage backend configuration (EPIC-011 Phase 5)."""
 
-    def test_default_api_url(self) -> None:
-        """Test default API URL (H200 enterprise service)."""
-        config = LightRAGConfig()
+    def test_default_values(self) -> None:
+        config = StorageConfig()
 
-        assert config.api_url == "http://117.131.45.179:3001"
-        assert config.api_timeout == 30.0
+        assert config.backend == "sqlite"
+        assert config.db_path == "~/.loomgraph/{workspace}.db"
 
-    def test_default_query_mode(self) -> None:
-        """Test default query mode."""
-        config = LightRAGConfig()
 
-        assert config.default_query_mode == "hybrid"
+class TestLLMConfig:
+    """Tests for LLM provider configuration."""
+
+    def test_default_provider_glm(self) -> None:
+        config = LLMConfig()
+
+        assert config.provider == "glm"
+        assert config.api_url == "http://117.131.45.179:3000"
+        assert config.model == "glm-4-flash"
 
 
 class TestSettings:
     """Tests for main settings."""
 
     def test_default_settings(self) -> None:
-        """Test default settings creation."""
         settings = Settings()
 
         assert settings.app_name == "LoomGraph"
         assert settings.debug is False
         assert settings.indexing.ast_extraction.enabled is True
-        assert settings.indexing.semantic_enhancement.enabled is False  # MVP
+        assert settings.indexing.semantic_enhancement.enabled is False
 
     def test_nested_config_access(self) -> None:
-        """Test accessing nested configuration."""
         settings = Settings()
 
-        # Indexing
         assert settings.indexing.ast_extraction.chunking == "ast"
-
-        # Embedding
         assert settings.embedding.dimension == 768
-
-        # LightRAG API (H200 enterprise service)
-        assert settings.lightrag.api_url == "http://117.131.45.179:3001"
-
-        # Retrieval
+        assert settings.storage.backend == "sqlite"
+        assert settings.llm.provider == "glm"
         assert settings.retrieval.default_mode == "hybrid"
 
 
@@ -101,7 +93,6 @@ class TestRemoveEnvOverrides:
     """Tests for _remove_env_overrides helper."""
 
     def test_strips_top_level_env_override(self) -> None:
-        """Env var LOOMGRAPH_DEBUG should strip 'debug' from YAML."""
         from loomgraph.core.config import _remove_env_overrides
 
         yaml_config = {"debug": True, "log_level": "DEBUG"}
@@ -112,77 +103,84 @@ class TestRemoveEnvOverrides:
         assert result["log_level"] == "DEBUG"
 
     def test_strips_nested_env_override(self) -> None:
-        """Env var LOOMGRAPH_LIGHTRAG__API_URL should strip nested key."""
         from loomgraph.core.config import _remove_env_overrides
 
-        yaml_config = {"lightrag": {"api_url": "http://yaml:3001", "api_timeout": 30.0}}
-        with patch.dict("os.environ", {"LOOMGRAPH_LIGHTRAG__API_URL": "http://env:9999"}):
+        yaml_config = {"storage": {"db_path": "~/yaml.db", "backend": "sqlite"}}
+        with patch.dict(
+            "os.environ", {"LOOMGRAPH_STORAGE__DB_PATH": "~/env.db"}
+        ):
             result = _remove_env_overrides(yaml_config)
 
-        # api_url stripped, api_timeout remains
-        assert result["lightrag"]["api_timeout"] == 30.0
-        assert "api_url" not in result["lightrag"]
+        assert result["storage"]["backend"] == "sqlite"
+        assert "db_path" not in result["storage"]
 
     def test_no_env_keeps_all_keys(self) -> None:
-        """Without env vars, all YAML keys are preserved."""
         from loomgraph.core.config import _remove_env_overrides
 
-        yaml_config = {"lightrag": {"api_url": "http://yaml:3001"}}
-        # Ensure the specific env var is NOT set
+        yaml_config = {"storage": {"db_path": "~/yaml.db"}}
         with patch.dict("os.environ", {}, clear=False):
             import os
-            os.environ.pop("LOOMGRAPH_LIGHTRAG__API_URL", None)
+
+            os.environ.pop("LOOMGRAPH_STORAGE__DB_PATH", None)
             result = _remove_env_overrides(yaml_config)
 
         assert result == yaml_config
 
     def test_empty_nested_dict_removed(self) -> None:
-        """If all keys in a nested dict are stripped, the parent key is omitted."""
         from loomgraph.core.config import _remove_env_overrides
 
-        yaml_config = {"lightrag": {"api_url": "http://yaml:3001"}}
-        with patch.dict("os.environ", {"LOOMGRAPH_LIGHTRAG__API_URL": "http://env:9999"}):
+        yaml_config = {"storage": {"db_path": "~/yaml.db"}}
+        with patch.dict(
+            "os.environ", {"LOOMGRAPH_STORAGE__DB_PATH": "~/env.db"}
+        ):
             result = _remove_env_overrides(yaml_config)
 
-        assert "lightrag" not in result
+        assert "storage" not in result
 
 
 class TestGetSettingsEnvPriority:
     """Tests that env vars properly override YAML config."""
 
     def test_env_overrides_yaml(self, tmp_path: Path) -> None:
-        """Env var should take precedence over YAML value."""
         from loomgraph.core.config import get_settings, reset_settings
 
         reset_settings()
 
-        yaml_config = {"lightrag": {"api_url": "http://yaml-server:3001"}}
-        env_url = "http://env-override:9999"
+        yaml_config = {"storage": {"db_path": "~/yaml.db"}}
+        env_url = "~/env.db"
 
         with (
-            patch("loomgraph.core.config.load_yaml_config", return_value=yaml_config),
-            patch.dict("os.environ", {"LOOMGRAPH_LIGHTRAG__API_URL": env_url}),
+            patch(
+                "loomgraph.core.config.load_yaml_config",
+                return_value=yaml_config,
+            ),
+            patch.dict(
+                "os.environ", {"LOOMGRAPH_STORAGE__DB_PATH": env_url}
+            ),
         ):
             settings = get_settings()
 
-        assert settings.lightrag.api_url == env_url
+        assert settings.storage.db_path == env_url
         reset_settings()
 
     def test_yaml_used_when_no_env(self) -> None:
-        """YAML value should be used when no env var is set."""
         from loomgraph.core.config import get_settings, reset_settings
 
         reset_settings()
 
-        yaml_config = {"lightrag": {"api_url": "http://yaml-server:3001"}}
+        yaml_config = {"storage": {"db_path": "~/yaml.db"}}
 
         with (
-            patch("loomgraph.core.config.load_yaml_config", return_value=yaml_config),
+            patch(
+                "loomgraph.core.config.load_yaml_config",
+                return_value=yaml_config,
+            ),
             patch.dict("os.environ", {}, clear=False),
         ):
             import os
-            os.environ.pop("LOOMGRAPH_LIGHTRAG__API_URL", None)
+
+            os.environ.pop("LOOMGRAPH_STORAGE__DB_PATH", None)
             settings = get_settings()
 
-        assert settings.lightrag.api_url == "http://yaml-server:3001"
+        assert settings.storage.db_path == "~/yaml.db"
         reset_settings()

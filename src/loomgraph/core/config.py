@@ -55,44 +55,28 @@ class EmbeddingConfig(BaseSettings):
     timeout: float = 30.0
 
 
-class LightRAGConfig(BaseSettings):
-    """LightRAG connection configuration.
-
-    LoomGraph delegates all storage to LightRAG via HTTP API.
-    """
-
-    # Default: H200 LightRAG API service
-    api_url: str = "http://117.131.45.179:3001"
-    api_timeout: float = 30.0
-
-    # Query settings
-    default_query_mode: Literal["local", "global", "hybrid", "naive"] = "hybrid"
-
-
 class StorageConfig(BaseSettings):
     """Storage backend selection (EPIC-011 / ADR-013).
 
-    Phase 1 default remains `lightrag` so existing deployments are unaffected.
-    Phase 2 flips the default to `sqlite`; Phase 5 removes the lightrag option.
+    Phase 5: only `sqlite` is supported. The legacy `lightrag` value was
+    removed in v0.10.0 along with the LightRAG client and adapter.
     """
 
-    backend: Literal["lightrag", "sqlite"] = "lightrag"
-    # For sqlite: filesystem path template. `{workspace}` is substituted at
-    # runtime with the resolved workspace name. `~` is expanded.
+    backend: Literal["sqlite"] = "sqlite"
+    # Filesystem path template. `{workspace}` is substituted at runtime with
+    # the resolved workspace name. `~` is expanded.
     db_path: str = "~/.loomgraph/{workspace}.db"
 
 
 class LLMConfig(BaseSettings):
     """LLM provider configuration (EPIC-011 Phase 4 / ADR-013).
 
-    Phase 1 default is `lightrag` for backward compatibility (overview /
-    impact go through LightRAG's `/query` endpoint). Phase 4 ships
-    `glm` / `openrouter` / `vllm` provider options that bypass LightRAG
-    entirely and speak the OpenAI-compatible chat-completions protocol.
-    Phase 5 drops the `lightrag` option together with the storage backend.
+    Phase 5: `lightrag` option dropped together with the storage backend.
+    `DirectLLMClient` (OpenAI-compatible chat completions) is the only
+    transport; `provider` chooses default model + endpoint conventions.
     """
 
-    provider: Literal["lightrag", "glm", "openrouter", "vllm"] = "lightrag"
+    provider: Literal["glm", "openrouter", "vllm"] = "glm"
     # OpenAI-compatible endpoint base URL (without /v1/chat/completions).
     # Default points at H200 GLM-4.7.
     api_url: str = "http://117.131.45.179:3000"
@@ -134,7 +118,6 @@ class Settings(BaseSettings):
     # Sub-configurations
     indexing: IndexingConfig = Field(default_factory=IndexingConfig)
     embedding: EmbeddingConfig = Field(default_factory=EmbeddingConfig)
-    lightrag: LightRAGConfig = Field(default_factory=LightRAGConfig)
     retrieval: RetrievalConfig = Field(default_factory=RetrievalConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
@@ -180,9 +163,9 @@ def flatten_dict(d: dict[str, Any], parent_key: str = "", sep: str = "__") -> di
     """Flatten nested dict for pydantic-settings compatibility.
 
     Example:
-        {"lightrag": {"api_url": "http://..."}}
+        {"storage": {"db_path": "~/.loomgraph/{workspace}.db"}}
         becomes
-        {"lightrag__api_url": "http://..."}
+        {"storage__db_path": "~/.loomgraph/{workspace}.db"}
     """
     items: list[tuple[str, Any]] = []
     for k, v in d.items():
@@ -201,7 +184,7 @@ def _remove_env_overrides(
     """Remove YAML config keys that have corresponding env var overrides.
 
     For nested configs, uses __ as delimiter to match pydantic-settings convention.
-    E.g., yaml key lightrag.api_url → env var LOOMGRAPH_LIGHTRAG__API_URL
+    E.g., yaml key storage.db_path → env var LOOMGRAPH_STORAGE__DB_PATH
 
     Only leaf (non-dict) values are checked; dict values are recursed into.
     """

@@ -1,6 +1,6 @@
 """Module dependency analysis.
 
-Analyzes cross-module dependencies by querying the LightRAG knowledge graph
+Analyzes cross-module dependencies by querying the knowledge graph
 and grouping entities by their file path modules.
 """
 
@@ -68,11 +68,11 @@ class DepsAnalyzer:
     """Analyzes module-level dependencies from the knowledge graph.
 
     Args:
-        client: LightRAG client instance
+        client: GraphStore instance
         depth: Directory depth for module grouping
     """
 
-    client: Any  # LightRAGClient
+    client: Any  # GraphStore
     depth: int = 2
 
     async def analyze(self) -> DepsResult:

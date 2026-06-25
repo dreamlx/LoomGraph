@@ -103,9 +103,9 @@ def impact(target: str, staged: bool, base: str | None, depth: int, file_path: s
             )
         else:
             output_error(
-                code=ErrorCode.LIGHTRAG_ERROR,
+                code=ErrorCode.STORAGE_ERROR,
                 message=f"Impact analysis failed: {e}",
-                suggestion="Check LightRAG status with: loomgraph status",
+                suggestion="Check service status with: loomgraph status",
             )
 
 
@@ -121,13 +121,11 @@ async def _async_impact(
     from loomgraph.core.impact import ImpactAnalyzer
 
     ws, store = await prepare_workspace_store(workspace)
-    llm = create_llm_client_for_workspace(ws)
 
     analyzer = ImpactAnalyzer(
-        lightrag_client=store,
+        store=store,
         repo_path=Path("."),
         max_depth=depth,
-        llm_client=llm,
     )
 
     if staged:
@@ -158,9 +156,9 @@ def deps(depth: int, workspace: str | None) -> None:
         output_success(result)
     except Exception as e:
         output_error(
-            code=ErrorCode.LIGHTRAG_ERROR,
+            code=ErrorCode.STORAGE_ERROR,
             message=f"Dependency analysis failed: {e}",
-            suggestion="Check LightRAG status with: loomgraph status",
+            suggestion="Check service status with: loomgraph status",
         )
 
 
@@ -190,9 +188,9 @@ def overview(depth: int, workspace: str | None, no_summary: bool) -> None:
         output_success(result)
     except Exception as e:
         output_error(
-            code=ErrorCode.LIGHTRAG_ERROR,
+            code=ErrorCode.STORAGE_ERROR,
             message=f"Overview generation failed: {e}",
-            suggestion="Check LightRAG status with: loomgraph status",
+            suggestion="Check service status with: loomgraph status",
         )
 
 
@@ -228,9 +226,9 @@ def topology(hub_threshold: int, god_threshold: int, module: str | None, workspa
         output_success(result)
     except Exception as e:
         output_error(
-            code=ErrorCode.LIGHTRAG_ERROR,
+            code=ErrorCode.STORAGE_ERROR,
             message=f"Topology analysis failed: {e}",
-            suggestion="Check LightRAG status with: loomgraph status",
+            suggestion="Check service status with: loomgraph status",
         )
 
 
@@ -273,9 +271,9 @@ def check(repo_path: str, workspace: str | None) -> None:
         output_success(result)
     except Exception as e:
         output_error(
-            code=ErrorCode.LIGHTRAG_ERROR,
+            code=ErrorCode.STORAGE_ERROR,
             message=f"Check failed: {e}",
-            suggestion="Check LightRAG status with: loomgraph status",
+            suggestion="Check service status with: loomgraph status",
         )
 
 
@@ -485,6 +483,6 @@ def trends(entity: str, metric: str, months: int, workspace: str | None) -> None
         )
     except Exception as e:
         output_error(
-            code=ErrorCode.LIGHTRAG_ERROR,
+            code=ErrorCode.STORAGE_ERROR,
             message=f"Trend analysis failed: {e}",
         )

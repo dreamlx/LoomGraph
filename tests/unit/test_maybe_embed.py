@@ -19,23 +19,9 @@ def reset_global_settings() -> None:
 
 
 class TestBackendGate:
-    async def test_skipped_on_lightrag_backend(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv("LOOMGRAPH_STORAGE__BACKEND", "lightrag")
-        entities: list[dict[str, Any]] = [
-            {"entity_name": "A", "description": "test"}
-        ]
-        with patch("loomgraph.embedding.jina.JinaEmbeddingClient") as mock_cls:
-            n = await maybe_embed_entities(entities)
-        assert n == 0
-        assert "embedding" not in entities[0]
-        mock_cls.assert_not_called()
-
     async def test_runs_on_sqlite_backend(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("LOOMGRAPH_STORAGE__BACKEND", "sqlite")
         entities: list[dict[str, Any]] = [
             {"entity_name": "A", "description": "test"},
             {"entity_name": "B", "description": "test2"},

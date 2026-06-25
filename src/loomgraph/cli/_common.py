@@ -45,7 +45,7 @@ def get_auto_workspace(workspace: str | None) -> str | None:
     if workspace:
         return workspace
 
-    # Auto-detect from current directory name (lowercase for LightRAG compatibility)
+    # Auto-detect from current directory name (lowercase — workspace names
     cwd = Path.cwd()
     ws_name = cwd.name.lower()
 
@@ -63,7 +63,7 @@ def get_auto_workspace(workspace: str | None) -> str | None:
 
 async def resolve_workspace_with_fallback(
     workspace: str,
-    store: Any,  # GraphStore (or LightRAGClient — duck-typed via get_graph_stats)
+    store: Any,  # GraphStore
     allow_fallback: bool = True,
 ) -> str:
     """Resolve workspace with fallback to main branches.
@@ -72,10 +72,6 @@ async def resolve_workspace_with_fallback(
     1. Check if target workspace has data (entity_count > 0)
     2. If not and allow_fallback=True, try main/develop/master
     3. Raise error if no valid workspace found
-
-    The `store` parameter accepts any object exposing
-    `await store.get_graph_stats()` — both GraphStore implementations and the
-    legacy LightRAGClient satisfy this.
     """
     # Check if target workspace has data
     try:
@@ -123,64 +119,8 @@ async def resolve_workspace_with_fallback(
 
 
 # ============================================
-# Client Factory (v0.9.2 — DRY refactor)
+# Store / LLM Factory (v0.10.0 — abstraction-only)
 # ============================================
-
-def create_client(
-    workspace: str | None = None,
-    api_url: str | None = None,
-) -> Any:
-    """Create a LightRAGClient with settings from config.
-
-    Args:
-        workspace: Optional workspace name (auto-detected if None)
-        api_url: Optional API URL override (uses config if None)
-
-    Returns:
-        Configured LightRAGClient instance
-    """
-    from loomgraph.core.config import get_settings
-    from loomgraph.core.lightrag_client import LightRAGClient
-
-    settings = get_settings()
-    url = api_url or settings.lightrag.api_url
-    ws = get_auto_workspace(workspace) if workspace is not None else None
-
-    return LightRAGClient(
-        base_url=url,
-        timeout=settings.lightrag.api_timeout,
-        workspace=ws,
-    )
-
-
-async def prepare_workspace_client(
-    workspace: str | None = None,
-) -> tuple[str, Any]:
-    """Create client and resolve workspace with fallback in one step.
-
-    Replaces the 8-line boilerplate pattern used in query commands.
-
-    Args:
-        workspace: Optional workspace name (auto-detected if None)
-
-    Returns:
-        Tuple of (resolved_workspace, configured_client)
-    """
-    from loomgraph.core.config import get_settings
-    from loomgraph.core.lightrag_client import LightRAGClient
-
-    settings = get_settings()
-    ws = get_auto_workspace(workspace)
-    client = LightRAGClient(
-        base_url=settings.lightrag.api_url,
-        timeout=settings.lightrag.api_timeout,
-        workspace=ws,
-    )
-
-    ws = await resolve_workspace_with_fallback(ws, client, allow_fallback=True)
-    client.workspace = ws
-
-    return ws, client
 
 
 async def prepare_workspace_store(
@@ -224,21 +164,12 @@ def create_llm_client_for_workspace(workspace: str | None = None) -> Any:
 async def maybe_embed_entities(entities: list[dict[str, Any]]) -> int:
     """Attach Jina Code V2 embeddings to entity dicts in place.
 
-    Only runs when the active storage backend benefits from vector data
-    (currently: sqlite, where embeddings land in vec0). LightRAG embeds
-    internally so this step is skipped to avoid duplicate work.
-
-    Embedding failure (service down, timeout, ...) logs a warning and
-    returns 0 — entity rows still write, the vector column just stays
-    empty. Returns count of embeddings attached.
+    Skipped on entities lacking a description or already carrying an
+    `embedding` field. Embedding failure (service down, timeout, ...)
+    logs a warning and returns 0 — entity rows still write, the vector
+    column just stays empty. Returns count of embeddings attached.
     """
     import logging
-
-    from loomgraph.core.config import get_settings
-
-    settings = get_settings()
-    if settings.storage.backend != "sqlite":
-        return 0
 
     targets: list[tuple[int, dict[str, Any]]] = [
         (i, e)
@@ -280,7 +211,7 @@ class ErrorCode:
     EMBEDDING_FAILED = "EMBEDDING_FAILED"
     DATABASE_CONNECTION_FAILED = "DATABASE_CONNECTION_FAILED"
     DATABASE_ERROR = "DATABASE_ERROR"
-    LIGHTRAG_ERROR = "LIGHTRAG_ERROR"
+    STORAGE_ERROR = "STORAGE_ERROR"
     INVALID_INPUT = "INVALID_INPUT"
     FILE_NOT_FOUND = "FILE_NOT_FOUND"
     DEPENDENCIES_MISSING = "DEPENDENCIES_MISSING"

@@ -48,11 +48,11 @@ class SimilarAnalyzer:
     """Finds similar entities across multiple workspaces.
 
     Args:
-        clients: List of LightRAG clients, each bound to a workspace
+        clients: List of GraphStore instances, each bound to a workspace
         workspace_names: Corresponding workspace names
     """
 
-    clients: list[Any]  # list[LightRAGClient]
+    clients: list[Any]  # list[GraphStore]
     workspace_names: list[str]
 
     async def analyze(self, entity_name: str) -> SimilarResult:

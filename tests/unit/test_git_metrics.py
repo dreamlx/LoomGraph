@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from loomgraph.core.git_metrics import GitMetricsAnalyzer
-from loomgraph.core.models import BusFactor, FileMetrics, Hotspot
+from loomgraph.core.models import FileMetrics
 
 
 class TestGitMetricsAnalyzer:

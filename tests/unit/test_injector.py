@@ -14,7 +14,7 @@ from loomgraph.core.injector import (
 from loomgraph.core.models import Call, Import, Inheritance, ParseResult, Symbol
 
 
-class MockLightRAGClient:
+class MockGraphStore:
     """Mock LightRAG HTTP client for testing."""
 
     def __init__(self):
@@ -48,9 +48,9 @@ class MockLightRAGClient:
 
 
 @pytest.fixture
-def mock_client() -> MockLightRAGClient:
+def mock_client() -> MockGraphStore:
     """Create a mock LightRAG client."""
-    return MockLightRAGClient()
+    return MockGraphStore()
 
 
 @pytest.fixture
@@ -100,7 +100,7 @@ class TestInjectParseResult:
 
     @pytest.mark.asyncio
     async def test_inject_entities(
-        self, mock_client: MockLightRAGClient, sample_parse_result: ParseResult
+        self, mock_client: MockGraphStore, sample_parse_result: ParseResult
     ) -> None:
         """Should inject all symbols as entities."""
         result = await inject_parse_result(mock_client, sample_parse_result)
@@ -120,7 +120,7 @@ class TestInjectParseResult:
 
     @pytest.mark.asyncio
     async def test_inject_call_relations(
-        self, mock_client: MockLightRAGClient, sample_parse_result: ParseResult
+        self, mock_client: MockGraphStore, sample_parse_result: ParseResult
     ) -> None:
         """Should inject call relations."""
         result = await inject_parse_result(mock_client, sample_parse_result)
@@ -139,7 +139,7 @@ class TestInjectParseResult:
 
     @pytest.mark.asyncio
     async def test_inject_inheritance_relations(
-        self, mock_client: MockLightRAGClient, sample_parse_result: ParseResult
+        self, mock_client: MockGraphStore, sample_parse_result: ParseResult
     ) -> None:
         """Should inject inheritance relations."""
         await inject_parse_result(mock_client, sample_parse_result)
@@ -155,7 +155,7 @@ class TestInjectParseResult:
 
     @pytest.mark.asyncio
     async def test_inject_import_relations(
-        self, mock_client: MockLightRAGClient, sample_parse_result: ParseResult
+        self, mock_client: MockGraphStore, sample_parse_result: ParseResult
     ) -> None:
         """Should inject import relations."""
         await inject_parse_result(mock_client, sample_parse_result)
@@ -170,7 +170,7 @@ class TestInjectParseResult:
 
     @pytest.mark.asyncio
     async def test_inject_handles_entity_error(
-        self, mock_client: MockLightRAGClient, sample_parse_result: ParseResult
+        self, mock_client: MockGraphStore, sample_parse_result: ParseResult
     ) -> None:
         """Should continue and record errors when entity injection fails."""
         # Fail on third call (1=module, 2=UserService, 3=UserService.login)
@@ -184,7 +184,7 @@ class TestInjectParseResult:
 
     @pytest.mark.asyncio
     async def test_inject_handles_relation_error(
-        self, mock_client: MockLightRAGClient, sample_parse_result: ParseResult
+        self, mock_client: MockGraphStore, sample_parse_result: ParseResult
     ) -> None:
         """Should continue and record errors when relation injection fails."""
         mock_client.relation_error = Exception("Relation error")
@@ -200,7 +200,7 @@ class TestInjectParseResultsBatch:
     """Tests for inject_parse_results_batch()."""
 
     @pytest.mark.asyncio
-    async def test_batch_inject_multiple_files(self, mock_client: MockLightRAGClient) -> None:
+    async def test_batch_inject_multiple_files(self, mock_client: MockGraphStore) -> None:
         """Should inject multiple parse results."""
         results = [
             ParseResult(
@@ -241,7 +241,7 @@ class TestInjectParseResultsBatch:
 
     @pytest.mark.asyncio
     async def test_batch_skips_files_with_parse_errors(
-        self, mock_client: MockLightRAGClient
+        self, mock_client: MockGraphStore
     ) -> None:
         """Should skip files with parse errors."""
         results = [

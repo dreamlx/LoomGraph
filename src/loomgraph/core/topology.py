@@ -64,7 +64,7 @@ ORPHAN_SUFFIX_PATTERNS = (
     "Extractor",  # ChangedSymbolExtractor - helper classes
     "Parser",  # GitDiffParser - utility classes
     "Assessor",  # RiskAssessor - analysis classes
-    "Client",  # LightRAGClient, JinaEmbeddingClient - service clients
+    "Client",  # GraphStore, JinaEmbeddingClient - service clients
 )
 
 # Regex patterns for common data classes and DTOs (reduce false positives)
@@ -86,8 +86,8 @@ WHITELIST_HUBS = frozenset({
     # Configuration singletons (used across all modules)
     "get_settings", "get_auto_workspace",
     # Internal helpers (high fan-in is intentional)
-    "LightRAGClient._get_headers", "_get_headers",
-    "LightRAGAPIError.__init__", "__init__",
+
+
 })
 
 
@@ -314,7 +314,7 @@ class TopologyAnalyzer:
     """Analyzes knowledge graph topology for structural code smells.
 
     Args:
-        client: LightRAG client instance
+        client: GraphStore instance
         hub_threshold: Minimum in-degree to flag as hub
         god_threshold: Minimum out-degree to flag as god function
         module: Optional module prefix filter (e.g. "cli" filters source_id)
@@ -322,7 +322,7 @@ class TopologyAnalyzer:
             extraction. Auto-detected from source_ids if None.
     """
 
-    client: Any  # LightRAGClient
+    client: Any  # GraphStore
     hub_threshold: int = 8
     god_threshold: int = 10
     module: str | None = None

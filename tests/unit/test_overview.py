@@ -93,45 +93,70 @@ class TestOverviewAnalyzer:
         assert sorted(core_module["files"]) == ["client.py", "utils.py"]
 
     @pytest.mark.asyncio
-    async def test_no_summary_skips_query(self, mock_client: AsyncMock) -> None:
-        """When no_summary=True, should not call client.query()."""
+    async def test_no_summary_skips_llm(self, mock_client: AsyncMock) -> None:
+        """When no_summary=True, llm_client.complete() must not be invoked."""
         mock_client.get_all_entities.return_value = [
             {"entity_name": "A", "entity_type": "class", "source_id": "src/core/a.py"},
         ]
         mock_client.get_all_relations.return_value = []
 
-        analyzer = OverviewAnalyzer(client=mock_client, depth=2)
+        mock_llm = AsyncMock()
+        analyzer = OverviewAnalyzer(client=mock_client, depth=2, llm_client=mock_llm)
         await analyzer.analyze(no_summary=True)
 
-        mock_client.query.assert_not_called()
+        mock_llm.complete.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_summary_calls_query(self, mock_client: AsyncMock) -> None:
-        """When no_summary=False, should call client.query() for each module."""
+    async def test_summary_calls_llm_per_module(
+        self, mock_client: AsyncMock
+    ) -> None:
+        """When no_summary=False and an LLMClient is provided, each module gets a completion."""
         mock_client.get_all_entities.return_value = [
             {"entity_name": "A", "entity_type": "class", "source_id": "src/core/a.py"},
             {"entity_name": "B", "entity_type": "class", "source_id": "src/cli/b.py"},
         ]
         mock_client.get_all_relations.return_value = []
-        mock_client.query.return_value = {"response": "This module does X"}
 
-        analyzer = OverviewAnalyzer(client=mock_client, depth=2)
+        mock_llm = AsyncMock()
+        mock_llm.complete.return_value = "This module does X"
+
+        analyzer = OverviewAnalyzer(client=mock_client, depth=2, llm_client=mock_llm)
         result = await analyzer.analyze(no_summary=False)
 
-        assert mock_client.query.call_count == 2
+        assert mock_llm.complete.await_count == 2
         for module in result.modules:
             assert module["summary"] == "This module does X"
 
     @pytest.mark.asyncio
-    async def test_summary_graceful_degradation(self, mock_client: AsyncMock) -> None:
+    async def test_summary_skipped_when_no_llm_client(
+        self, mock_client: AsyncMock
+    ) -> None:
+        """Without an LLMClient, summaries are silently empty."""
+        mock_client.get_all_entities.return_value = [
+            {"entity_name": "A", "entity_type": "class", "source_id": "src/core/a.py"},
+        ]
+        mock_client.get_all_relations.return_value = []
+
+        analyzer = OverviewAnalyzer(client=mock_client, depth=2, llm_client=None)
+        result = await analyzer.analyze(no_summary=False)
+
+        for module in result.modules:
+            assert module["summary"] == ""
+
+    @pytest.mark.asyncio
+    async def test_summary_graceful_degradation(
+        self, mock_client: AsyncMock
+    ) -> None:
         """LLM failure should not crash; summary should be empty string."""
         mock_client.get_all_entities.return_value = [
             {"entity_name": "A", "entity_type": "class", "source_id": "src/core/a.py"},
         ]
         mock_client.get_all_relations.return_value = []
-        mock_client.query.side_effect = Exception("LLM timeout")
 
-        analyzer = OverviewAnalyzer(client=mock_client, depth=2)
+        mock_llm = AsyncMock()
+        mock_llm.complete.side_effect = Exception("LLM timeout")
+
+        analyzer = OverviewAnalyzer(client=mock_client, depth=2, llm_client=mock_llm)
         result = await analyzer.analyze(no_summary=False)
 
         core_module = next(m for m in result.modules if m["name"] == "src/core")

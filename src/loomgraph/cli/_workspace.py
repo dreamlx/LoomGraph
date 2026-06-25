@@ -25,9 +25,9 @@ def workspace_list() -> None:
         output_success(result)
     except Exception as e:
         output_error(
-            code=ErrorCode.LIGHTRAG_ERROR,
+            code=ErrorCode.STORAGE_ERROR,
             message=f"Workspace list failed: {e}",
-            suggestion="Check LightRAG status with: loomgraph status",
+            suggestion="Check service status with: loomgraph status",
         )
 
 
@@ -53,9 +53,9 @@ def workspace_info(name: str | None, ws_option: str | None) -> None:
         output_success(result)
     except Exception as e:
         output_error(
-            code=ErrorCode.LIGHTRAG_ERROR,
+            code=ErrorCode.STORAGE_ERROR,
             message=f"Workspace info failed: {e}",
-            suggestion="Check LightRAG status with: loomgraph status",
+            suggestion="Check service status with: loomgraph status",
         )
 
 
@@ -106,9 +106,9 @@ def workspace_delete(name: str, yes: bool) -> None:
         output_success(result)
     except Exception as e:
         output_error(
-            code=ErrorCode.LIGHTRAG_ERROR,
+            code=ErrorCode.STORAGE_ERROR,
             message=f"Workspace delete failed: {e}",
-            suggestion="Check LightRAG status with: loomgraph status",
+            suggestion="Check service status with: loomgraph status",
         )
 
 
@@ -138,9 +138,9 @@ def compare(ws1: str, ws2: str) -> None:
         output_success(result)
     except Exception as e:
         output_error(
-            code=ErrorCode.LIGHTRAG_ERROR,
+            code=ErrorCode.STORAGE_ERROR,
             message=f"Workspace comparison failed: {e}",
-            suggestion="Check LightRAG status with: loomgraph status",
+            suggestion="Check service status with: loomgraph status",
         )
 
 
@@ -170,9 +170,9 @@ def similar(entity: str, workspaces: str | None) -> None:
         output_success(result)
     except Exception as e:
         output_error(
-            code=ErrorCode.LIGHTRAG_ERROR,
+            code=ErrorCode.STORAGE_ERROR,
             message=f"Similar entity search failed: {e}",
-            suggestion="Check LightRAG status with: loomgraph status",
+            suggestion="Check service status with: loomgraph status",
         )
 
 

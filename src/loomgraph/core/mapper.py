@@ -1,12 +1,12 @@
-"""Mapping layer between codeindex and LightRAG.
+"""Mapping layer between codeindex and the knowledge graph.
 
 This module implements the data contract defined in docs/api/DATA_CONTRACT.md.
-It transforms codeindex ParseResult into LightRAG entity/relation format.
+It transforms codeindex ParseResult into knowledge-graph entity/relation format.
 
-**LightRAG API Convention (confirmed 2025-02-04)**:
+**Knowledge-graph payload convention (confirmed 2025-02-04)**:
 - entity_data: entity_type, description (concat signature+language), source_id, file_path
 - edge_data: keywords (relation_type), description, weight, source_id
-- embedding: Let LightRAG auto-generate (do not pass)
+- embedding: caller-provided (Phase 2+), optional
 """
 
 from pathlib import Path
@@ -74,12 +74,12 @@ def map_symbol_to_entity(
     file_path: str,
     language: str,
 ) -> EntityData:
-    """Map codeindex Symbol to LightRAG entity data.
+    """Map codeindex Symbol to GraphStore entity payload.
 
-    **LightRAG Convention**:
+    **Payload convention**:
     - description: Concatenate signature + language + file:line for semantic search
     - source_id: file:line_start-line_end for linking
-    - Do NOT pass embedding (let LightRAG auto-generate)
+    - Embedding is caller-attached (optional)
 
     Args:
         symbol: Symbol from codeindex ParseResult
@@ -87,7 +87,7 @@ def map_symbol_to_entity(
         language: Programming language identifier
 
     Returns:
-        EntityData ready for LightRAG acreate_entity()
+        EntityData ready for GraphStore.create_entity()
 
     Example:
         >>> symbol = Symbol(
@@ -116,21 +116,21 @@ def map_symbol_to_entity(
     description_parts.append(f"{language.capitalize()} | {file_path}:{symbol.line_start}-{symbol.line_end}")
 
     entity_data: dict[str, Any] = {
-        # LightRAG standard fields (per API convention)
+        # GraphStore standard fields
         "entity_type": symbol.kind,
         "description": " | ".join(description_parts),
         "source_id": f"{file_path}:{symbol.line_start}-{symbol.line_end}",
         "file_path": file_path,
-        # Note: Do NOT include embedding - let LightRAG auto-generate
+        # Embedding is attached by caller when needed (vec0)
     }
 
     return EntityData(entity_name=entity_name, entity_data=entity_data)
 
 
 def map_call_to_relation(call: Call, file_path: str) -> RelationData:
-    """Map codeindex Call to LightRAG relation data.
+    """Map codeindex Call to GraphStore relation payload.
 
-    **LightRAG Convention**:
+    **Payload convention**:
     - keywords: Use for relation_type (e.g., "CALLS")
     - description: Human-readable relation context
 
@@ -168,7 +168,7 @@ def map_call_to_relation(call: Call, file_path: str) -> RelationData:
 def map_inheritance_to_relation(inh: Inheritance, file_path: str) -> RelationData:
     """Map codeindex Inheritance to LightRAG relation data.
 
-    **LightRAG Convention**:
+    **Payload convention**:
     - keywords: Use for relation_type (e.g., "INHERITS")
     - description: Human-readable relation context
 
@@ -207,7 +207,7 @@ def map_import_to_relation(
 
     Creates IMPORTS relations from the importing module/file to the imported module.
 
-    **LightRAG Convention**:
+    **Payload convention**:
     - keywords: Use for relation_type (e.g., "IMPORTS")
     - description: Human-readable import statement
 

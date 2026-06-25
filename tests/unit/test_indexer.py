@@ -10,8 +10,8 @@ from loomgraph.core.indexer import index_file, index_repository, scan_code_files
 from loomgraph.core.models import ParseResult, Symbol
 
 
-class MockLightRAGClient:
-    """Mock LightRAG HTTP client for testing."""
+class MockGraphStore:
+    """Mock GraphStore for testing."""
 
     def __init__(self):
         self.entities: list[dict[str, Any]] = []
@@ -57,9 +57,9 @@ def temp_repo() -> Path:
 
 
 @pytest.fixture
-def mock_client() -> MockLightRAGClient:
-    """Create mock LightRAG client."""
-    return MockLightRAGClient()
+def mock_client() -> MockGraphStore:
+    """Create mock GraphStore."""
+    return MockGraphStore()
 
 
 @pytest.fixture
@@ -129,7 +129,7 @@ class TestIndexRepository:
     async def test_index_repository_basic(
         self,
         temp_repo: Path,
-        mock_client: MockLightRAGClient,
+        mock_client: MockGraphStore,
         mock_parse_file,
     ) -> None:
         """Should index all code files in repository."""
@@ -149,7 +149,7 @@ class TestIndexRepository:
     async def test_index_repository_with_parse_error(
         self,
         temp_repo: Path,
-        mock_client: MockLightRAGClient,
+        mock_client: MockGraphStore,
     ) -> None:
         """Should handle parse errors gracefully."""
         call_count = 0
@@ -187,7 +187,7 @@ class TestIndexRepository:
     async def test_index_repository_progress_callback(
         self,
         temp_repo: Path,
-        mock_client: MockLightRAGClient,
+        mock_client: MockGraphStore,
         mock_parse_file,
     ) -> None:
         """Should call progress callback."""
@@ -218,7 +218,7 @@ class TestIndexFile:
     async def test_index_single_file(
         self,
         temp_repo: Path,
-        mock_client: MockLightRAGClient,
+        mock_client: MockGraphStore,
         mock_parse_file,
     ) -> None:
         """Should index a single file."""
@@ -238,7 +238,7 @@ class TestIndexFile:
     async def test_index_file_with_error(
         self,
         temp_repo: Path,
-        mock_client: MockLightRAGClient,
+        mock_client: MockGraphStore,
     ) -> None:
         """Should handle file parse error."""
         file_path = temp_repo / "src" / "main.py"

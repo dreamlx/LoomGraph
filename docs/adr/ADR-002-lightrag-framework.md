@@ -1,8 +1,12 @@
 # ADR-002: 选择 LightRAG 作为图谱构建框架
 
-**状态**: ✅ 已批准
+**状态**: ❌ Superseded by [ADR-013](ADR-013-sqlite-vec-replace-lightrag.md) (2026-06-25)
 **日期**: 2025-02-03
 **决策者**: DreamLinx
+
+> **v0.10.0 update**: 一年实践后发现 LightRAG 是 layer 错配（它的
+> LLM 实体抽取在代码 AST 层是多此一举）。LightRAG 客户端 + 适配器
+> + 配置全部移除，存储/查询归 SQLite + sqlite-vec。详见 ADR-013。
 
 ---
 
