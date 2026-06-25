@@ -82,6 +82,27 @@ class StorageConfig(BaseSettings):
     db_path: str = "~/.loomgraph/{workspace}.db"
 
 
+class LLMConfig(BaseSettings):
+    """LLM provider configuration (EPIC-011 Phase 4 / ADR-013).
+
+    Phase 1 default is `lightrag` for backward compatibility (overview /
+    impact go through LightRAG's `/query` endpoint). Phase 4 ships
+    `glm` / `openrouter` / `vllm` provider options that bypass LightRAG
+    entirely and speak the OpenAI-compatible chat-completions protocol.
+    Phase 5 drops the `lightrag` option together with the storage backend.
+    """
+
+    provider: Literal["lightrag", "glm", "openrouter", "vllm"] = "lightrag"
+    # OpenAI-compatible endpoint base URL (without /v1/chat/completions).
+    # Default points at H200 GLM-4.7.
+    api_url: str = "http://internal.example.invalid:3000"
+    api_key: str = ""  # Required for OpenRouter; optional for self-hosted
+    model: str = "glm-4-flash"
+    timeout: float = 60.0
+    max_tokens: int = 1024
+    temperature: float = 0.7
+
+
 class RetrievalConfig(BaseSettings):
     """Retrieval configuration."""
 
@@ -116,6 +137,7 @@ class Settings(BaseSettings):
     lightrag: LightRAGConfig = Field(default_factory=LightRAGConfig)
     retrieval: RetrievalConfig = Field(default_factory=RetrievalConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)
+    llm: LLMConfig = Field(default_factory=LLMConfig)
 
 
 # Global settings instance (lazy loaded)

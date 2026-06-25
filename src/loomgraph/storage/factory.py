@@ -58,15 +58,32 @@ async def create_graph_store(workspace: str | None = None) -> GraphStore:
 
 
 def create_llm_client(workspace: str | None = None) -> LLMClient:
-    """Instantiate an LLMClient.
+    """Instantiate an LLMClient per `settings.llm.provider`.
 
-    Phase 1 only ships the LightRAG adapter (mode=local for overview/impact
-    compatibility). Phase 4 adds DirectLLMClient that bypasses LightRAG.
+    - `lightrag`: legacy adapter that routes through LightRAG's `/query`
+      endpoint (mode=local). Maintained for backward compatibility until
+      Phase 5; `workspace` is forwarded so retrieval scope is correct.
+    - `glm` / `openrouter` / `vllm`: DirectLLMClient over OpenAI-compatible
+      `POST /v1/chat/completions`. `workspace` is ignored (no retrieval).
     """
     settings = get_settings()
-    client = LightRAGClient(
-        base_url=settings.lightrag.api_url,
-        timeout=settings.lightrag.api_timeout,
-        workspace=workspace,
+    provider = settings.llm.provider
+
+    if provider == "lightrag":
+        client = LightRAGClient(
+            base_url=settings.lightrag.api_url,
+            timeout=settings.lightrag.api_timeout,
+            workspace=workspace,
+        )
+        return LightRAGLLMClient(client)
+
+    from loomgraph.llm.direct import DirectLLMClient
+
+    return DirectLLMClient(
+        base_url=settings.llm.api_url,
+        model=settings.llm.model,
+        api_key=settings.llm.api_key,
+        timeout=settings.llm.timeout,
+        max_tokens=settings.llm.max_tokens,
+        temperature=settings.llm.temperature,
     )
-    return LightRAGLLMClient(client)
