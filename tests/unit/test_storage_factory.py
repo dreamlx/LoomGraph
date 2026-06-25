@@ -107,12 +107,58 @@ class TestGraphStoreFactory:
 
 
 class TestLLMClientFactory:
-    def test_returns_lightrag_adapter(self) -> None:
+    def test_default_provider_is_lightrag(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("LOOMGRAPH_LLM__PROVIDER", raising=False)
+        from loomgraph.core.config import reset_settings as _reset
+
+        _reset()
         llm = create_llm_client(workspace="ws1")
         assert isinstance(llm, LightRAGLLMClient)
         assert llm.client.workspace == "ws1"
 
-    def test_no_workspace(self) -> None:
+    def test_no_workspace(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("LOOMGRAPH_LLM__PROVIDER", raising=False)
+        from loomgraph.core.config import reset_settings as _reset
+
+        _reset()
         llm = create_llm_client()
         assert isinstance(llm, LightRAGLLMClient)
         assert llm.client.workspace is None
+
+    def test_glm_provider_routes_to_direct(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from loomgraph.llm.direct import DirectLLMClient
+
+        monkeypatch.setenv("LOOMGRAPH_LLM__PROVIDER", "glm")
+        monkeypatch.setenv("LOOMGRAPH_LLM__API_URL", "http://h200:3000")
+        monkeypatch.setenv("LOOMGRAPH_LLM__MODEL", "glm-4-air")
+        llm = create_llm_client()
+        assert isinstance(llm, DirectLLMClient)
+        assert llm.base_url == "http://h200:3000"
+        assert llm.model == "glm-4-air"
+
+    def test_openrouter_provider_routes_to_direct(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from loomgraph.llm.direct import DirectLLMClient
+
+        monkeypatch.setenv("LOOMGRAPH_LLM__PROVIDER", "openrouter")
+        monkeypatch.setenv(
+            "LOOMGRAPH_LLM__API_URL", "https://openrouter.ai/api"
+        )
+        monkeypatch.setenv("LOOMGRAPH_LLM__API_KEY", "sk-test")
+        llm = create_llm_client()
+        assert isinstance(llm, DirectLLMClient)
+        assert llm.api_key == "sk-test"
+
+    def test_vllm_provider_routes_to_direct(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from loomgraph.llm.direct import DirectLLMClient
+
+        monkeypatch.setenv("LOOMGRAPH_LLM__PROVIDER", "vllm")
+        llm = create_llm_client()
+        assert isinstance(llm, DirectLLMClient)
