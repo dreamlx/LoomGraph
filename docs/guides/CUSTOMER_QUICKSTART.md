@@ -61,7 +61,7 @@ loomgraph index .
 ```
 /mo:arch "show me the authentication flow"
 loomgraph find "UserService"
-loomgraph query "how does payment processing work"
+loomgraph graph "UserService.login"
 ```
 
 ---

@@ -620,135 +620,15 @@ class TestFindCommand:
         assert "deprecated" in result.output.lower()
 
 
-class TestQueryCommand:
-    """Tests for the query command (semantic RAG search)."""
+class TestQueryCommandRemoved:
+    """`loomgraph query` was removed in v0.10.0 (EPIC-011 Phase 4)."""
 
-    @patch("loomgraph.cli._search.asyncio.run")
-    def test_query_basic(self, mock_run: MagicMock, runner: CliRunner) -> None:
-        """Test basic query command."""
-        mock_run.return_value = {
-            "query": "How does authentication work?",
-            "mode": "hybrid",
-            "response": "Authentication uses JWT tokens via AuthService.",
-            "workspace": "test-ws",
-        }
-
-        result = runner.invoke(main, ["query", "How does authentication work?"])
-        assert result.exit_code == 0
-
-        data = json.loads(result.stdout)
-        assert data["success"] is True
-        assert data["data"]["mode"] == "hybrid"
-        assert "Authentication" in data["data"]["response"]
-
-    @patch("loomgraph.cli._search.asyncio.run")
-    def test_query_with_mode(self, mock_run: MagicMock, runner: CliRunner) -> None:
-        """Test query with explicit mode."""
-        mock_run.return_value = {
-            "query": "What are the design patterns?",
-            "mode": "global",
-            "response": "The project uses MVC and Repository patterns.",
-            "workspace": "test-ws",
-        }
-
-        result = runner.invoke(main, ["query", "What are the design patterns?", "--mode", "global"])
-        assert result.exit_code == 0
-
-        data = json.loads(result.stdout)
-        assert data["data"]["mode"] == "global"
-
-    @patch("loomgraph.cli._search.asyncio.run", side_effect=ConnectionError("Connection refused"))
-    def test_query_connection_error(self, mock_run: MagicMock, runner: CliRunner) -> None:
-        """Test query error handling for connection failure."""
-        result = runner.invoke(main, ["query", "test question"])
-        assert result.exit_code == 1  # output_error calls sys.exit(1)
-
-        data = json.loads(result.output.strip())
-        assert data["success"] is False
-        assert "Connection" in data["error"]["message"]
-        assert "find" in data["error"]["suggestion"].lower()
-
-    @patch("loomgraph.cli._search.asyncio.run", side_effect=TimeoutError("Request timed out"))
-    def test_query_timeout_error(self, mock_run: MagicMock, runner: CliRunner) -> None:
-        """Test query error handling for timeout."""
-        result = runner.invoke(main, ["query", "test question"])
-        assert result.exit_code == 1
-
-        data = json.loads(result.output.strip())
-        assert data["success"] is False
-        assert "timed out" in data["error"]["message"].lower() or "timeout" in data["error"]["suggestion"].lower()
-
-    def test_query_help(self, runner: CliRunner) -> None:
-        """Test query command help."""
-        result = runner.invoke(main, ["query", "--help"])
-        assert result.exit_code == 0
-        assert "QUESTION" in result.stdout
-        assert "--mode" in result.stdout
-
-
-class TestAsyncQuery:
-    """Tests for _async_query."""
-
-    @patch("loomgraph.cli._search.create_llm_client_for_workspace")
-    @patch("loomgraph.cli._search.prepare_workspace_store")
-    async def test_async_query_hybrid(
-        self,
-        mock_prepare: MagicMock,
-        mock_llm_factory: MagicMock,
-    ) -> None:
-        from loomgraph.llm.lightrag_llm import LightRAGLLMClient
-
-        mock_prepare.return_value = ("test-ws", AsyncMock())
-        mock_llm = AsyncMock(spec=LightRAGLLMClient)
-        mock_llm.complete.return_value = "Auth uses JWT tokens."
-        mock_llm_factory.return_value = mock_llm
-        from loomgraph.cli._search import _async_query
-
-        result = await _async_query("How does auth work?", "hybrid", "test-ws")
-
-        assert result["query"] == "How does auth work?"
-        assert result["mode"] == "hybrid"
-        assert "JWT" in result["response"]
-        assert mock_llm.mode == "hybrid"
-
-    @patch("loomgraph.cli._search.create_llm_client_for_workspace")
-    @patch("loomgraph.cli._search.prepare_workspace_store")
-    async def test_async_query_empty_response(
-        self,
-        mock_prepare: MagicMock,
-        mock_llm_factory: MagicMock,
-    ) -> None:
-        from loomgraph.llm.lightrag_llm import LightRAGLLMClient
-
-        mock_prepare.return_value = ("test-ws", AsyncMock())
-        mock_llm = AsyncMock(spec=LightRAGLLMClient)
-        mock_llm.complete.return_value = ""
-        mock_llm_factory.return_value = mock_llm
-        from loomgraph.cli._search import _async_query
-
-        result = await _async_query("nonexistent topic", "hybrid", "test-ws")
-
-        assert "No relevant information" in result["response"]
-
-    @patch("loomgraph.cli._search.create_llm_client_for_workspace")
-    @patch("loomgraph.cli._search.prepare_workspace_store")
-    async def test_async_query_mode_passed(
-        self,
-        mock_prepare: MagicMock,
-        mock_llm_factory: MagicMock,
-    ) -> None:
-        from loomgraph.llm.lightrag_llm import LightRAGLLMClient
-
-        mock_prepare.return_value = ("test-ws", AsyncMock())
-        mock_llm = AsyncMock(spec=LightRAGLLMClient)
-        mock_llm.complete.return_value = "Global patterns found."
-        mock_llm_factory.return_value = mock_llm
-        from loomgraph.cli._search import _async_query
-
-        await _async_query("patterns?", "global", "test-ws")
-
-        mock_llm.complete.assert_awaited_once_with("patterns?")
-        assert mock_llm.mode == "global"
+    def test_query_command_no_longer_registered(self, runner: CliRunner) -> None:
+        result = runner.invoke(main, ["query", "anything"])
+        # Click reports unknown command via stderr + non-zero exit
+        assert result.exit_code != 0
+        assert "No such command 'query'" in (result.output or "") or \
+               "No such command 'query'" in (result.stderr or "")
 
 
 class TestGraphCommand:

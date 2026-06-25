@@ -1,9 +1,13 @@
 # ADR-010: 搜索体系重构 — find / query / graph 三分
 
-**状态**: ✅ 已批准
+**状态**: ⚠️ 部分被 [ADR-013](ADR-013-sqlite-vec-replace-lightrag.md) Supersede (2026-06-25)
 **日期**: 2026-02-21
 **决策者**: DreamLinx
 **关联**: EPIC-008, ADR-008 (双向调度器), Issue #7 (已关闭)
+
+> **v0.10.0 修订**: `loomgraph query` 命令 v0.10.0 移除（EPIC-011 Phase 4）。
+> `find` / `graph` 的结构化能力保留。理由：一年实践后 Claude Code / Codex /
+> Cursor 已经做好自然语言代码问答，LoomGraph 该聚焦结构精确层。详见 ADR-013。
 
 ---
 
