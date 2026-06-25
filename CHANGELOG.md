@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-06-25 — EPIC-012 Embedding provider 解耦 (Breaking)
+
+### Added
+- `DirectEmbeddingClient` — OpenAI-compatible `POST /v1/embeddings`, single
+  client covers Ollama / OpenAI / Voyage / GLM / vLLM / custom
+- `EmbeddingConfig` 重塑：
+  - `enabled: bool` (default `false`) — embedding 不再自动尝试连接
+  - `provider: ollama | openai | voyage | glm | custom` (default `ollama`)
+  - `api_url`, `api_key`, `model`, `dimension` 可配
+- `SqliteGraphStore(dimension=...)` 参数化 + 启动时 detect mismatch →
+  `SqliteDimensionMismatch` 引导 cold rebuild
+- `storage.factory.create_embedding_client()` 工厂
+- `.loomgraph.yaml` 默认配置示例（embedding 段）
+
+### Removed (Breaking)
+- `JinaEmbeddingClient` / `loomgraph.embedding.jina` 整模块删除
+- `EmbeddingConfig.base_url` 字段 → 重命名为 `api_url`
+- `EmbeddingConfig.provider` 旧值（`jina`/`local`）废弃，新值
+  `ollama`/`openai`/`voyage`/`glm`/`custom`
+- `SqliteGraphStore.VECTOR_DIM` 常量改为 `DEFAULT_VECTOR_DIM`（仍 768）
+
+### Changed
+- `maybe_embed_entities` 改读 `embedding.enabled` 门控
+  （默认 `False` → pipx install 不连任何远端 embedding 服务）
+- 默认 embedding 指向本地 Ollama（`http://localhost:11434/v1`）
+
 ## [0.10.0] - 2026-06-25 — EPIC-011 SQLite + sqlite-vec (Breaking)
 
 ### Added — EPIC-011 SQLite + sqlite-vec backend (Phase 1-5)

@@ -1,4 +1,4 @@
-"""maybe_embed_entities() — caller-side embedding step tests."""
+"""maybe_embed_entities() tests — gated by embedding.enabled, default off."""
 
 from __future__ import annotations
 
@@ -18,10 +18,24 @@ def reset_global_settings() -> None:
     reset_settings()
 
 
-class TestBackendGate:
-    async def test_runs_on_sqlite_backend(
+class TestEnabledGate:
+    async def test_default_disabled_skips(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        monkeypatch.delenv("LOOMGRAPH_EMBEDDING__ENABLED", raising=False)
+        entities: list[dict[str, Any]] = [
+            {"entity_name": "A", "description": "test"}
+        ]
+        with patch(
+            "loomgraph.storage.factory.create_embedding_client"
+        ) as factory:
+            n = await maybe_embed_entities(entities)
+        assert n == 0
+        assert "embedding" not in entities[0]
+        factory.assert_not_called()
+
+    async def test_enabled_runs(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("LOOMGRAPH_EMBEDDING__ENABLED", "true")
         entities: list[dict[str, Any]] = [
             {"entity_name": "A", "description": "test"},
             {"entity_name": "B", "description": "test2"},
@@ -33,7 +47,7 @@ class TestBackendGate:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=None)
         with patch(
-            "loomgraph.embedding.jina.JinaEmbeddingClient",
+            "loomgraph.storage.factory.create_embedding_client",
             return_value=mock_client,
         ):
             n = await maybe_embed_entities(entities)
@@ -46,7 +60,7 @@ class TestFilter:
     async def test_skips_entities_without_description(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("LOOMGRAPH_STORAGE__BACKEND", "sqlite")
+        monkeypatch.setenv("LOOMGRAPH_EMBEDDING__ENABLED", "true")
         entities: list[dict[str, Any]] = [
             {"entity_name": "A"},  # no description
             {"entity_name": "B", "description": "real"},
@@ -58,34 +72,35 @@ class TestFilter:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=None)
         with patch(
-            "loomgraph.embedding.jina.JinaEmbeddingClient",
+            "loomgraph.storage.factory.create_embedding_client",
             return_value=mock_client,
         ):
             n = await maybe_embed_entities(entities)
         assert n == 1
         assert "embedding" not in entities[0]
         assert entities[1]["embedding"] == [0.5] * 768
-        # Only the entity with a description goes to the service
         mock_client.embed.assert_awaited_once_with(["real"])
 
     async def test_skips_already_embedded_entities(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("LOOMGRAPH_STORAGE__BACKEND", "sqlite")
+        monkeypatch.setenv("LOOMGRAPH_EMBEDDING__ENABLED", "true")
         entities: list[dict[str, Any]] = [
             {"entity_name": "A", "description": "x", "embedding": [0.0] * 768},
         ]
-        with patch("loomgraph.embedding.jina.JinaEmbeddingClient") as mock_cls:
+        with patch(
+            "loomgraph.storage.factory.create_embedding_client"
+        ) as factory:
             n = await maybe_embed_entities(entities)
         assert n == 0
-        mock_cls.assert_not_called()
+        factory.assert_not_called()
 
 
 class TestFailureMode:
     async def test_embedding_failure_returns_zero_no_raise(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("LOOMGRAPH_STORAGE__BACKEND", "sqlite")
+        monkeypatch.setenv("LOOMGRAPH_EMBEDDING__ENABLED", "true")
         entities: list[dict[str, Any]] = [
             {"entity_name": "A", "description": "x"},
         ]
@@ -94,7 +109,7 @@ class TestFailureMode:
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=None)
         with patch(
-            "loomgraph.embedding.jina.JinaEmbeddingClient",
+            "loomgraph.storage.factory.create_embedding_client",
             return_value=mock_client,
         ):
             n = await maybe_embed_entities(entities)

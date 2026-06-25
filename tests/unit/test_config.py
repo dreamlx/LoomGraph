@@ -37,12 +37,15 @@ class TestSemanticEnhancementConfig:
 
 
 class TestEmbeddingConfig:
-    """Tests for embedding configuration."""
+    """Tests for embedding configuration (EPIC-012 / Phase 6)."""
 
     def test_default_values(self) -> None:
         config = EmbeddingConfig()
 
-        assert config.provider == "jina"
+        assert config.enabled is False
+        assert config.provider == "ollama"
+        assert config.api_url == "http://localhost:11434/v1"
+        assert config.model == "nomic-embed-text"
         assert config.dimension == 768
         assert config.batch_size == 32
 

@@ -1,4 +1,6 @@
-# Migration Guide — LoomGraph v0.9.x → v0.10.0
+# Migration Guide — LoomGraph v0.9.x → v0.10.0 → v0.11.0
+
+> **v0.11.0 update** (EPIC-012): embedding service decoupled. See [§ v0.11.0 changes](#v0110-embedding-provider-decoupling) at the bottom.
 
 **EPIC-011 / ADR-013**: LightRAG backend removed, replaced by local SQLite + sqlite-vec.
 
@@ -96,3 +98,99 @@ deterministic side.
 See:
 - [ADR-013: SQLite + sqlite-vec replace LightRAG](../adr/ADR-013-sqlite-vec-replace-lightrag.md)
 - [EPIC-011 on GitHub](https://github.com/dreamlx/LoomGraph/issues/31)
+
+---
+
+## v0.11.0 — Embedding provider decoupling
+
+### What changed
+
+| Layer | v0.10.0 | v0.11.0 |
+|---|---|---|
+| Embedding default | Auto-connect H200 Jina TEI (`:3002`) | **Disabled by default** (`embedding.enabled: false`) |
+| Protocol | Jina HF TEI (`POST /embed`) | OpenAI-compatible (`POST /v1/embeddings`) |
+| Provider | Hardcoded Jina | `ollama` (default) / `openai` / `voyage` / `glm` / `vllm` / `custom` |
+| Config key `embedding.base_url` | Present | **Renamed to `api_url`** |
+| Config key `embedding.enabled` | n/a | New, default `false` |
+| Vector dimension | Hardcoded 768 | Configurable; mismatch with existing `.db` raises `SqliteDimensionMismatch` |
+| `JinaEmbeddingClient` | Available | Removed |
+
+### Migration
+
+Existing v0.10.0 deployments default-on to Jina/H200. After upgrading:
+
+```bash
+pipx install --upgrade loomgraph
+```
+
+Edit your `.loomgraph.yaml`:
+
+```yaml
+# Replace this (v0.10.0)
+embedding:
+  provider: jina
+  base_url: http://117.131.45.179:3002
+  model: jinaai/jina-embeddings-v2-base-code
+
+# With this (v0.11.0)
+embedding:
+  enabled: false      # or: true to keep semantic embedding active
+  provider: ollama    # or openai / voyage / glm / custom
+  api_url: http://localhost:11434/v1
+  model: nomic-embed-text
+  dimension: 768
+```
+
+### Switching embedding provider
+
+If you change `dimension` (e.g. switching to OpenAI's 1536-dim model),
+`SqliteGraphStore` will refuse to open the existing `.db` and tell you
+to:
+
+```bash
+loomgraph index --clear .
+```
+
+This is a safety check — vec0 silently retains the original column type
+on `CREATE VIRTUAL TABLE IF NOT EXISTS`, so KNN would return garbage if
+we let the schema drift.
+
+### Provider quick examples
+
+**Ollama (local, default)**
+```bash
+ollama pull nomic-embed-text
+# embedding.enabled: true is enough; defaults work
+```
+
+**OpenAI**
+```yaml
+embedding:
+  enabled: true
+  provider: openai
+  api_url: https://api.openai.com/v1
+  api_key: sk-...
+  model: text-embedding-3-small
+  dimension: 1536
+```
+
+**Voyage AI** (best-in-class for code per Voyage benchmarks)
+```yaml
+embedding:
+  enabled: true
+  provider: voyage
+  api_url: https://api.voyageai.com/v1
+  api_key: pa-...
+  model: voyage-code-2
+  dimension: 1536
+```
+
+**Self-hosted vLLM / TEI in OpenAI mode**
+```yaml
+embedding:
+  enabled: true
+  provider: custom
+  api_url: http://internal-vllm:8000/v1
+  model: jinaai/jina-embeddings-v2-base-code
+  dimension: 768
+```
