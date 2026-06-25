@@ -79,8 +79,8 @@ class CompareAnalyzer:
         ws2: Name of workspace 2
     """
 
-    client1: Any  # LightRAGClient
-    client2: Any  # LightRAGClient
+    client1: Any  # GraphStore
+    client2: Any  # GraphStore
     ws1: str = "ws1"
     ws2: str = "ws2"
 

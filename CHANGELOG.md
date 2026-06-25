@@ -7,7 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added — EPIC-011 SQLite + sqlite-vec backend (Phase 1-4)
+## [0.10.0] - 2026-06-25 — EPIC-011 SQLite + sqlite-vec (Breaking)
+
+### Added — EPIC-011 SQLite + sqlite-vec backend (Phase 1-5)
 - `GraphStore` ABC + `LightRAGGraphStore` adapter + `SqliteGraphStore` with vec0 KNN (Phase 1-2)
 - `storage.factory.create_graph_store(workspace)` per `settings.storage.backend`
 - `LLMClient` ABC + `DirectLLMClient` (OpenAI-compatible chat completions) supporting GLM / OpenRouter / vLLM (Phase 4)
@@ -22,7 +24,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed (Breaking) — v0.10.0
 - **`loomgraph query` command removed**. Natural-language code Q&A is now handled by general-purpose agents (Claude Code / Codex / Cursor). LoomGraph focuses on deterministic `find` / `graph` / `topology`.
-- `core/__init__` no longer re-exports `LightRAGClient` / `LightRAGAPIError` (use `loomgraph.storage` factory instead)
+- **LightRAG client / adapter / config removed** (`core/lightrag_client.py`, `storage/lightrag_store.py`, `llm/lightrag_llm.py`, `LightRAGConfig`, `storage.backend=lightrag`, `llm.provider=lightrag`)
+- **PostgreSQL + pgvector dropped from runtime deps** (`asyncpg`, `pgvector`); `docker-compose.yml` postgres service removed; `scripts/init-db.sql` removed
+- `cli/_common.create_client` / `prepare_workspace_client` (legacy LightRAG helpers)
+- `cli/_indexing.py --lightrag-url` override flag
+- `cli/_deps_check.check_lightrag_api` (replaced with `check_storage` — SQLite + sqlite-vec smoke)
+- `ErrorCode.LIGHTRAG_ERROR` renamed to `STORAGE_ERROR`
+- `ImpactAnalyzer.lightrag_client` / `llm_client` fields → single `store: GraphStore` (deterministic graph traversal, no LLM needed)
+- ADR-001 (PostgreSQL storage) and ADR-002 (LightRAG framework) marked Superseded by ADR-013
 
 ## [0.9.3] - 2026-03-22
 

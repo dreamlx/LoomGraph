@@ -1,8 +1,7 @@
 """GraphStore ABC — backend-agnostic storage contract.
 
-Implementations:
-- LightRAGGraphStore: adapter over the legacy LightRAGClient (Phase 1).
-- SqliteGraphStore: SQLite + sqlite-vec single-file backend (Phase 2+, ADR-013).
+Production implementation: `SqliteGraphStore` (SQLite + sqlite-vec
+single-file backend; see ADR-013).
 """
 
 from __future__ import annotations

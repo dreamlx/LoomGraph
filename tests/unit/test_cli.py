@@ -13,7 +13,7 @@ from click.testing import CliRunner
 from loomgraph.cli.main import (
     ErrorCode,
     check_codeindex,
-    check_lightrag_api,
+    check_storage,
     main,
 )
 
@@ -334,19 +334,22 @@ class TestStatusCommand:
 
     @patch("loomgraph.cli._setup.get_auto_workspace", return_value="testproject:main")
     @patch("loomgraph.cli._setup.check_codeindex")
-    @patch("loomgraph.cli._setup.check_lightrag_api")
+    @patch("loomgraph.cli._setup.check_storage")
     @patch("loomgraph.cli._setup.check_embedding")
     def test_status_all_ok(
         self,
         mock_embedding: MagicMock,
-        mock_lightrag: MagicMock,
+        mock_storage: MagicMock,
         mock_codeindex: MagicMock,
         mock_workspace: MagicMock,
         runner: CliRunner,
     ) -> None:
-        """Test status when all dependencies are available."""
         mock_codeindex.return_value = {"installed": True, "version": "1.0.0"}
-        mock_lightrag.return_value = {"connected": True, "status": "healthy", "version": "1.0.0"}
+        mock_storage.return_value = {
+            "connected": True,
+            "backend": "sqlite",
+            "vec_version": "v0.1.9",
+        }
         mock_embedding.return_value = {"connected": True, "model": "jina"}
 
         result = runner.invoke(main, ["status"])
@@ -360,19 +363,21 @@ class TestStatusCommand:
 
     @patch("loomgraph.cli._setup.get_auto_workspace", return_value="testproject:develop")
     @patch("loomgraph.cli._setup.check_codeindex")
-    @patch("loomgraph.cli._setup.check_lightrag_api")
+    @patch("loomgraph.cli._setup.check_storage")
     @patch("loomgraph.cli._setup.check_embedding")
-    def test_status_lightrag_unavailable(
+    def test_status_storage_unavailable(
         self,
         mock_embedding: MagicMock,
-        mock_lightrag: MagicMock,
+        mock_storage: MagicMock,
         mock_codeindex: MagicMock,
         mock_workspace: MagicMock,
         runner: CliRunner,
     ) -> None:
-        """Test status when LightRAG API is not available."""
         mock_codeindex.return_value = {"installed": True, "version": "1.0.0"}
-        mock_lightrag.return_value = {"connected": False, "error": "connection refused"}
+        mock_storage.return_value = {
+            "connected": False,
+            "error": "sqlite-vec not installed",
+        }
         mock_embedding.return_value = {"connected": True, "model": "jina"}
 
         result = runner.invoke(main, ["status"])
@@ -719,43 +724,16 @@ class TestDependencyChecks:
         assert result["installed"] is True
         assert result["path"] == "/usr/bin/codeindex"
 
-    @patch("httpx.Client")
-    def test_check_lightrag_api_connected(self, mock_client_class: MagicMock) -> None:
-        """Test LightRAG API check when connected."""
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "status": "healthy",
-            "core_version": "1.4.9",
-        }
-        mock_client = MagicMock()
-        mock_client.get.return_value = mock_response
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client_class.return_value = mock_client
-
+    def test_check_storage_smoke(self) -> None:
+        """check_storage opens an in-memory SQLite + loads sqlite-vec."""
         from loomgraph.core.config import get_settings
+
         settings = get_settings()
-        result = check_lightrag_api(settings)
+        result = check_storage(settings)
 
         assert result["connected"] is True
-        assert result["status"] == "healthy"
-
-    @patch("httpx.Client")
-    def test_check_lightrag_api_error(self, mock_client_class: MagicMock) -> None:
-        """Test LightRAG API check when connection fails."""
-        mock_client = MagicMock()
-        mock_client.get.side_effect = Exception("Connection refused")
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-        mock_client_class.return_value = mock_client
-
-        from loomgraph.core.config import get_settings
-        settings = get_settings()
-        result = check_lightrag_api(settings)
-
-        assert result["connected"] is False
-        assert "error" in result
+        assert result["backend"] == "sqlite"
+        assert "vec_version" in result
 
 
 class TestCLIHelp:
@@ -1048,8 +1026,8 @@ class TestOverviewCommand:
                     "name": "src/core",
                     "entity_count": 50,
                     "entities_by_type": {"class": 5, "function": 20},
-                    "top_entities": ["LightRAGClient"],
-                    "files": ["lightrag_client.py"],
+                    "top_entities": ["SqliteGraphStore"],
+                    "files": ["sqlite_store.py"],
                     "summary": "Core engine module",
                 },
             ],

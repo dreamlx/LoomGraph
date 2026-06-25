@@ -285,7 +285,7 @@ class TestImpactAnalyzer:
         mock_client.query = AsyncMock(return_value={"response": ""})
 
         analyzer = ImpactAnalyzer(
-            lightrag_client=mock_client,
+            store=mock_client,
             repo_path=Path("."),
         )
 
@@ -323,7 +323,7 @@ class TestImpactAnalyzer:
         mock_client = MagicMock()
         mock_client.query = AsyncMock(return_value={"response": ""})
 
-        analyzer = ImpactAnalyzer(lightrag_client=mock_client)
+        analyzer = ImpactAnalyzer(store=mock_client)
 
         modules = analyzer._identify_affected_modules(
             symbols=[
@@ -354,7 +354,7 @@ class TestImpactAnalyzer:
         mock_client = MagicMock()
         mock_client.query = AsyncMock(return_value={"response": ""})
 
-        analyzer = ImpactAnalyzer(lightrag_client=mock_client)
+        analyzer = ImpactAnalyzer(store=mock_client)
 
         tests = analyzer._identify_affected_tests(
             direct_callers=[

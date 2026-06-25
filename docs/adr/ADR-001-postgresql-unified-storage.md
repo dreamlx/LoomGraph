@@ -1,8 +1,11 @@
 # ADR-001: 使用 PostgreSQL 统一存储
 
-**状态**: ✅ 已批准
+**状态**: ❌ Superseded by [ADR-013](ADR-013-sqlite-vec-replace-lightrag.md) (2026-06-25)
 **日期**: 2025-02-03
 **决策者**: DreamLinx
+
+> **v0.10.0 update**: PostgreSQL + pgvector 被 SQLite + sqlite-vec
+> 取代。LightRAG 拆除后所有存储归并到单文件 .db。详见 ADR-013。
 
 ---
 
