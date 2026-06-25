@@ -1,19 +1,35 @@
 [project]
 name = "loomgraph"
 version = "0.11.0"
-description = "Enterprise Code Intelligence Engine — SQLite + sqlite-vec knowledge graph for code"
+description = "Local code knowledge graph — SQLite + sqlite-vec, AST-driven, no RAG framework needed"
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "MIT" }
-authors = [{ name = "DreamLinx" }]
-keywords = ["code", "graph", "rag", "embedding", "lightrag", "jina", "h200"]
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "DreamLinx", email = "noreply@github.com" }]
+maintainers = [{ name = "DreamLinx", email = "noreply@github.com" }]
+keywords = [
+    "code-intelligence",
+    "knowledge-graph",
+    "sqlite-vec",
+    "code-analysis",
+    "ast",
+    "embeddings",
+    "vector-search",
+    "claude-code",
+]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development",
+    "Topic :: Software Development :: Code Generators",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Database",
 ]
 
 dependencies = [
@@ -22,8 +38,7 @@ dependencies = [
     "pydantic-settings>=2.0",
     "pyyaml>=6.0",
 
-    # Async
-    "asyncio>=3.4",
+    # Async HTTP (stdlib asyncio is implied, never pin from PyPI)
     "httpx>=0.26",
     "aiofiles>=23.0",
 
@@ -55,15 +70,38 @@ dev = [
 [project.scripts]
 loomgraph = "loomgraph.cli.main:main"
 
+[project.urls]
+Homepage = "https://github.com/dreamlx/LoomGraph"
+Repository = "https://github.com/dreamlx/LoomGraph"
+Documentation = "https://github.com/dreamlx/LoomGraph#readme"
+Changelog = "https://github.com/dreamlx/LoomGraph/blob/main/CHANGELOG.md"
+Issues = "https://github.com/dreamlx/LoomGraph/issues"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/loomgraph"]
+# README_AI.md files are codeindex auto-generated and rotate frequently —
+# they bloat the wheel and aren't useful at runtime.
+exclude = ["**/README_AI.md", "**/PROJECT_SYMBOLS.md"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "skills" = "loomgraph/_skills"
+
+[tool.hatch.build.targets.sdist]
+exclude = [
+    "/customers",
+    "/scripts/package.py",
+    "/docs/epics",
+    "/docs/archive",
+    "/.serena",
+    "/tests/integration",
+    "**/README_AI.md",
+    "**/PROJECT_SYMBOLS.md",
+    "dist/",
+]
 
 # ============== Tool Configurations ==============
 
@@ -112,7 +150,7 @@ disallow_untyped_defs = true
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["asyncpg.*", "pgvector.*"]
+module = ["sqlite_vec.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
