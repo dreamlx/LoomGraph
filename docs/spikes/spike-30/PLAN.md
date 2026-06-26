@@ -54,28 +54,37 @@ modes. Verdict gets reported per class; aggregate verdict gates schema.
 - "Which entities are semantically similar to `<entity Z>` but live in a different module?"
 - Ground truth = hand-picked list of 3-5 entities sharing purpose
 
-**E. Adversarial — graph's known failure modes** (added per review feedback)
+**E. Adversarial — recall failures** (graph false-negatives)
 - E1. **Dynamic dispatch** — "who calls `<method X>` via duck typing / `getattr` / event handler?" — AST extraction misses these; graph returns 0 callers but ground truth has 2-3.
 - E2. **Reflection / metaprogramming** — "find every place that touches `<class Y>` via `__init_subclass__` / decorator / metaclass" — graph misses entirely; README often has prose that mentions it.
 - E3. **Test-only callers** — "who tests `<entity Z>`?" — depending on how tests parse, graph may or may not include test files; ground truth pulls from `tests/`.
 
-If Path B systematically reports "0 / empty" on class E while Path A
-recovers via prose, that's signal the export schema should ship with
-**explicit completeness caveats** — not blocker for固化, but mandatory
-metadata.
+**F. Adversarial — precision failures** (graph false-positives, per review G1)
+> The asymmetric risk: a missing edge makes the agent fall back to
+> reading code (recoverable). A wrong edge with `provenance=AST`
+> stamped on it makes the agent confidently act on bad data
+> (irrecoverable, breaks the trust the schema is meant to confer).
+> Fixing schema固化 to authoritatively transmit wrong data is worse
+> than not固化 at all — this class directly gates #102.
+
+- F1. **Name collision** — codebase has `Foo.bar` in two different modules; trace "who really calls `module_a.Foo.bar` from `module_b`?" Path B must NOT report `module_c.Foo.bar` as a caller.
+- F2. **Alias misresolution** — `import Foo as Bar` patterns + chained re-exports; trace true callee through alias chain.
+- F3. **Same-name method on unrelated classes** — `ServiceA.run()` vs `ServiceB.run()`; graph should resolve to the right one given a call site.
+
+Hallucination metric (§5) misses these because the false-positive
+entity *exists* in the fixture — it's just the wrong one. F-class
+needs its own scorer: "did Path B return an entity that is a real
+collision target, not the intended one?"
 
 ### Distribution
 
-- **6 tasks per class × 5 classes = 30 tasks per fixture**
-- 2 fixtures → **60 tasks total**, up from the 24-task baseline
-- Adversarial class E gets 6, not weighted lower — so a 1/6 E miss is
-  the same weight as a 1/6 A miss in the per-class verdict
-
-This pushes Day-1 labelling to roughly 5h instead of 4h. Still within
-the stop-and-rescope threshold; if it's not, cut to **3 per class per
-fixture = 30 total tasks** (revert to the original budget), keeping
-class E intact (its diagnostic value is bigger than 1 extra task per
-A-D).
+- **6 classes × 3 tasks per class per fixture = 18 tasks/fixture**
+- 2 fixtures → **36 tasks total**
+- Class balance: A-D (graph-favored / README-favored / mixed) +
+  E (recall-adversarial) + F (precision-adversarial) — same weight per
+  class
+- N=3 runs per task × 2 paths × 36 tasks = **216 agent runs**, Haiku
+  budget ~\$8-15
 
 Distribution is **balanced**, not weighted by "real usage" — codeindex
 / loomgraph decide weighting at use. The verdict per class is the
@@ -108,7 +117,8 @@ Each agent run gets:
 |---|---|---|
 | **Correctness** | Exact match on ground-truth answer set; 1.0 / 0.5 partial / 0.0 | Primary signal |
 | **Recall** | `|answer ∩ ground_truth| / |ground_truth|` | Don't reward terse but incomplete answers |
-| **Hallucination rate** | Count of answer entities NOT in fixture | Critical for trust |
+| **Hallucination rate** | Count of answer entities NOT in fixture | Critical for trust on entities |
+| **Misresolution rate** (F-class only) | Count of answer entities that are a real collision target (exist in fixture) but NOT the ground-truth target | Catches the failure mode hallucination misses; gates #102 schema固化 directly |
 | **Tokens spent** | Agent input + output, summed across turns | Secondary, but per `feedback_benchmark_must_grade_quality` cannot be primary |
 | **Wall time** | Seconds from prompt sent to final answer | Secondary |
 
@@ -116,10 +126,36 @@ Each agent run gets:
 
 | Verdict | Definition | Action |
 |---|---|---|
-| 🟢 **GREEN** | Path B (graph) ≥ Path A (README) on **correctness + recall** in **≥3 of 5 task classes**, **including ≥1 of A/B** (impact / call-chain), AND **class E** doesn't reveal catastrophic recall loss (>50% E miss disqualifies GREEN even if A-D win) | Solidify `graph-export` schema; promote loomgraph CLI to first-class export. codeindex 2a flip justified. Schema **must** ship with the E-class completeness caveats discovered. |
-| 🟡 **YELLOW** | Path B wins on **1-2 task classes only** (typically A + B), Path A wins on others | Solidify only the schema fields that the winning classes use (e.g. edges + entity_type). Don't export anything README already covers. |
-| ⚫ **BLACK** | Path B shows **no statistically meaningful lift** on any class; or Path A is within noise on all classes; or **class E reveals graph misses >70% of dynamic-dispatch / reflection cases without any caveat metadata available** | **codeindex ADR-007 should retract graph-export**. loomgraph CLI remains internal. The whole graph-export thesis is wrong, OR the graph is too unreliable to expose without provenance metadata that AST extraction can't produce. |
-| 🔴 **RED** | Either path has correctness <30% → tasks too hard, results uninterpretable | Re-scope task set; spike inconclusive. |
+**Pre-registered effect-size gates** (per review G3 — no post-hoc
+"statistically meaningful" judgments at N=3). All thresholds computed
+on per-task **median across 3 runs**, then aggregated per class as the
+median of task scores.
+
+| Verdict | Pre-registered trigger | Action |
+|---|---|---|
+| 🟢 **GREEN** | Path B beats Path A by **`median(B.correctness) − median(A.correctness) ≥ +0.20`** OR **`recall_B − recall_A ≥ +0.30`** in **≥3 of 6 task classes**, **including ≥1 of A/B** (impact / call-chain), AND **class E miss ≤ 50%**, AND **class F misresolution ≤ 30%** | Solidify `graph-export` schema; promote loomgraph CLI to first-class export. codeindex 2a flip justified. Schema **must** ship with E/F caveats discovered. |
+| 🟡 **YELLOW** | Path B wins on **1-2 task classes only** (typically A + B), Path A wins on others; class E/F within GREEN limits | Solidify only the schema fields the winning classes use (e.g. edges + entity_type). Don't export anything README already covers. Same provenance caveat requirement as GREEN. |
+| ⚫ **BLACK** | **`|median(B) − median(A)| < +0.10` (within noise) on ALL 6 classes** OR **class E miss > 70%** OR **class F misresolution > 50%** | **Scope-limited verdict**: For Haiku-class agent population (≤30B effective params, ≈GPT-4o-mini tier), graph-export does not earn its weight. Stronger agents (Sonnet/Opus tier) on harder real tasks may show different results — this BLACK does not bind decisions for those populations. codeindex schema固化 may proceed for larger-agent target tiers, but NOT for the tier tested here. F-class trigger is the strongest signal: schema would authoritatively transmit wrong data → must not固化 in current form. |
+| 🔴 **RED** | Either path has **correctness < 30%** on ≥3 classes → tasks too hard, results uninterpretable | Re-scope task set; spike inconclusive. |
+
+### Why these specific numbers
+
+- `+0.20` correctness delta = roughly "B gets 1 more partial-credit
+  answer right out of 6 tasks per class" — small but consistent lift
+- `+0.30` recall delta = "B finds 30% more of the ground-truth set" —
+  the recall-friendly gate when correctness is tied
+- `±0.10` aggregate noise band = N=3 typical run-to-run variance
+- Class E `50%/70%` and class F `30%/50%` thresholds are asymmetric on
+  purpose: precision failures (F) are more dangerous than recall
+  failures (E) per the G1 argument
+
+### Scope discipline (per review G2)
+
+This spike measures Haiku-class consumption. A BLACK verdict scoped to
+that tier does NOT close codeindex ADR-007's export path for stronger
+agents — only triggers a re-spike requirement before固化 for those
+tiers. Future spikes targeting Sonnet/Opus would need their own
+pre-registered thresholds; same methodology.
 
 ## 7. Out of scope (explicit)
 
@@ -137,25 +173,23 @@ Each agent run gets:
 
 ## 9. Time-box
 
-- **Day 1** (10 hours max — adversarial class adds 1h labelling):
+- **Day 1** (10 hours max — F-class collision-site hand-finding adds ~1h):
   - Harness scaffold (2h)
-  - **30** hand-labelled tasks with ground truth across 5 classes incl. adversarial (5h)
+  - **36** hand-labelled tasks (6 classes × 3 × 2 fixtures): A-D structural tasks (3h), E-class adversarial recall (1.5h), **F-class collision/alias sites (1.5h — hardest to hand-find)** (6h total)
   - Path A + Path B agent runners (1h)
-  - Smoke run on 1 task per class end-to-end (1.5h)
-  - Buffer (0.5h)
+  - Smoke run on 1 task per class end-to-end (1h)
 - **Day 2** (8 hours max):
-  - Full run (**30 tasks × 2 paths × N=3 = 180 agent runs**); on Haiku ~$6-12 budget
-  - Scoring + judge pass (2h)
+  - Full run (**36 tasks × 2 paths × N=3 = 216 agent runs**); on Haiku ~$8-15 budget
+  - Scoring + per-class verdict against pre-registered thresholds (2h)
   - Report write-up (2h)
   - Comment back on issue #30 + codeindex#102 / #101 threads with verdict tables
 
-### Adversarial class budget impact
+### Stop-and-rescope rule
 
-Class E adds ~$1-2 to model cost (6 extra tasks × 2 paths × 3 runs ×
-~3 turns each). Cumulative Day-1 work goes from 8h → 10h. If Day-1
-overruns past 10h cumulative: cut to **3 per class × 5 classes = 30
-total tasks** (single-fixture loomgraph only). Don't drop class E in
-the cut — its 6 tasks are the highest signal-per-token in the set.
+If Day-1 cumulative work > 10h before all 36 tasks are labelled: cut
+to **single fixture (loomgraph) only** = 18 tasks. Don't drop class E
+or F — they're the highest-signal classes for the gating decision.
+Cutting fixture preserves diagnostic power; cutting class doesn't.
 
 If Day 1 overruns (>10h cumulative): **stop and re-scope**. Likely cut to 1 fixture (loomgraph only).
 
@@ -171,9 +205,18 @@ A reply on LoomGraph#30 containing:
 
 ## Sign-off check before running
 
-- [ ] Fixtures pinned (loomgraph + an internal TS monorepo)
-- [ ] Task count (24) accepted
-- [ ] Agent model (Haiku 4.5) accepted, budget acknowledged (~$5-10)
-- [ ] Verdict palette including BLACK accepted
-- [ ] Time-box 2 days accepted (with Day-1 stop-and-rescope rule)
-- [ ] All 5 critique guards from §8 noted
+- [x] Fixtures pinned (loomgraph + an internal TS monorepo)
+- [x] Task count (36 across 6 classes × 2 fixtures) accepted
+- [x] Agent model (Haiku 4.5) accepted, budget acknowledged (~$8-15)
+- [x] Verdict palette including BLACK accepted, with G2 scope language
+- [x] Time-box 2 days accepted (with Day-1 stop-and-rescope: cut fixture not class)
+- [x] All 5 critique guards from §8 noted
+- [x] **G1** false-positive class F added with own misresolution metric
+- [x] **G2** BLACK scope language explicit (Haiku-tier population, not whole-thesis kill)
+- [x] **G3** pre-registered effect sizes (+0.20 correctness, +0.30 recall, ±0.10 noise band)
+
+## Review trail
+
+- 2026-06-26 — initial PLAN frozen
+- 2026-06-26 — class E (recall adversarial) added per first review pass
+- 2026-06-26 — class F (precision adversarial) + G2 scope + G3 effect sizes added per review G1/G2/G3
