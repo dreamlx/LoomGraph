@@ -1,0 +1,31 @@
+{
+  "task_id": "loomgraph-B-2",
+  "fixture": "loomgraph",
+  "task_class": "B",
+  "subtype": "B1",
+  "prompt": "When `loomgraph index .` runs (cold rebuild), trace the call chain from the click command `index` to the moment knowledge-graph data is actually written to SQLite via `store.insert_custom_kg`. List production loomgraph functions in execution order. Ignore stdlib (asyncio, Path, str, len, enumerate, subprocess), the JSON output helpers (output_success/output_error), and per-file scalar accessors like `c.get`, `path.is_absolute`. One function per line.",
+  "ground_truth": {
+    "expected": [
+      "index",
+      "_async_index_pipeline",
+      "check_codeindex",
+      "get_auto_workspace",
+      "create_graph_store",
+      "collect_kg_data",
+      "build_chunks",
+      "create_external_stubs",
+      "maybe_embed_entities",
+      "store.insert_custom_kg"
+    ],
+    "must_mention": [],
+    "misresolution_traps": [],
+    "notes": "Production write chain on cold index:\n1. `index` (click command) — Validates path, calls check_codeindex pre-flight, runs `asyncio.run(_async_index_pipeline(...))`.\n2. `_async_index_pipeline` — gets workspace name via `get_auto_workspace`, instantiates store via `create_graph_store`, optionally `store.delete_all()` if --clear.\n3. For each parsed file: `collect_kg_data` → entities/relations; `build_chunks` → vec0-bound chunks.\n4. `create_external_stubs` — synthesises placeholder entities for cross-file references not in the parsed set.\n5. `maybe_embed_entities` — caller-side embedding (no-op if `embedding.enabled: false`, which is the v0.11.0 default).\n6. `store.insert_custom_kg` — the actual writer (polymorphic; concrete = SqliteGraphStore.insert_custom_kg).\n\nVerified empirically: `loomgraph graph _async_index_pipeline --direction callees --depth 1` returns these production callees (alongside many stdlib calls the prompt asks the agent to ignore).\n\nAccept `SqliteGraphStore.insert_custom_kg` as terminal in place of `store.insert_custom_kg`."
+  },
+  "rationale": "Class B call-chain tracing on the write path — longest concrete chain in the codebase. Tests filtering noise (the agent must ignore stdlib + non-production calls) and ordering. Path A README_AI for cli/ + storage/ covers each piece in isolation but doesn't show the join order. Path B's callees walk + transitive traversal is precisely the use case.",
+  "sources": [
+    "src/loomgraph/cli/_indexing.py",
+    "src/loomgraph/core/injector.py",
+    "src/loomgraph/cli/_common.py",
+    "src/loomgraph/storage/factory.py"
+  ]
+}
