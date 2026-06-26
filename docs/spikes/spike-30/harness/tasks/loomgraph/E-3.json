@@ -1,0 +1,20 @@
+{
+  "task_id": "loomgraph-E-3",
+  "fixture": "loomgraph",
+  "task_class": "E",
+  "subtype": "E3",
+  "prompt": "Is the class `FakeGraphStore` used anywhere outside of test code in this codebase? If yes, where? If no, say so explicitly.",
+  "ground_truth": {
+    "expected": [],
+    "must_mention": [
+      "no",
+      "test"
+    ],
+    "misresolution_traps": [],
+    "notes": "Class E3 — test-only callers.\n\nFakeGraphStore is defined in tests/unit/test_graph_store_contract.py as the in-memory dict-backed reference implementation of the GraphStore contract. It is ONLY instantiated by tests; no production code in src/loomgraph/ touches it.\n\nThe correct answer: 'No, FakeGraphStore is only used in test code, specifically tests/unit/test_graph_store_contract.py as the reference implementation for the GraphStore contract tests.'\n\nMust mention: 'no' AND 'test' (case-insensitive substring). Both → 1.0; one → 0.5; neither → 0.0.\n\nAdversarial signal: the graph DOES index test files (the loomgraph index . scanned 56 files including tests). So `loomgraph find FakeGraphStore` returns it AND `loomgraph graph FakeGraphStore.create_entity --direction callers` returns test callers. The question is whether the agent correctly interprets all callers being in tests/ as 'no production use' vs hallucinating a production use case.\n\nHallucination trap: if the agent says 'FakeGraphStore is used by inject_parse_result' or similar production function, that's a precision failure even though those entity names exist in the fixture."
+  },
+  "rationale": "Class E3 — test-only callers. Tests whether the agent can distinguish test fixture callers from production callers via source_id prefix inspection. Path B has source_id in find results; Path A's README typically doesn't enumerate test code.",
+  "sources": [
+    "tests/unit/test_graph_store_contract.py"
+  ]
+}
