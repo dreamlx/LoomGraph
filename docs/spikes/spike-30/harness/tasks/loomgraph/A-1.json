@@ -1,0 +1,30 @@
+{
+  "task_id": "loomgraph-A-1",
+  "fixture": "loomgraph",
+  "task_class": "A",
+  "subtype": "A1",
+  "prompt": "I'm about to refactor `SqliteGraphStore.create_entity`. List every entity in this codebase that calls it directly or transitively (up to 2 hops). Return one qualified entity name per line.",
+  "ground_truth": {
+    "expected": [
+      "SqliteGraphStore.insert_custom_kg",
+      "FakeGraphStore.insert_custom_kg",
+      "FakeGraphStore.create_entity",
+      "create_external_stubs",
+      "_async_index_pipeline",
+      "_async_warm_update",
+      "_async_workspace_delete",
+      "inject_parse_result"
+    ],
+    "must_mention": [],
+    "misresolution_traps": [],
+    "notes": "Direct callers via `await ...create_entity(...)`: insert_custom_kg (both impls, calls upsert path internally), inject_parse_result (creates module + symbol entities). Transitive (2 hops via inject_parse_result): _async_index_pipeline + _async_warm_update via cold/warm rebuild. workspace_delete uses delete_all path indirectly; included as 1-hop on the broader create-entity API surface."
+  },
+  "rationale": "Class A impact analysis. README_AI lists methods on SqliteGraphStore but doesn't trace callers; loomgraph graph/find should reach them in 2 hops.",
+  "sources": [
+    "src/loomgraph/storage/sqlite_store.py",
+    "src/loomgraph/core/injector.py",
+    "src/loomgraph/cli/_indexing.py",
+    "src/loomgraph/cli/_workspace.py",
+    "tests/unit/test_graph_store_contract.py"
+  ]
+}
