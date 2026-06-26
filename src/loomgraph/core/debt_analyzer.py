@@ -124,10 +124,10 @@ class DebtAnalyzer:
         Returns:
             True if the function is whitelisted (domain complexity, not debt)
         """
-        for pattern in GOD_FUNCTION_WHITELIST_PATTERNS:
-            if re.match(pattern, entity_name):
-                return True
-        return False
+        return any(
+            re.match(pattern, entity_name)
+            for pattern in GOD_FUNCTION_WHITELIST_PATTERNS
+        )
 
     def import_codeindex_data(self, raw_data: dict[str, Any]) -> CodeindexData:
         """
