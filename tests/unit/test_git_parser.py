@@ -74,7 +74,7 @@ def456|bob|1704154200|feat: add caching
         # This test requires a real git repository
         # Will raise GitError when initializing with non-git dir
         with pytest.raises(GitError):
-            parser = GitLogParser(tmp_path)
+            GitLogParser(tmp_path)
 
     def test_detect_bug_fix_commits(self):
         """Test bug fix detection from commit messages."""
