@@ -34,7 +34,9 @@ The answer gates two downstream decisions:
 
 ## 3. Task classes (frozen)
 
-Four classes that span the README↔graph utility axis:
+Four primary classes spanning the README↔graph utility axis, **plus a
+fifth adversarial class** that probes the graph path's known failure
+modes. Verdict gets reported per class; aggregate verdict gates schema.
 
 **A. Impact analysis** (graph-favored a priori)
 - "If `<entity X>` changes, which other entities are at risk?"
@@ -52,9 +54,32 @@ Four classes that span the README↔graph utility axis:
 - "Which entities are semantically similar to `<entity Z>` but live in a different module?"
 - Ground truth = hand-picked list of 3-5 entities sharing purpose
 
-Distribution is **balanced** (6 tasks per class) — not weighted by "real
-usage", because we don't have real usage data yet. The verdict per
-class is the deliverable; codeindex / loomgraph decide weighting at use.
+**E. Adversarial — graph's known failure modes** (added per review feedback)
+- E1. **Dynamic dispatch** — "who calls `<method X>` via duck typing / `getattr` / event handler?" — AST extraction misses these; graph returns 0 callers but ground truth has 2-3.
+- E2. **Reflection / metaprogramming** — "find every place that touches `<class Y>` via `__init_subclass__` / decorator / metaclass" — graph misses entirely; README often has prose that mentions it.
+- E3. **Test-only callers** — "who tests `<entity Z>`?" — depending on how tests parse, graph may or may not include test files; ground truth pulls from `tests/`.
+
+If Path B systematically reports "0 / empty" on class E while Path A
+recovers via prose, that's signal the export schema should ship with
+**explicit completeness caveats** — not blocker for固化, but mandatory
+metadata.
+
+### Distribution
+
+- **6 tasks per class × 5 classes = 30 tasks per fixture**
+- 2 fixtures → **60 tasks total**, up from the 24-task baseline
+- Adversarial class E gets 6, not weighted lower — so a 1/6 E miss is
+  the same weight as a 1/6 A miss in the per-class verdict
+
+This pushes Day-1 labelling to roughly 5h instead of 4h. Still within
+the stop-and-rescope threshold; if it's not, cut to **3 per class per
+fixture = 30 total tasks** (revert to the original budget), keeping
+class E intact (its diagnostic value is bigger than 1 extra task per
+A-D).
+
+Distribution is **balanced**, not weighted by "real usage" — codeindex
+/ loomgraph decide weighting at use. The verdict per class is the
+deliverable.
 
 ## 4. Harness
 
@@ -91,9 +116,9 @@ Each agent run gets:
 
 | Verdict | Definition | Action |
 |---|---|---|
-| 🟢 **GREEN** | Path B (graph) ≥ Path A (README) on **correctness + recall** in **≥3 of 4 task classes**, including at least one of A/B (impact / call-chain) | Solidify `graph-export` schema; promote loomgraph CLI to first-class export. codeindex 2a flip justified. |
+| 🟢 **GREEN** | Path B (graph) ≥ Path A (README) on **correctness + recall** in **≥3 of 5 task classes**, **including ≥1 of A/B** (impact / call-chain), AND **class E** doesn't reveal catastrophic recall loss (>50% E miss disqualifies GREEN even if A-D win) | Solidify `graph-export` schema; promote loomgraph CLI to first-class export. codeindex 2a flip justified. Schema **must** ship with the E-class completeness caveats discovered. |
 | 🟡 **YELLOW** | Path B wins on **1-2 task classes only** (typically A + B), Path A wins on others | Solidify only the schema fields that the winning classes use (e.g. edges + entity_type). Don't export anything README already covers. |
-| ⚫ **BLACK** | Path B shows **no statistically meaningful lift** on any class; or Path A is within noise on all classes | **codeindex ADR-007 should retract graph-export**. loomgraph CLI remains internal. The whole graph-export thesis is wrong. |
+| ⚫ **BLACK** | Path B shows **no statistically meaningful lift** on any class; or Path A is within noise on all classes; or **class E reveals graph misses >70% of dynamic-dispatch / reflection cases without any caveat metadata available** | **codeindex ADR-007 should retract graph-export**. loomgraph CLI remains internal. The whole graph-export thesis is wrong, OR the graph is too unreliable to expose without provenance metadata that AST extraction can't produce. |
 | 🔴 **RED** | Either path has correctness <30% → tasks too hard, results uninterpretable | Re-scope task set; spike inconclusive. |
 
 ## 7. Out of scope (explicit)
@@ -112,16 +137,25 @@ Each agent run gets:
 
 ## 9. Time-box
 
-- **Day 1** (8 hours max):
+- **Day 1** (10 hours max — adversarial class adds 1h labelling):
   - Harness scaffold (2h)
-  - 24 hand-labelled tasks with ground truth (4h)
+  - **30** hand-labelled tasks with ground truth across 5 classes incl. adversarial (5h)
   - Path A + Path B agent runners (1h)
-  - Smoke run on 1 task each end-to-end (1h)
+  - Smoke run on 1 task per class end-to-end (1.5h)
+  - Buffer (0.5h)
 - **Day 2** (8 hours max):
-  - Full run (24 tasks × 2 paths × N=3 = 144 agent runs); on Haiku ~$5-10 budget
+  - Full run (**30 tasks × 2 paths × N=3 = 180 agent runs**); on Haiku ~$6-12 budget
   - Scoring + judge pass (2h)
   - Report write-up (2h)
-  - Comment back on issue #30, ping codeindex thread
+  - Comment back on issue #30 + codeindex#102 / #101 threads with verdict tables
+
+### Adversarial class budget impact
+
+Class E adds ~$1-2 to model cost (6 extra tasks × 2 paths × 3 runs ×
+~3 turns each). Cumulative Day-1 work goes from 8h → 10h. If Day-1
+overruns past 10h cumulative: cut to **3 per class × 5 classes = 30
+total tasks** (single-fixture loomgraph only). Don't drop class E in
+the cut — its 6 tasks are the highest signal-per-token in the set.
 
 If Day 1 overruns (>10h cumulative): **stop and re-scope**. Likely cut to 1 fixture (loomgraph only).
 
