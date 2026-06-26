@@ -1,0 +1,28 @@
+{
+  "task_id": "loomgraph-F-3",
+  "fixture": "loomgraph",
+  "task_class": "F",
+  "subtype": "F3",
+  "prompt": "Both `SqliteGraphStore` and the in-memory `FakeGraphStore` define a method `create_entity` with the same signature. Which production functions in `src/loomgraph/` (NOT in tests/) actually call `SqliteGraphStore.create_entity` at runtime? List one qualified entity name per line. Do not list functions that call FakeGraphStore.create_entity.",
+  "ground_truth": {
+    "expected": [
+      "inject_parse_result",
+      "SqliteGraphStore.insert_custom_kg"
+    ],
+    "must_mention": [],
+    "misresolution_traps": [
+      "FakeGraphStore.insert_custom_kg",
+      "FakeGraphStore.create_entity",
+      "TestEntityCRUD",
+      "test_create_then_read",
+      "test_create_is_idempotent_upsert"
+    ],
+    "notes": "Class F3 — same-name method on unrelated implementations of the same ABC.\n\nBoth SqliteGraphStore.create_entity and FakeGraphStore.create_entity exist; they share signature `(name, data) -> None` because both implement the GraphStore ABC contract. The production runtime resolves `store.create_entity(...)` to SqliteGraphStore.create_entity via factory.create_graph_store which always returns SqliteGraphStore. FakeGraphStore is only instantiated in test_graph_store_contract.py.\n\nGround truth (production callers of SqliteGraphStore.create_entity at runtime, via polymorphic dispatch through GraphStore ABC):\n- inject_parse_result — calls `client.create_entity(...)` where client is a GraphStore (concrete: Sqlite)\n- SqliteGraphStore.insert_custom_kg — calls self.create_entity in fallback path (rare; the batch path uses executemany directly)\n\nMisresolution traps: FakeGraphStore.insert_custom_kg calls self.create_entity (line 75 of test_graph_store_contract.py), and the various test_create_* test methods call store.create_entity on a FakeGraphStore instance. These are NOT production callers but their entity names ARE in the fixture (the test file is indexed).\n\nThis task is also a known E-class failure mode (polymorphic dispatch, same as E-4). What makes it F3 instead of E: the question is precision-framed — we accept 'no production callers found' as wrong (recall failure) but specifically penalize returning FakeGraphStore-side callers (precision failure). Tests whether the agent reads source_id prefix to distinguish src/ from tests/.\n\nScoring: correctness 1.0 if both expected returned AND no misresolution_traps; 0.5 if at least one expected AND ≤1 trap; 0.0 otherwise."
+  },
+  "rationale": "Class F3 — same-name method via ABC. Compounds the F2 alias risk with the E-class polymorphic dispatch risk. Critical for #102 schema固化 because if export schema can't distinguish SqliteGraphStore.create_entity callers from FakeGraphStore.create_entity callers, it would authoritatively transmit cross-class contamination.",
+  "sources": [
+    "src/loomgraph/storage/sqlite_store.py",
+    "src/loomgraph/core/injector.py",
+    "tests/unit/test_graph_store_contract.py"
+  ]
+}

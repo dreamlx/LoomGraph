@@ -1,0 +1,22 @@
+{
+  "task_id": "loomgraph-C-2",
+  "fixture": "loomgraph",
+  "task_class": "C",
+  "subtype": "C1",
+  "prompt": "In one or two sentences, what does the `TopologyAnalyzer` class do? What kinds of structural code smells does it detect?",
+  "ground_truth": {
+    "expected": [],
+    "must_mention": [
+      "orphan",
+      "hub",
+      "god"
+    ],
+    "misresolution_traps": [],
+    "notes": "Class C single-entity responsibility — README-favored. TopologyAnalyzer.analyze() detects 4 smells (orphan entities, hub fragility, god functions, cross-module coupling). The 3 must_mention terms cover the most distinctive ones; orphan + hub + god is what makes Topology distinct from other analyzers in loomgraph (Debt, Overview, Deps).\n\nThe class docstring describes purpose; README_AI for core/ describes it; Path A has both. Path B can find via `loomgraph find TopologyAnalyzer` then read description, but description is typically a one-liner.\n\nScoring: substring-match on must_mention list. 3/3 → 1.0; 1-2 → 0.5; 0 → 0.0."
+  },
+  "rationale": "Class C — second descriptive-prose task. Different class than C-1 (analyzer vs storage) to reduce sampling bias within class.",
+  "sources": [
+    "src/loomgraph/core/topology.py",
+    "src/loomgraph/core/README_AI.md"
+  ]
+}
