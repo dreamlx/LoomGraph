@@ -50,7 +50,13 @@ def status() -> None:
         suggestions.append(
             "Storage backend unavailable; check sqlite-vec install"
         )
-    if not embedding_status.get("connected"):
+    # Only warn when the user opted into embedding and the service is down.
+    # `enabled: false` is a deliberate choice (the v0.11.0 default), not a
+    # problem worth surfacing.
+    if (
+        embedding_status.get("enabled", True)
+        and not embedding_status.get("connected")
+    ):
         suggestions.append(
             "Embedding service not reachable (semantic search vec0 will be empty)"
         )

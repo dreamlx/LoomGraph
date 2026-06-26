@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.3] - 2026-06-26 — `check_embedding` honors `embedding.enabled`
+
+Patch release. `loomgraph status` no longer probes the embedding URL or
+emits a "service not reachable" warning when the user has explicitly
+set `embedding.enabled: false` (the v0.11.0 default).
+
+### Changed
+- `cli/_deps_check.check_embedding`: short-circuits to `{"enabled": false,
+  "connected": false}` when `settings.embedding.enabled` is false. No HTTP
+  call, no error message. When enabled, response shape gains an `enabled`
+  field so downstream code can distinguish "off by choice" from "off by
+  failure".
+- `cli/_setup.status`: suppresses the "Embedding service not reachable"
+  suggestion when `embedding.enabled` is false. Matches the runtime
+  semantics of `maybe_embed_entities` which has always honored the flag.
+
+### Added
+- 5 regression tests in `test_embedding_disabled.py`: disabled-skips-probe /
+  enabled-still-probes / enabled-but-unreachable-still-warns / status
+  command warning on/off based on enabled flag.
+
 ## [0.11.2] - 2026-06-26 — Graceful stale-config handling
 
 Patch release. Old `.loomgraph.yaml` / `~/.config/loomgraph/config.yaml`

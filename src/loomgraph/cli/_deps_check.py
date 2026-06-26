@@ -56,7 +56,17 @@ def check_storage(settings: Any) -> dict[str, Any]:
 
 
 def check_embedding(settings: Any) -> dict[str, Any]:
-    """Check embedding service availability."""
+    """Check embedding service availability.
+
+    Honors `embedding.enabled` — when disabled (the v0.11.0 default),
+    skip the network probe entirely. The status command no longer
+    warns "embedding service not reachable" for a service the user
+    explicitly turned off. Matches the runtime semantics where
+    `maybe_embed_entities` short-circuits on the same flag.
+    """
+    if not settings.embedding.enabled:
+        return {"enabled": False, "connected": False}
+
     try:
         import httpx
 
@@ -65,12 +75,21 @@ def check_embedding(settings: Any) -> dict[str, Any]:
             response = client.get(f"{settings.embedding.api_url}/health")
         if response.status_code == 200:
             return {
+                "enabled": True,
                 "connected": True,
                 "model": settings.embedding.model,
                 "url": settings.embedding.api_url,
             }
-        return {"connected": False, "error": f"HTTP {response.status_code}"}
+        return {
+            "enabled": True,
+            "connected": False,
+            "error": f"HTTP {response.status_code}",
+        }
     except ImportError:
-        return {"connected": False, "error": "httpx not installed"}
+        return {
+            "enabled": True,
+            "connected": False,
+            "error": "httpx not installed",
+        }
     except Exception as e:
-        return {"connected": False, "error": str(e)}
+        return {"enabled": True, "connected": False, "error": str(e)}
