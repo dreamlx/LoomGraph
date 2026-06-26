@@ -89,8 +89,8 @@ def run(
     run_index: int = 0,
     *,
     client=None,
-    model: str = "claude-haiku-4-5-20251001",
-    max_tokens: int = 1024,
+    model: str = "deepseek-v4-flash",
+    max_tokens: int = 8000,  # DeepSeek v4 is reasoning-style; needs room for thinking + answer
     dry_run: bool = False,
 ) -> AgentRun:
     """Execute Path A for one task.
@@ -144,9 +144,14 @@ def run(
         )
 
     wall = time.perf_counter() - t0
+    # DeepSeek v4 returns interleaved thinking + text blocks. Final answer is
+    # in text blocks. When the model legitimately refuses (e.g. "I cannot
+    # find this in the READMEs, so I will output nothing"), the text block
+    # is empty and we keep it empty — that's a true 0-recall result, not a
+    # bug. Don't fabricate an answer from thinking-tail garble.
     text = "".join(
         block.text for block in response.content if block.type == "text"
-    )
+    ).strip()
 
     return AgentRun(
         task_id=task.task_id,

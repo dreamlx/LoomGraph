@@ -187,8 +187,8 @@ def run(
     run_index: int = 0,
     *,
     client=None,
-    model: str = "claude-haiku-4-5-20251001",
-    max_tokens: int = 1024,
+    model: str = "deepseek-v4-flash",
+    max_tokens: int = 8000,
     dry_run: bool = False,
 ) -> AgentRun:
     """Execute Path B for one task with tool use loop."""
