@@ -136,11 +136,7 @@ def _is_whitelisted_orphan(name: str, source_id: str = "") -> bool:
         return True
 
     # Regex patterns for data classes and DTOs (Config, Result, Info, Error, etc.)
-    for pattern in ORPHAN_REGEX_PATTERNS:
-        if re.match(pattern, class_name):
-            return True
-
-    return False
+    return any(re.match(pattern, class_name) for pattern in ORPHAN_REGEX_PATTERNS)
 
 
 def _entity_name(entity: dict[str, Any]) -> str:

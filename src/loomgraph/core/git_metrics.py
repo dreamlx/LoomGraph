@@ -54,10 +54,10 @@ class GitMetricsAnalyzer:
         Returns:
             True if file matches auto-generated patterns
         """
-        for pattern in AUTOGEN_FILE_PATTERNS:
-            if fnmatch.fnmatch(file_path, pattern):
-                return True
-        return False
+        return any(
+            fnmatch.fnmatch(file_path, pattern)
+            for pattern in AUTOGEN_FILE_PATTERNS
+        )
 
     def analyze(self) -> GitMetricsResult:
         """Run full git metrics analysis.

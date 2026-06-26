@@ -299,9 +299,10 @@ class TestGitMetricsAnalyzer:
 
         analyzer = GitMetricsAnalyzer(tmp_path, since="3 months")
 
-        # This will fail until GitLogParser is implemented
-        with pytest.raises(Exception):
-            result = analyzer.analyze()
+        # This will fail until GitLogParser is implemented (any real error
+        # type from git invocation is acceptable here).
+        with pytest.raises(Exception):  # noqa: B017
+            analyzer.analyze()
 
     def test_empty_git_history(self):
         """Test handling of empty git history (no commits in time window)."""
