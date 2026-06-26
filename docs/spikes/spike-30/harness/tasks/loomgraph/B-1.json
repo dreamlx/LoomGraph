@@ -1,0 +1,25 @@
+{
+  "task_id": "loomgraph-B-1",
+  "fixture": "loomgraph",
+  "task_class": "B",
+  "subtype": "B1",
+  "prompt": "When a user runs `loomgraph find UserService`, what production functions are called between the click command entry point (`find`) and the moment SQLite entity rows are returned? List the function names in call order. One per line. Ignore stdlib calls (asyncio, Path, etc.) and JSON output helpers — only loomgraph production code.",
+  "ground_truth": {
+    "expected": [
+      "find",
+      "_async_find",
+      "prepare_workspace_store",
+      "create_graph_store",
+      "_async_find"
+    ],
+    "must_mention": [],
+    "misresolution_traps": [],
+    "notes": "Production chain on the cold path (workspace store already initialised):\n1. find (click command) — invokes asyncio.run(_async_find(...))\n2. _async_find — calls prepare_workspace_store to resolve workspace + store\n3. prepare_workspace_store — internally calls create_graph_store\n4. create_graph_store — instantiates SqliteGraphStore\n5. _async_find — back in the same function, calls store.get_all_entities() (polymorphic, SqliteGraphStore.get_all_entities at runtime). This is the SQLite SELECT moment.\n\nDuplicate `_async_find` in the expected list is intentional — the chain re-enters _async_find after prepare_workspace_store returns, then performs the actual graph query. An agent that doesn't notice and only lists each unique entity gives 4/5; one that traces flow correctly gives 5/5.\n\nNote on polymorphic dispatch: `store.get_all_entities()` resolves to `SqliteGraphStore.get_all_entities` at runtime but the graph won't show it (same ABC pattern as E-4). For this B task we accept either of {`store.get_all_entities`, `SqliteGraphStore.get_all_entities`, `GraphStore.get_all_entities`} as the terminating step IF the agent mentioned it at all. The expected list above tests the upstream chain; the terminating step is graded permissively.\n\nVerified empirically: `loomgraph graph find --direction callees --depth 1` returns _async_find (among 4 callees, 3 of which are noise per the prompt). Walking _async_find's callees confirms prepare_workspace_store. Walking prepare_workspace_store's callees confirms create_graph_store."
+  },
+  "rationale": "Class B call-chain tracing on a frequently-used CLI command. Chain spans 5 hops across cli boundary into storage factory. Tests whether the agent can filter graph noise (the prompt explicitly says ignore stdlib/output helpers) and walk a directed sequence. Path A README_AI describes each layer in isolation but doesn't draw the call chain.",
+  "sources": [
+    "src/loomgraph/cli/_search.py",
+    "src/loomgraph/cli/_common.py",
+    "src/loomgraph/storage/factory.py"
+  ]
+}
