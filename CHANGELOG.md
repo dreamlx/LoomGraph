@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.2] - 2026-06-26 — Graceful stale-config handling
+
+Patch release. Old `.loomgraph.yaml` / `~/.config/loomgraph/config.yaml`
+files written for v0.9.x or v0.10.x no longer crash the CLI with a
+pydantic stack trace on upgrade.
+
+### Added
+- `ConfigSchemaError` — wraps pydantic `ValidationError` with a single
+  human-readable message and a pointer to the migration guide
+- `cli_entry()` — new user-facing entrypoint that intercepts
+  `ConfigSchemaError` and writes one stderr line + exits 2 (no traceback);
+  `[project.scripts]` now points here
+- 6 regression tests covering legacy `lightrag:` block / renamed
+  `embedding.base_url` / invalid `Literal` values / wrong types / CLI
+  formatter
+
+### Changed
+- Every sub-config (`ASTExtractionConfig`, `SemanticEnhancementConfig`,
+  `IndexingConfig`, `EmbeddingConfig`, `StorageConfig`, `LLMConfig`,
+  `RetrievalConfig`) now sets `model_config = SettingsConfigDict(extra="ignore")`
+  so removed YAML fields (e.g. `embedding.base_url`) are silently dropped
+  rather than raising `extra_forbidden`. Typos in known fields still
+  surface via `ConfigSchemaError`.
+
 ## [0.11.1] - 2026-06-26 — First PyPI publication
 
 First release published to PyPI. Code is identical to v0.11.0; only release
