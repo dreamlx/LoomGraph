@@ -50,5 +50,29 @@ from loomgraph.cli._deps_check import (  # noqa: E402, F401
     check_storage,
 )
 
+
+def cli_entry() -> None:
+    """User-facing entrypoint.
+
+    Wraps click's `main()` so a `ConfigSchemaError` (stale YAML) becomes a
+    single-line stderr message instead of a pydantic stack trace.
+    """
+    import sys
+
+    from loomgraph.core.config import ConfigSchemaError
+
+    try:
+        main(standalone_mode=False)
+    except ConfigSchemaError as exc:
+        sys.stderr.write(f"loomgraph: {exc}\n")
+        sys.exit(2)
+    except click.ClickException as exc:
+        exc.show()
+        sys.exit(exc.exit_code)
+    except click.exceptions.Abort:
+        sys.stderr.write("Aborted!\n")
+        sys.exit(1)
+
+
 if __name__ == "__main__":
-    main()
+    cli_entry()

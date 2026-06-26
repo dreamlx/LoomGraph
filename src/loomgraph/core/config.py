@@ -15,9 +15,17 @@ import yaml
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Every sub-config uses `extra="ignore"` so a stale YAML carried over from
+# v0.9.x or v0.10.x doesn't crash the CLI with a pydantic stack trace.
+# Removed fields (e.g. `lightrag.api_url`, `embedding.base_url`) are silently
+# dropped; user is reminded once via `get_settings()` (see below).
+_IGNORE_EXTRA = SettingsConfigDict(extra="ignore")
+
 
 class ASTExtractionConfig(BaseSettings):
     """AST extraction configuration."""
+
+    model_config = _IGNORE_EXTRA
 
     enabled: bool = True
     chunking: Literal["ast", "token"] = "ast"
@@ -28,6 +36,8 @@ class ASTExtractionConfig(BaseSettings):
 class SemanticEnhancementConfig(BaseSettings):
     """LLM semantic enhancement configuration (disabled in MVP)."""
 
+    model_config = _IGNORE_EXTRA
+
     enabled: bool = False  # MVP default: disabled
     description_generation: bool = False
     pattern_recognition: bool = False
@@ -35,6 +45,8 @@ class SemanticEnhancementConfig(BaseSettings):
 
 class IndexingConfig(BaseSettings):
     """Indexing pipeline configuration."""
+
+    model_config = _IGNORE_EXTRA
 
     ast_extraction: ASTExtractionConfig = Field(default_factory=ASTExtractionConfig)
     semantic_enhancement: SemanticEnhancementConfig = Field(
@@ -61,6 +73,8 @@ class EmbeddingConfig(BaseSettings):
     you to `loomgraph index --clear`.
     """
 
+    model_config = _IGNORE_EXTRA
+
     enabled: bool = False
     provider: Literal["ollama", "openai", "voyage", "glm", "custom"] = "ollama"
     api_url: str = "http://localhost:11434/v1"
@@ -79,6 +93,8 @@ class StorageConfig(BaseSettings):
     removed in v0.10.0 along with the LightRAG client and adapter.
     """
 
+    model_config = _IGNORE_EXTRA
+
     backend: Literal["sqlite"] = "sqlite"
     # Filesystem path template. `{workspace}` is substituted at runtime with
     # the resolved workspace name. `~` is expanded.
@@ -93,6 +109,8 @@ class LLMConfig(BaseSettings):
     transport; `provider` chooses default model + endpoint conventions.
     """
 
+    model_config = _IGNORE_EXTRA
+
     provider: Literal["glm", "openrouter", "vllm"] = "glm"
     # OpenAI-compatible endpoint base URL (without /v1/chat/completions).
     # Default points at H200 GLM-4.7.
@@ -106,6 +124,8 @@ class LLMConfig(BaseSettings):
 
 class RetrievalConfig(BaseSettings):
     """Retrieval configuration."""
+
+    model_config = _IGNORE_EXTRA
 
     modes: list[str] = ["keyword", "semantic", "graph"]
     default_mode: Literal["keyword", "semantic", "graph", "hybrid"] = "hybrid"
@@ -223,6 +243,40 @@ def _remove_env_overrides(
     return result
 
 
+class ConfigSchemaError(RuntimeError):
+    """User-facing config-load failure (clearer than a pydantic stack trace)."""
+
+
+def _format_validation_error(exc: Exception) -> str:
+    """Render a pydantic ValidationError as a friendly migration hint."""
+    lines = [
+        "Failed to load LoomGraph configuration.",
+        "",
+        "Field problems:",
+    ]
+    errors = getattr(exc, "errors", None)
+    if callable(errors):
+        for err in exc.errors():  # type: ignore[attr-defined]
+            loc = ".".join(str(p) for p in err.get("loc", []))
+            msg = err.get("msg", "")
+            lines.append(f"  - {loc}: {msg}")
+    else:
+        lines.append(f"  - {exc}")
+    lines.extend(
+        [
+            "",
+            "This usually means your .loomgraph.yaml or "
+            "~/.config/loomgraph/config.yaml was written for an older release.",
+            "v0.10.0 dropped the `lightrag` section; v0.11.0 renamed "
+            "`embedding.base_url` to `embedding.api_url` and gated "
+            "embedding behind `embedding.enabled`.",
+            "Migration guide: "
+            "https://github.com/dreamlx/LoomGraph/blob/main/docs/guides/migration-v0.10.md",
+        ]
+    )
+    return "\n".join(lines)
+
+
 def get_settings() -> Settings:
     """Get or create global settings instance.
 
@@ -233,18 +287,25 @@ def get_settings() -> Settings:
 
     YAML values are passed as init kwargs to Settings(), but any key
     that has a corresponding env var override is stripped first so that
-    pydantic-settings resolves the env var instead.
+    pydantic-settings resolves the env var instead. Unknown / removed
+    sub-fields are silently ignored (sub-configs use `extra="ignore"`)
+    so an older YAML doesn't crash the CLI; only impossible values
+    (wrong type, invalid Literal) raise ConfigSchemaError.
     """
     global _settings
     if _settings is None:
         yaml_config = load_yaml_config()
 
-        if yaml_config:
-            # Strip YAML keys that have env var overrides
-            filtered = _remove_env_overrides(yaml_config)
-            _settings = Settings(**filtered)
-        else:
-            _settings = Settings()
+        try:
+            if yaml_config:
+                filtered = _remove_env_overrides(yaml_config)
+                _settings = Settings(**filtered)
+            else:
+                _settings = Settings()
+        except Exception as exc:
+            # ValidationError is a pydantic_core.ValidationError; catch broadly
+            # to avoid a hard import dependency on the private module path.
+            raise ConfigSchemaError(_format_validation_error(exc)) from exc
 
     return _settings
 
