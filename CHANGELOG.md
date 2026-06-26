@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-06-26 — First PyPI publication
+
+First release published to PyPI. Code is identical to v0.11.0; only release
+infrastructure was added.
+
+### Added
+- `LICENSE` (MIT) file
+- `pyproject.toml` — `Project-URL` block (Homepage / Repository / Documentation
+  / Changelog / Issues), Topic classifiers, `license-files = ["LICENSE"]` (PEP 639)
+- `.github/workflows/release.yml` — Trusted Publisher OIDC (`pypa/gh-action-pypi-publish@release/v1`),
+  test matrix on Python 3.11/3.12, environment `pypi`
+
+### Changed
+- `pyproject.toml` keywords cleaned: removed `lightrag` / `jina` / `h200`,
+  added `code-intelligence` / `knowledge-graph` / `sqlite-vec` / `ast` /
+  `embeddings` / `vector-search` / `claude-code`
+- Development Status: `3 - Alpha` → `4 - Beta`
+- `description` neutralized for PyPI (was "Enterprise … H200 Optimized GraphRAG")
+- `README.md` rewritten for v0.11.0+ reality (was stuck at v0.9.0 / LightRAG / H200)
+- Wheel/sdist exclude lists: drop `README_AI.md`, `PROJECT_SYMBOLS.md`,
+  `customers/`, `scripts/package.py`, `docs/epics`, `docs/archive`,
+  `tests/integration` (391 KB wheel, 58 entries vs 65 before)
+
+### Removed
+- `asyncio>=3.4` from runtime dependencies (stdlib — listing it as a PyPI
+  package is an anti-pattern that installs a placeholder package of the same
+  name)
+- mypy override for `asyncpg.*` / `pgvector.*` (LightRAG-era leftover);
+  replaced with `sqlite_vec.*`
+
 ## [0.11.0] - 2026-06-25 — EPIC-012 Embedding provider 解耦 (Breaking)
 
 ### Added
