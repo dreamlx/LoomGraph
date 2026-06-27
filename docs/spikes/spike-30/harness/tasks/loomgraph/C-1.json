@@ -1,0 +1,22 @@
+{
+  "task_id": "loomgraph-C-1",
+  "fixture": "loomgraph",
+  "task_class": "C",
+  "subtype": "C1",
+  "prompt": "In one or two sentences, what is `SqliteGraphStore` responsible for in this codebase? What kind of data does it persist, and how does it integrate with the rest of the system? Keep the answer focused — no lists, no code.",
+  "ground_truth": {
+    "expected": [],
+    "must_mention": [
+      "sqlite",
+      "vec0",
+      "GraphStore"
+    ],
+    "misresolution_traps": [],
+    "notes": "Class C single-entity responsibility — README-favored a priori. The class docstring + README_AI for storage/ both describe SqliteGraphStore explicitly. A correct answer mentions:\n- It's the SQLite-backed implementation of the GraphStore abstract contract\n- It uses sqlite-vec (vec0 virtual tables) for vector KNN\n- It holds entities + relations + (vec0) embeddings in a single .db file per workspace\n\nScoring: substring-match on must_mention list (case-insensitive). All 3 required → 1.0; 1-2 → 0.5; 0 → 0.0.\n\nThis is a task where Path A SHOULD do well — README_AI for storage/ describes the class. Path B can find the class via loomgraph_find but has to read the description field, which is shorter than the README prose.\n\nIntentional: tests whether the discriminator we found in A-1 (README staleness) generalizes to descriptive prose tasks. If Path A wins here, README still has value for descriptive content even if it drifts on caller chains."
+  },
+  "rationale": "Class C is README-favored a priori. SqliteGraphStore has substantial docstrings + storage/README_AI coverage. Path A should win or tie; if Path B wins it's a strong signal graph-export needs description field.",
+  "sources": [
+    "src/loomgraph/storage/sqlite_store.py",
+    "src/loomgraph/storage/README_AI.md (auto-generated)"
+  ]
+}

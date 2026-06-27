@@ -1,0 +1,28 @@
+{
+  "task_id": "loomgraph-F-2",
+  "fixture": "loomgraph",
+  "task_class": "F",
+  "subtype": "F2",
+  "prompt": "In `src/loomgraph/core/adapter.py`, the codeindex ParseResult type is imported as `CodeindexParseResult` to avoid name collision with loomgraph's own ParseResult dataclass. List every production callsite that USES the codeindex one (`CodeindexParseResult`), not loomgraph's. One per line.",
+  "ground_truth": {
+    "expected": [
+      "adapt_codeindex_parse_result"
+    ],
+    "must_mention": [],
+    "misresolution_traps": [
+      "inject_parse_result",
+      "inject_parse_results_batch",
+      "index_file",
+      "index_repository",
+      "build_chunks",
+      "collect_kg_data"
+    ],
+    "notes": "Class F2 — alias misresolution.\n\nVerified: in src/loomgraph/core/adapter.py:21 there's `from codeindex.parser import ParseResult as CodeindexParseResult`. The only function that uses this alias is `adapt_codeindex_parse_result()` in the same file — it converts codeindex's external ParseResult to loomgraph's internal ParseResult dataclass.\n\nAll other functions named `*_parse_result*` or that take ParseResult (inject_parse_result, build_chunks, collect_kg_data, index_file, index_repository) use loomgraph's INTERNAL ParseResult (loomgraph.core.models.ParseResult), NOT the codeindex one.\n\nMisresolution traps: those 6 production functions are real, exist in the fixture, and use a type called ParseResult — but the WRONG ParseResult (loomgraph's internal one, not the aliased external one).\n\nIf Path B does `loomgraph_find ParseResult` and returns callers without distinguishing the alias source, it'll surface inject_parse_result et al as 'uses ParseResult'. That's the F2 failure mode: existing-but-wrong entities returned with high confidence.\n\nScoring: correctness 1.0 if `adapt_codeindex_parse_result` returned AND no misresolution_traps; 0.5 if right answer but ≤2 traps; 0.0 otherwise."
+  },
+  "rationale": "Class F2 — alias misresolution. Tests whether the path distinguishes which ParseResult (loomgraph's own vs codeindex's, aliased) a given callsite uses. Graph AST doesn't track import aliases — this is a known precision failure mode that has direct schema implications for #102.",
+  "sources": [
+    "src/loomgraph/core/adapter.py",
+    "src/loomgraph/core/injector.py",
+    "src/loomgraph/core/models.py"
+  ]
+}
