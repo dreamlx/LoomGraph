@@ -154,12 +154,22 @@ def _run_loomgraph(args: list[str], *, cwd: Path, timeout: float = 30.0) -> str:
     )
 
 
+def _workspace_override() -> list[str]:
+    """If SPIKE30_WORKSPACE env var is set, return [-w, <name>] to append
+    to every loomgraph CLI invocation. Used for the round-trip P1 task —
+    flips Path B from querying the auto-detected workspace to a specific
+    imported one without touching production code."""
+    ws = os.environ.get("SPIKE30_WORKSPACE")
+    return ["-w", ws] if ws else []
+
+
 def _dispatch_tool(name: str, args: dict, *, fixture_root: Path) -> str:
+    override = _workspace_override()
     if name == "loomgraph_find":
         cli = ["find", args["query"]]
         if args.get("entity_type"):
             cli += ["--type", args["entity_type"]]
-        cli += ["--limit", "20"]
+        cli += ["--limit", "20", *override]
         return _run_loomgraph(cli, cwd=fixture_root)
     if name == "loomgraph_graph":
         cli = ["graph", args["entity"]]
@@ -167,16 +177,19 @@ def _dispatch_tool(name: str, args: dict, *, fixture_root: Path) -> str:
             cli += ["--direction", args["direction"]]
         if args.get("depth"):
             cli += ["--depth", str(args["depth"])]
+        cli += override
         return _run_loomgraph(cli, cwd=fixture_root)
     if name == "loomgraph_topology":
         cli = ["topology"]
         if args.get("module"):
             cli += ["--module", args["module"]]
+        cli += override
         return _run_loomgraph(cli, cwd=fixture_root)
     if name == "loomgraph_impact":
         cli = ["impact", args["target"]]
         if args.get("depth"):
             cli += ["--depth", str(args["depth"])]
+        cli += override
         return _run_loomgraph(cli, cwd=fixture_root)
     return json.dumps({"success": False, "error": f"unknown tool {name}"})
 
