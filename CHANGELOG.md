@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `loomgraph import-export <artifact>` — consumes a codeindex
+  `graph-export` NDJSON file (codeindex#102 contract) and lands the
+  entities + edges in a workspace. Default workspace name is
+  `<basename>:imported`, isolated from `loomgraph index .` output.
+- `--dry-run` flag on `import-export` — reads + validates + maps
+  without touching storage. Returns the same summary structure the
+  real run would, plus a `would_write` count of intended writes.
+- `loomgraph.io` package — public reader API (`GraphExportReader`,
+  `map_entity`, `map_edge`, `ImportSummary`) for callers that want
+  to consume the format directly without going through the CLI.
+
+### Notes
+- `import-export --clear` defaults to **False** (non-destructive).
+  Workspace contents are preserved unless the flag is passed
+  explicitly. This protects AI agents that may invoke the command
+  without flags.
+- Unresolved edges (where codeindex couldn't resolve a target) are
+  counted in `summary.edge_qualifiers["unresolved"]` but skipped
+  from storage — preserving the completeness statistic without
+  creating a misleading "hub" entity for every unresolved call.
+  Ambiguous edges store the first candidate with the full list
+  preserved in `edge_data["candidates"]`.
+
 ## [0.11.3] - 2026-06-26 — `check_embedding` honors `embedding.enabled`
 
 Patch release. `loomgraph status` no longer probes the embedding URL or
