@@ -1,0 +1,12 @@
+{"task_id": "loomgraph-A-1", "path": "README", "run_index": 0, "correctness": 0.0, "recall": 0.0, "hallucination_count": 0, "misresolution_count": 0, "tokens_total": 2600, "wall_seconds": 26.56594075006433}
+{"task_id": "loomgraph-A-1", "path": "LOOMGRAPH", "run_index": 0, "correctness": 1.0, "recall": 1.0, "hallucination_count": 0, "misresolution_count": 0, "tokens_total": 9414, "wall_seconds": 23.55801875004545}
+{"task_id": "loomgraph-B-1", "path": "README", "run_index": 0, "correctness": 0.5, "recall": 0.5, "hallucination_count": 6, "misresolution_count": 0, "tokens_total": 5525, "wall_seconds": 54.84943983401172}
+{"task_id": "loomgraph-B-1", "path": "LOOMGRAPH", "run_index": 0, "correctness": 0.0, "recall": 0.0, "hallucination_count": 0, "misresolution_count": 0, "tokens_total": 18997, "wall_seconds": 33.8817208330147}
+{"task_id": "loomgraph-C-1", "path": "README", "run_index": 0, "correctness": 0.5, "recall": 0.6666666666666666, "hallucination_count": 1, "misresolution_count": 0, "tokens_total": 441, "wall_seconds": 4.79709962499328}
+{"task_id": "loomgraph-C-1", "path": "LOOMGRAPH", "run_index": 0, "correctness": 0.5, "recall": 0.6666666666666666, "hallucination_count": 0, "misresolution_count": 0, "tokens_total": 4697, "wall_seconds": 9.436870374949649}
+{"task_id": "loomgraph-D-1", "path": "README", "run_index": 0, "correctness": 0.5, "recall": 0.5, "hallucination_count": 0, "misresolution_count": 0, "tokens_total": 1309, "wall_seconds": 12.806312417029403}
+{"task_id": "loomgraph-D-1", "path": "LOOMGRAPH", "run_index": 0, "correctness": 1.0, "recall": 1.0, "hallucination_count": 2, "misresolution_count": 0, "tokens_total": 11413, "wall_seconds": 14.575343542033806}
+{"task_id": "loomgraph-E-1", "path": "README", "run_index": 0, "correctness": 0.0, "recall": 0.0, "hallucination_count": 1, "misresolution_count": 0, "tokens_total": 218, "wall_seconds": 2.389810874941759}
+{"task_id": "loomgraph-E-1", "path": "LOOMGRAPH", "run_index": 0, "correctness": 0.0, "recall": 0.0, "hallucination_count": 0, "misresolution_count": 0, "tokens_total": 9093, "wall_seconds": 16.78772550006397}
+{"task_id": "loomgraph-F-1", "path": "README", "run_index": 0, "correctness": 0.0, "recall": 0.0, "hallucination_count": 2, "misresolution_count": 0, "tokens_total": 1171, "wall_seconds": 12.14228633302264}
+{"task_id": "loomgraph-F-1", "path": "LOOMGRAPH", "run_index": 0, "correctness": 0.0, "recall": 0.0, "hallucination_count": 1, "misresolution_count": 0, "tokens_total": 9712, "wall_seconds": 19.70143716596067}

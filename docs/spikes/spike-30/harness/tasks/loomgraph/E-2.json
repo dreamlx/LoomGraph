@@ -1,0 +1,51 @@
+{
+  "task_id": "loomgraph-E-2",
+  "fixture": "loomgraph",
+  "task_class": "E",
+  "subtype": "E2",
+  "prompt": "The click decorator `@main.command()` registers each decorated function as a CLI subcommand. List the function names in this codebase that are registered as `loomgraph` CLI subcommands via that decorator. One per line.",
+  "ground_truth": {
+    "expected": [
+      "find",
+      "search",
+      "graph",
+      "index",
+      "embed",
+      "inject",
+      "update",
+      "impact",
+      "deps",
+      "overview",
+      "topology",
+      "check",
+      "git_metrics",
+      "trends",
+      "debt",
+      "compare",
+      "similar",
+      "workspace_list",
+      "workspace_info",
+      "workspace_delete",
+      "install_skills",
+      "setup_config",
+      "version",
+      "status",
+      "hooks"
+    ],
+    "must_mention": [],
+    "misresolution_traps": [
+      "query"
+    ],
+    "notes": "Class E2 — reflection / decorator-based registration.\n\nThe agent is asked to list all click-decorated entries. The graph's AST extraction sees the function definitions but the @main.command decorator's dispatch table is metadata — the graph doesn't have a 'is registered as CLI command' edge. README_AI for cli/ DOES enumerate each `def <command>(...)` body but doesn't usually flag which are click-registered vs internal helpers.\n\nFull expected set (25 entries, verified empirically by parsing @main.command + @workspace.command + @hooks.command in src/loomgraph/cli/):\n- _search.py: find, search (hidden alias), graph\n- _indexing.py: index, embed, inject, update\n- _analysis.py: impact, deps, overview, topology, check, git_metrics, trends\n- _debt.py: debt\n- _workspace.py: compare, similar (top-level) + workspace_list, workspace_info, workspace_delete (workspace subgroup)\n- _setup.py: install_skills, setup_config, version, status\n- _hooks.py: hooks group (with install/uninstall/status subcommands — listing just the group is acceptable)\n\nMisresolution trap: `query` was REMOVED in v0.11.0 (the natural-language QA command, removed when LightRAG was removed). If the agent lists `query` as a current CLI command, that's a misresolution failure — the entity doesn't exist in current source. README_AI might still mention `query` if it drifted.\n\nRecall scoring: ≥18/25 → 1.0; ≥8 → 0.5; else 0.0."
+  },
+  "rationale": "Class E2 — decorator-based registration. Graph misses the click command dispatch table because it's runtime metadata. README enumerates commands but doesn't flag which are click-registered. Tests whether either path can recover the full registration set.",
+  "sources": [
+    "src/loomgraph/cli/_search.py",
+    "src/loomgraph/cli/_analysis.py",
+    "src/loomgraph/cli/_indexing.py",
+    "src/loomgraph/cli/_workspace.py",
+    "src/loomgraph/cli/_setup.py",
+    "src/loomgraph/cli/_debt.py",
+    "src/loomgraph/cli/_hooks.py"
+  ]
+}

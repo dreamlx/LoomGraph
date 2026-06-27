@@ -1,0 +1,20 @@
+{
+  "task_id": "loomgraph-C-3",
+  "fixture": "loomgraph",
+  "task_class": "C",
+  "subtype": "C1",
+  "prompt": "What is the purpose of `maybe_embed_entities` in `loomgraph.cli._common`? When does it actually call an embedding service, and when does it short-circuit?",
+  "ground_truth": {
+    "expected": [],
+    "must_mention": [
+      "embedding.enabled",
+      "vec0"
+    ],
+    "misresolution_traps": [],
+    "notes": "Class C on a function (not class). Tests whether README_AI captures function-level intent or only class-level. maybe_embed_entities short-circuits when settings.embedding.enabled is False (the v0.11.0 default); otherwise it calls Jina/Ollama/OpenAI-compatible embedding service and attaches embeddings for vec0 KNN search.\n\nMust mention: 'embedding.enabled' (the gate) and 'vec0' (the destination). Substring match case-insensitive. 2/2 → 1.0; 1 → 0.5; 0 → 0.0.\n\nFunction docstring describes both conditions in the body. README_AI for cli/_common may capture this in less detail than class C-1/C-2 because READMEs typically have less detail per function than per class."
+  },
+  "rationale": "Class C third descriptive task — function-level (vs class-level for C-1/C-2). Tests whether README_AI's function description detail is enough or whether Path B's tool-fetched description wins. Different shape from C-1 (storage class) and C-2 (analyzer class).",
+  "sources": [
+    "src/loomgraph/cli/_common.py"
+  ]
+}

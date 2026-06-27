@@ -1,0 +1,35 @@
+{
+  "task_id": "loomgraph-A-1",
+  "fixture": "loomgraph",
+  "task_class": "A",
+  "subtype": "A1",
+  "prompt": "I'm about to change the signature of `prepare_workspace_store` in `loomgraph.cli._common`. List every entity in this codebase that would need to be updated — direct callers plus their callers (depth 2). Return one qualified entity name per line. Function names only — no source paths, no explanations.",
+  "ground_truth": {
+    "expected": [
+      "_async_find",
+      "_async_graph_query",
+      "_async_impact",
+      "_async_overview",
+      "_async_topology",
+      "_async_check",
+      "_async_deps",
+      "find",
+      "search",
+      "graph",
+      "impact",
+      "overview",
+      "topology",
+      "check",
+      "deps"
+    ],
+    "must_mention": [],
+    "misresolution_traps": [],
+    "notes": "Direct callers (depth 1, 7 entities): _async_find, _async_graph_query, _async_impact, _async_overview, _async_topology, _async_check, _async_deps. All are private query-pipeline functions in cli/_search.py / cli/_analysis.py. Each is called by exactly one click command (depth 2, 8 entities): find/search (both call _async_find — search is the deprecated alias kept around), graph, impact, overview, topology, check, deps. Total set 15. Verified empirically: `loomgraph graph prepare_workspace_store --direction callers --depth 1` returns the 7 _async_*; following each gives the 8 click commands. AST resolution is clean here because callers are plain function calls, no ABC dispatch."
+  },
+  "rationale": "Class A1 impact analysis on a function with concrete AST-resolvable callers. README_AI files describe the cli/ module structure but won't enumerate the full caller chain. loomgraph graph (Path B) can walk it in 2 hops via the tool. This is the cleanest version of 'graph-favored impact analysis' — no polymorphism confound.",
+  "sources": [
+    "src/loomgraph/cli/_common.py",
+    "src/loomgraph/cli/_search.py",
+    "src/loomgraph/cli/_analysis.py"
+  ]
+}
