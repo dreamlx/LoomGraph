@@ -37,9 +37,14 @@ VALID_ENTITY_TYPES = {"class", "function", "method"}
 VALID_EDGE_KINDS = {"CALLS", "INHERITS"}
 VALID_QUALIFIERS = {"resolved", "ambiguous", "unresolved"}
 
-# Sentinel for unresolved edge targets. Consumers must filter on the
-# `resolution_qualifier` field — walking edges by `tgt_id` alone will
-# reach this dead-end and rightly fail.
+# Historic sentinel value — kept exported so external callers calling
+# `map_edge` directly still get a non-`None` return for unresolved
+# records. The package-level `GraphExportReader.read()` SKIPS unresolved
+# edges intentionally (see `_handle_edge`) — the completeness statistic
+# is preserved via `ImportSummary.edge_qualifiers["unresolved"]` instead.
+# Why skip storage: a single sentinel target would make every unresolved
+# call appear to converge on one entity, producing a misleading "hub" in
+# topology analytics.
 UNRESOLVED_SENTINEL = "<unresolved>"
 
 # Highest schema_version this reader supports
@@ -109,22 +114,26 @@ def map_entity(rec: dict) -> EntityData:
 def map_edge(rec: dict) -> RelationData | None:
     """codeindex edge record → loomgraph RelationData.
 
-    Q1=A decision (from LoomGraph#30 round-trip planning): import ALL
-    edges. Surface the qualifier so downstream filtering is explicit.
+    Q1=A decision (from LoomGraph#30 round-trip planning): surface the
+    `resolution_qualifier` for every edge that lands so consumers can
+    apply the trust calculus explicitly.
 
+    Per-qualifier handling:
     - resolved   → src→dst, weight=1.0
     - ambiguous  → src→candidates[0], weight=0.5, full candidate list
                    preserved in edge_data["candidates"]. Does NOT fan
                    out to N parallel edges — that would inflate caller
                    analytics and lie about the underlying ambiguity.
-    - unresolved → src→UNRESOLVED_SENTINEL, weight=0.5. Preserves the
-                   edge for completeness analytics but the placeholder
-                   tgt makes it a dead-end any consumer walking edges
-                   by tgt_id will fail at (failing fast is desirable).
+    - unresolved → returns a relation whose tgt is UNRESOLVED_SENTINEL.
+                   GraphExportReader.read() SKIPS these from the output
+                   list because a single sentinel target would create a
+                   misleading hub. The completeness statistic is
+                   preserved via ImportSummary.edge_qualifiers.
+                   This function is kept callable for direct uses that
+                   want a placeholder relation (e.g. doc generation).
 
     Returns None for malformed records (e.g. ambiguous with no
-    candidates) — those are counted under `skipped_records` in the
-    summary.
+    candidates) — those are counted under `skipped_records`.
     """
     qualifier = rec["resolution_qualifier"]
     kind = rec["kind"]
@@ -280,7 +289,14 @@ class GraphExportReader:
                 f"{rec['resolution_qualifier']!r}"
             )
         summary.edge_kinds[rec["kind"]] += 1
-        summary.edge_qualifiers[rec["resolution_qualifier"]] += 1
+        qualifier = rec["resolution_qualifier"]
+        summary.edge_qualifiers[qualifier] += 1
+
+        # Intentional: unresolved edges are NOT stored — the sentinel
+        # tgt would create a misleading hub. Their count survives in
+        # summary.edge_qualifiers["unresolved"] for completeness analytics.
+        if qualifier == "unresolved":
+            return
 
         mapped = map_edge(rec)
         if mapped is None:

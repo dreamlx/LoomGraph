@@ -151,19 +151,48 @@ def test_map_edge_resolved_without_dst_returns_none():
 # ----- GraphExportReader -------------------------------------------------
 
 def test_reader_round_trips_minimal_artifact(tmp_path: Path):
+    """resolved + ambiguous land; unresolved is counted but skipped from
+    storage (sentinel would create a misleading hub — see export_reader
+    module docstring)."""
     path = _write_ndjson(tmp_path, [MIN_META, *ENTITY_RECORDS, *EDGE_RECORDS])
     entities, relations, summary = GraphExportReader(path).read()
 
     assert len(entities) == 2
-    assert len(relations) == 3
+    assert len(relations) == 2, "unresolved must NOT be in stored relations"
+    qualifiers_stored = {
+        r.edge_data["resolution_qualifier"] for r in relations
+    }
+    assert qualifiers_stored == {"resolved", "ambiguous"}
     assert summary.entity_count == 2
-    assert summary.relation_count == 3
+    assert summary.relation_count == 2
     assert summary.entity_types == {"class": 1, "method": 1}
+    # Completeness stat preserves the unresolved count even though we skipped storage:
     assert summary.edge_qualifiers == {"resolved": 1, "ambiguous": 1, "unresolved": 1}
     assert summary.edge_kinds == {"CALLS": 3}
     assert summary.schema_warnings == []
     assert summary.meta is not None
     assert summary.meta["schema_version"] == 0
+
+
+def test_reader_unresolved_count_is_preserved_even_though_storage_skipped(tmp_path: Path):
+    """Regression guard for Q1=A intent — surface qualifier counts for
+    consumer's trust calculus even when storage drops the edge."""
+    many_unresolved = [
+        {
+            "type": "edge",
+            "kind": "CALLS",
+            "src": ENTITY_RECORDS[1]["id"],
+            "dst": None,
+            "resolution_qualifier": "unresolved",
+            "source_id": f"app/svc.py:{20 + i}",
+        }
+        for i in range(5)
+    ]
+    path = _write_ndjson(tmp_path, [MIN_META, *ENTITY_RECORDS, *many_unresolved])
+    _, relations, summary = GraphExportReader(path).read()
+    assert relations == [], "no unresolved edges stored"
+    assert summary.edge_qualifiers["unresolved"] == 5
+    assert summary.relation_count == 0
 
 
 def test_reader_flags_missing_provenance_completeness(tmp_path: Path):

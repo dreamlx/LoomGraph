@@ -308,6 +308,61 @@ affected_data = json.loads(affected_result)
 
 ---
 
+## 讨论附录: codeindex 侧是否需要新建 git diff 解析器
+
+**结论**: 不需要。codeindex 零改动，全部工作在 LoomGraph 侧。
+
+### 现有能力全景
+
+```bash
+codeindex affected --json              # 已有：返回变更文件列表 + 行数 + 影响目录
+codeindex parse <file> --output json   # 已有：返回单文件完整 ParseResult
+```
+
+`incremental.py` 中的 `get_changed_files()` 已经封装了 `git diff --numstat`，返回 `FileChange` 对象（path, additions, deletions）。post-commit hook 已经在用这套逻辑自动更新 README_AI.md。
+
+### 为什么"符号级 git diff 解析器"不值得做
+
+| 粒度 | 做法 | 耗时 | 收益 |
+|------|------|------|------|
+| 文件级（推荐） | `affected --json` → 已有 | 0 | 覆盖 95% 场景 |
+| 符号级 | 解析旧版+新版 → diff symbols | 几周 | 10MB 图谱规模下收益极小 |
+
+**核心原因**: 瓶颈不在"发现变更"，而在 LightRAG 侧的 embedding + 注入。即使精确到符号级 diff，每个文件仍然需要调用 embedding API（秒级），tree-sitter 解析是毫秒级的。省掉的只是 parse 时间，但 parse 不是瓶颈。
+
+### LoomGraph 侧实际实现
+
+```python
+# loomgraph update --incremental [--since HEAD~1]
+affected = run("codeindex affected --json --since HEAD~1")
+
+for file in affected["files"]:
+    if file.exists():                              # Modified / Added
+        parse_result = run(f"codeindex parse {file} --output json")
+        lightrag.delete_by_source_id(file.path)    # 擦除旧图谱
+        lightrag.inject(parse_result)              # 注入新数据
+    else:                                          # Deleted
+        lightrag.delete_by_source_id(file.path)    # 仅擦除
+```
+
+### 触发层对比
+
+| 触发方式 | 适用场景 | 实现 |
+|---------|---------|------|
+| Post-commit hook | 本地开发，实时更新 | 在现有 hook 中加一行 `loomgraph update --incremental` |
+| GitHub Action | CI/CD，合并到 main 后更新 | 薄壳 wrapper 调用同一个命令 |
+
+两者共用同一个 `loomgraph update --incremental` 命令，触发方式只是 trigger 的差异。GitHub Action 作为 trigger 是合理的，但不应该把逻辑写在 Action YAML 里，而应该调用 LoomGraph CLI。
+
+### 优先级建议
+
+1. **LightRAG 侧**: 先实现 `DELETE /api/entities?source_id=xxx` 端点
+2. **LoomGraph 侧**: 实现 `loomgraph update --incremental`，内部调用 codeindex + LightRAG
+3. **触发层**: GitHub Action（几行 YAML）+ post-commit hook（一行添加）
+4. **codeindex 侧**: 零改动
+
+---
+
 ## 相关文档
 
 - [UPDATE_STRATEGY.md](../architecture/UPDATE_STRATEGY.md) - 更新策略设计
@@ -323,3 +378,4 @@ affected_data = json.loads(affected_result)
 | 2025-02-10 | 0.1 | 初始创建 |
 | 2026-02-21 | 0.2 | Feature-001~003 全部完成，迁移到 insert_custom_kg |
 | 2026-02-22 | 0.3 | 添加 Feature-004~006：GitHub Action + hooks + affected 集成 |
+| 2026-06-03 | 0.4 | 追加讨论附录：codeindex 零改动结论（来源：inbox 笔记） |
