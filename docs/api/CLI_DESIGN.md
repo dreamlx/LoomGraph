@@ -191,6 +191,67 @@ loomgraph inject <parse_json> <embeddings_json> [options]
 
 ---
 
+### 3.5. `loomgraph import-export` - 消费 codeindex graph-export artifact
+
+**用途**: 读取 codeindex `graph-export` 写出的 NDJSON 文件（codeindex#102 契约），把其中的 entities + edges 落入一个 workspace。LoomGraph#30 spike 验证过 round-trip 语义保真。
+
+```bash
+loomgraph import-export <artifact> [options]
+```
+
+**参数**:
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `<artifact>` | codeindex graph-export 产出的 NDJSON 路径 | 必填 |
+| `--workspace`, `-w` | 写入 workspace 名 | `<basename>:imported` |
+| `--clear` / `--no-clear` | 写入前清空 workspace | `false`（非破坏性默认） |
+| `--dry-run` | 只读取 + 校验 + 映射，不写存储 | `false` |
+
+**默认 workspace 命名**: `<artifact-basename>:imported`（`:imported` 后缀避免与 `loomgraph index .` 的 workspace 撞名）
+
+**资格保真**: 每条 edge 的 `resolution_qualifier`（`resolved` / `ambiguous` / `unresolved`）原样保留在 `edge_data` 里，让下游 `find` / `graph` 查询能显式过滤。`unresolved` edges 不入库（避免单一 sentinel target 造成虚假 hub），但 `summary.edge_qualifiers["unresolved"]` 保留完整计数。
+
+**成功输出**（`--dry-run`）:
+```json
+{
+  "success": true,
+  "data": {
+    "workspace": "customer:imported",
+    "artifact": "/tmp/customer.ndjson",
+    "dry_run": true,
+    "summary": {
+      "meta": {"schema_version": 0, "provenance_completeness": "ast-only..."},
+      "entity_count": 2931,
+      "relation_count": 5057,
+      "entity_types": {"class": 541, "function": 655, "method": 1735},
+      "edge_kinds": {"CALLS": 12284, "INHERITS": 30},
+      "edge_qualifiers": {"resolved": 2890, "ambiguous": 2167, "unresolved": 7257},
+      "skipped_records": 0,
+      "schema_warnings": []
+    },
+    "would_write": {"entities": 2931, "relations": 5057}
+  }
+}
+```
+
+**成功输出**（实写）增加 `store_stats`，删去 `dry_run` / `would_write`。
+
+**错误输出**:
+```json
+{
+  "success": false,
+  "error": {
+    "code": "INVALID_INPUT",
+    "message": "Artifact malformed: meta record missing schema_version",
+    "suggestion": "Validate with: head -1 <file> | python3 -m json.tool"
+  }
+}
+```
+
+错误码: `FILE_NOT_FOUND` / `INVALID_INPUT` / `STORAGE_ERROR`
+
+---
+
 ### 4. `loomgraph find` - 结构化实体发现
 
 **用途**: 按名字匹配实体，可选带关系上下文
