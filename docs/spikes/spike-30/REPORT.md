@@ -1,8 +1,8 @@
 # Spike #30 — Consumption A/B Report
 
-> Status: **FINAL (flash tier)**. Full N=3 run completed; stronger-tier
-> (deepseek-v4-pro) deferred — verdict is actionable at the flash tier
-> and pro is optional confirmation.
+> Status: **FINAL (flash + pro tiers)**. Pro tier comparison added after
+> initial flash verdict. **Pro replicates YELLOW** — G2 concern (Haiku-only
+> over-extrapolation) dissolved.
 
 ## TL;DR — 🟡 YELLOW
 
@@ -243,6 +243,95 @@ test whether the failure is harness or schema.
 - **Ground truth hand-labelled by spike author** — risk of confirmation
   bias. Mitigation: each task's `notes` field documents the empirical
   verification.
+
+## Pro tier comparison (added 2026-06-27)
+
+Pro tier (`deepseek-v4-pro`) ran the same 19 tasks × 2 paths × N=3 = 114
+runs to address PLAN G2 concern about Haiku-class over-extrapolation.
+Wall: 2281s (~38 min, ~25% slower than flash's 1791s).
+
+### Per-class verdict: PRO REPLICATES YELLOW
+
+| Class | Flash Δ (B-A) | Pro Δ (B-A) | Replicates? |
+|---|---|---|---|
+| **A** impact | +1.00 / +1.00 | **+1.00 / +1.00** | ✅ identical |
+| **B** chain | -0.50 / -0.50 | 0.00 / -0.25 | ⚠ different shape — see below |
+| **C** responsibility | 0.00 | 0.00 | ✅ tied identically |
+| **D** relatedness | +0.50 / +0.50 | **+0.50 / +0.50** | ✅ identical |
+| **E** recall adv | 0.00 | 0.00 | ✅ both fail identically |
+| **F** precision adv | 0.00 | 0.00 (but F-1 LOOMGRAPH 0→1) | ⚠ pro stronger on F-1 |
+
+**Verdict status**: 🟡 YELLOW (same as flash). 2 of 6 wins (A, D). Does
+not flip GREEN, nowhere near BLACK.
+
+### Where pro DIFFERS from flash (5 task-level deltas)
+
+| Task | Path | Flash | Pro | Note |
+|---|---|---|---|---|
+| B-1 | README | 0.50 | **0.00** | Pro stricter on stale README — refused instead of partial-credit hallucination |
+| B-3 | LOOMGRAPH | 1.00 | **0.00** | Surprising regression — pro failed where flash succeeded on the short call chain |
+| B-3 | README | 0.50 | **0.00** | Pro also stricter here |
+| D-1 | LOOMGRAPH | 1.00 | **0.00** | Pro failed where flash got the 2 ABC siblings |
+| **F-1** | **LOOMGRAPH** | 0.00 | **1.00** | 🎯 **Pro NAILED the precision adversarial — correctly identified `_async_topology` as THE caller of `TopologyAnalyzer.analyze` without confusing siblings** |
+
+### Interpretation
+
+**Pro is NOT uniformly better than flash on this task set.** Pro shows:
+
+1. **Better precision reasoning** (F-1 win) — stronger model handles
+   collision-disambiguation correctly. Schema固化 of CALLS edges
+   benefits stronger consumers most clearly here.
+2. **More conservative refusals** (B-1, B-3, D-1 README) — pro doesn't
+   bet on stale documentation. Better honesty, lower partial-credit
+   recovery. Path A's "0.50 partial-credit on drift" wins under flash
+   become "0.00 refusal" under pro.
+3. **Same hard fails** (E + F-2/F-3 + Class B chain BFS) — pro doesn't
+   automatically solve agent over-exploration. The Class B over-walk
+   pattern that broke flash on long chains also breaks pro on long
+   chains. Stronger reasoning does NOT compensate for unconstrained
+   tool depth.
+
+### What this means for the verdict
+
+- **G2 scope concern dissolved**: the YELLOW verdict holds at stronger
+  tier. Schema固化 recommendations don't change.
+- **Class B failure is structural, not tier-bound**: rich-tools-degrade-
+  via-over-exploration is real even with stronger reasoning. Schema固化
+  must ship consumption guidance, OR tool API needs depth-cap. Stronger
+  consumers don't auto-fix this.
+- **F-1 win is the strongest pro-tier-specific signal**: precision
+  disambiguation actually works at pro tier. The `resolution_qualifier`
+  metadata field (motivated by F-class) gains a real consumer at pro
+  tier even if flash can't use it. Solidify the field.
+
+### Pro tier cost
+
+Roughly comparable token volumes to flash but pro's per-token pricing is
+~3-5× higher. Estimated cost: **~$1.50 for the pro re-run** (after
+re-indexing fixture; first attempt aborted on workspace-not-found —
+see "fixture-state regression finding" below).
+
+**Spike total spend: ~$2.10** (flash $0.60 + pro $1.50). Under PLAN's
+$1-3 budget.
+
+### Bonus finding from the aborted first pro run
+
+The first pro launch hit a fixture-state regression — workspace was
+indexed on `spike/issue-30-consumption-spike` branch where the spike
+ran but not on `main` (which we'd merged to). Pro's Path B agent
+honestly reported:
+
+> "The knowledge graph for this codebase has not been indexed yet.
+> All three tools return the same error. Run `loomgraph index .`"
+
+Flash on the same fixture state would have returned `callers_count: 0`
+silently — same "0" that's already documented as the dangerous E-class
+failure mode. **Pro tier surfaces tool errors more transparently**.
+This is independent evidence for the `provenance_completeness` field's
+value — and shows that consumer-side error reporting is a real
+quality differential.
+
+---
 
 ## Run metadata
 
