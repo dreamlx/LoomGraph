@@ -170,8 +170,14 @@ The full architecture rationale is in
 - v0.10.0 — LightRAG and PostgreSQL removed; local SQLite backend
 - v0.11.0 — Embedding provider decoupled; OpenAI-compatible by default, off by default
 
-460 unit tests passing, ruff clean. Performance and stability tested on
-codebases up to ~100k functions. See [CHANGELOG.md](CHANGELOG.md).
+495 unit tests passing, ruff clean. Dogfood-benchmarked on `loomgraph`
+(10.9k LoC, indexed in 0.88s) and `codeindex` (22.0k LoC, indexed in
+0.93s) with sub-0.4s wall on every query — see
+[docs/benchmarks/dogfood.md](docs/benchmarks/dogfood.md) for the full
+numbers, including round-trip preservation of `codeindex graph-export`
+artifacts (81-85% relation coverage vs direct index). Larger fixture
+benchmarks (Django/FastAPI-scale) are still pending and are an honest
+gap in the README's earlier claims. See [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
