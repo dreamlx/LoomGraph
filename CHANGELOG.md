@@ -19,17 +19,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `map_entity`, `map_edge`, `ImportSummary`) for callers that want
   to consume the format directly without going through the CLI.
 
+### Changed
+- `loomgraph.io.export_reader`: consume the new `dst_raw` field shipped
+  in `ai-codeindex>=0.27.0`. For unresolved edges the reader now uses
+  `dst_raw` (the original call expression, e.g. `os.environ.get`) as
+  the relation's `tgt_id`. Each unresolved edge gets its own distinct
+  target — no more fake hub problem. Round-trip on loomgraph self
+  jumped from 624 → 1883 stored relations (~3×) with verdict-quality
+  unchanged (YELLOW preserved per-class). Older artifacts without
+  `dst_raw` still degrade gracefully: unresolved edges are skipped
+  rather than collapsed onto a sentinel.
+
 ### Notes
 - `import-export --clear` defaults to **False** (non-destructive).
   Workspace contents are preserved unless the flag is passed
   explicitly. This protects AI agents that may invoke the command
   without flags.
-- Unresolved edges (where codeindex couldn't resolve a target) are
-  counted in `summary.edge_qualifiers["unresolved"]` but skipped
-  from storage — preserving the completeness statistic without
-  creating a misleading "hub" entity for every unresolved call.
-  Ambiguous edges store the first candidate with the full list
-  preserved in `edge_data["candidates"]`.
+- Compatibility: validated against `ai-codeindex>=0.27.0` graph-export
+  artifacts. Pre-0.27.0 artifacts continue to load but lose the
+  unresolved-edge coverage above.
 
 ## [0.11.3] - 2026-06-26 — `check_embedding` honors `embedding.enabled`
 
