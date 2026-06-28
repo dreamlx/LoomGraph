@@ -37,14 +37,17 @@ VALID_ENTITY_TYPES = {"class", "function", "method"}
 VALID_EDGE_KINDS = {"CALLS", "INHERITS"}
 VALID_QUALIFIERS = {"resolved", "ambiguous", "unresolved"}
 
-# Historic sentinel value — kept exported so external callers calling
-# `map_edge` directly still get a non-`None` return for unresolved
-# records. The package-level `GraphExportReader.read()` SKIPS unresolved
-# edges intentionally (see `_handle_edge`) — the completeness statistic
-# is preserved via `ImportSummary.edge_qualifiers["unresolved"]` instead.
-# Why skip storage: a single sentinel target would make every unresolved
-# call appear to converge on one entity, producing a misleading "hub" in
-# topology analytics.
+# Historic sentinel for unresolved-edge targets. Pre-0.27.0 (no `dst_raw`
+# in the schema) we'd return this as `tgt_id` for unresolved edges, then
+# skip them at the reader level to avoid creating a fake hub.
+#
+# In `ai-codeindex>=0.27.0` every edge carries `dst_raw` (the original
+# call expression text, e.g. `os.environ.get` for an unresolved external
+# call). The reader uses `dst_raw` as `tgt_id` for unresolved instead —
+# each unresolved edge gets its own distinct target, no fake hub.
+#
+# Kept exported for backwards-compatibility with callers that pre-date
+# 0.27.0 or that hit a record where `dst_raw` is missing.
 UNRESOLVED_SENTINEL = "<unresolved>"
 
 # Highest schema_version this reader supports
@@ -115,25 +118,24 @@ def map_edge(rec: dict) -> RelationData | None:
     """codeindex edge record → loomgraph RelationData.
 
     Q1=A decision (from LoomGraph#30 round-trip planning): surface the
-    `resolution_qualifier` for every edge that lands so consumers can
-    apply the trust calculus explicitly.
+    `resolution_qualifier` for every edge so consumers can apply the
+    trust calculus explicitly.
 
     Per-qualifier handling:
-    - resolved   → src→dst, weight=1.0
+    - resolved   → src→dst, weight=1.0. dst_raw (if present) preserved in
+                   edge_data for display/debug.
     - ambiguous  → src→candidates[0], weight=0.5, full candidate list
-                   preserved in edge_data["candidates"]. Does NOT fan
-                   out to N parallel edges — that would inflate caller
-                   analytics and lie about the underlying ambiguity.
-    - unresolved → returns a relation whose tgt is UNRESOLVED_SENTINEL.
-                   GraphExportReader.read() SKIPS these from the output
-                   list because a single sentinel target would create a
-                   misleading hub. The completeness statistic is
-                   preserved via ImportSummary.edge_qualifiers.
-                   This function is kept callable for direct uses that
-                   want a placeholder relation (e.g. doc generation).
+                   preserved in edge_data["candidates"]. dst_raw kept too.
+                   Does NOT fan out to N parallel edges — that would
+                   inflate caller analytics.
+    - unresolved → src→dst_raw if present (the original call expression,
+                   `ai-codeindex>=0.27.0`), else UNRESOLVED_SENTINEL.
+                   Each unresolved edge gets its own distinct tgt, so no
+                   fake hub forms. Reader stores these (no longer skips).
 
-    Returns None for malformed records (e.g. ambiguous with no
-    candidates) — those are counted under `skipped_records`.
+    Returns None for malformed records (e.g. ambiguous with no candidates,
+    resolved with no dst, unresolved with neither dst_raw nor sentinel
+    fallback).
     """
     qualifier = rec["resolution_qualifier"]
     kind = rec["kind"]
@@ -141,6 +143,7 @@ def map_edge(rec: dict) -> RelationData | None:
     source_id = rec["source_id"]
     candidates = rec.get("candidates") or []
     dst = rec.get("dst")
+    dst_raw = rec.get("dst_raw")
 
     if qualifier == "resolved":
         if not dst:
@@ -151,7 +154,9 @@ def map_edge(rec: dict) -> RelationData | None:
             return None
         tgt_id = candidates[0]
     elif qualifier == "unresolved":
-        tgt_id = UNRESOLVED_SENTINEL
+        # 0.27.0+: use raw call expression as distinct tgt per edge.
+        # Pre-0.27.0 (no dst_raw): fall back to sentinel.
+        tgt_id = dst_raw or UNRESOLVED_SENTINEL
     else:
         return None
 
@@ -164,6 +169,8 @@ def map_edge(rec: dict) -> RelationData | None:
     }
     if candidates:
         edge_data["candidates"] = candidates
+    if dst_raw:
+        edge_data["dst_raw"] = dst_raw
 
     return RelationData(src_id=src, tgt_id=tgt_id, edge_data=edge_data)
 
@@ -292,10 +299,12 @@ class GraphExportReader:
         qualifier = rec["resolution_qualifier"]
         summary.edge_qualifiers[qualifier] += 1
 
-        # Intentional: unresolved edges are NOT stored — the sentinel
-        # tgt would create a misleading hub. Their count survives in
-        # summary.edge_qualifiers["unresolved"] for completeness analytics.
-        if qualifier == "unresolved":
+        # Unresolved edges: in `ai-codeindex>=0.27.0` they carry `dst_raw`
+        # (the original call expression), so we CAN store them — each
+        # gets its own distinct tgt_id. In older artifacts without
+        # `dst_raw` we still skip rather than collapse onto a sentinel
+        # hub that would distort topology analytics.
+        if qualifier == "unresolved" and not rec.get("dst_raw"):
             return
 
         mapped = map_edge(rec)
