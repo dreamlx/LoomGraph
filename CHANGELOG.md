@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-06-29 — MCP server + codeindex 0.27.0 round-trip
+
+Major release. Two big additions: native MCP (Model Context Protocol)
+server for AI-agent tool use, and a fully validated `import-export`
+consumer for codeindex's `graph-export` artifacts (codeindex#102
+contract). Plus a 3× boost in unresolved-edge coverage when consuming
+`ai-codeindex>=0.27.0` artifacts via the new `dst_raw` schema field.
+
+Spike-30 round-trip verdict (🟡 YELLOW) preserved at the stronger
+DeepSeek v4 pro tier; loomgraph + codeindex now form a working
+end-to-end pipeline for real Python codebases up to ~22k LoC
+(documented in `docs/benchmarks/dogfood.md`).
+
 ### Added — MCP server (EPIC-013, v0.12.0)
 - `loomgraph mcp serve` — native Model Context Protocol stdio server
   exposing 8 read-side tools (`find`, `graph`, `topology`, `impact`,
