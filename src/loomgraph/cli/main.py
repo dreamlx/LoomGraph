@@ -32,6 +32,7 @@ from loomgraph.cli import (  # noqa: E402, F401
     _hooks,
     _import_export,
     _indexing,
+    _mcp,
     _search,
     _setup,
     _workspace,
