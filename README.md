@@ -137,14 +137,22 @@ summary mode) calls the LLM; `--no-summary` skips it entirely.
 
 ## Claude Code integration
 
-LoomGraph ships skills for Claude Code (debt audit, sync advisor, evolution).
-After `pipx install loomgraph`, install them into your Claude config:
+LoomGraph speaks **MCP (Model Context Protocol)** natively as of v0.12.0.
+After `pipx install loomgraph` and one-time indexing (`loomgraph index .`):
 
 ```bash
-loomgraph install-skills
+loomgraph mcp install-config --path ~/.claude/mcp.json
 ```
 
-Then in any project: `/loomgraph-debt-radar`, `/loomgraph-sync-advisor`, ...
+Restart Claude Code. `loomgraph_find` / `loomgraph_graph` /
+`loomgraph_topology` / `loomgraph_impact` / `loomgraph_deps` /
+`loomgraph_overview` / `loomgraph_workspace_*` appear as native tools —
+no subprocess overhead, no `/skill-name` invocation. Full reference:
+[docs/api/MCP_DESIGN.md](docs/api/MCP_DESIGN.md).
+
+Legacy skill commands (debt audit, sync advisor, evolution) still ship
+via `loomgraph install-skills` for users who prefer the explicit-invoke
+model.
 
 ## Architecture (v0.11.0+)
 
