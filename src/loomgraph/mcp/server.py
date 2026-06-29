@@ -23,8 +23,13 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
+from loomgraph.mcp.tools import deps as t_deps
 from loomgraph.mcp.tools import find as t_find
 from loomgraph.mcp.tools import graph as t_graph
+from loomgraph.mcp.tools import impact as t_impact
+from loomgraph.mcp.tools import overview as t_overview
+from loomgraph.mcp.tools import topology as t_topology
+from loomgraph.mcp.tools import workspace as t_workspace
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +50,12 @@ def _register(spec: Tool, handler: Any) -> None:
 
 _register(t_find.TOOL_SPEC, t_find.handle)
 _register(t_graph.TOOL_SPEC, t_graph.handle)
+_register(t_topology.TOOL_SPEC, t_topology.handle)
+_register(t_impact.TOOL_SPEC, t_impact.handle)
+_register(t_deps.TOOL_SPEC, t_deps.handle)
+_register(t_overview.TOOL_SPEC, t_overview.handle)
+_register(t_workspace.LIST_SPEC, t_workspace.list_handle)
+_register(t_workspace.INFO_SPEC, t_workspace.info_handle)
 
 
 def build_server() -> Server:
