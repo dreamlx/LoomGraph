@@ -10,7 +10,36 @@ permissions:
   id-token: write    # PyPI Trusted Publisher (OIDC)
 
 jobs:
+  # Fail-fast gate — kill the workflow in <10s if the tag we're releasing
+  # doesn't actually match the version in pyproject.toml / customers/VERSION.
+  # Catches the failure mode that bit v0.12.0 release: tag pushed to a
+  # commit whose pyproject still had the previous version.
+  version-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify tag matches pyproject version
+        run: |
+          set -e
+          TAG_VERSION="${GITHUB_REF#refs/tags/v}"
+          PYPROJECT_VERSION=$(grep -E '^version\s*=' pyproject.toml | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
+          CUSTOMERS_VERSION=$(cat customers/VERSION 2>/dev/null | tr -d ' \n' || echo "")
+          echo "Tag version:        ${TAG_VERSION}"
+          echo "pyproject.toml:     ${PYPROJECT_VERSION}"
+          echo "customers/VERSION:  ${CUSTOMERS_VERSION}"
+          if [ "${TAG_VERSION}" != "${PYPROJECT_VERSION}" ]; then
+            echo "::error::Tag v${TAG_VERSION} does not match pyproject.toml ${PYPROJECT_VERSION}."
+            echo "::error::Run scripts/bump_version.py ${TAG_VERSION} on the release commit, push, then re-tag."
+            exit 1
+          fi
+          if [ -n "${CUSTOMERS_VERSION}" ] && [ "${CUSTOMERS_VERSION}" != "${PYPROJECT_VERSION}" ]; then
+            echo "::error::customers/VERSION ${CUSTOMERS_VERSION} != pyproject.toml ${PYPROJECT_VERSION}."
+            exit 1
+          fi
+
   test:
+    needs: version-check
     runs-on: ubuntu-latest
     strategy:
       matrix:

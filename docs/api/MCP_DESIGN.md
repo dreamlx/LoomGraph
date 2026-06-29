@@ -201,14 +201,21 @@ The MCP protocol is portable. Anything that speaks stdio MCP works:
 
 ## Performance budget
 
-Numbers from a smoke run on the dogfood benchmark workspace
-(`loomgraph-bench:main`, 1300 entities / 2319 relations):
+Numbers measured end-to-end against `loomgraph-bench:main`
+(1300 entities / 2319 relations) on M3 Mac:
 
-| Path | Wall (cold) | Notes |
+| Operation | Wall | Notes |
 |---|---|---|
-| CLI subprocess (`loomgraph find Foo`) | ~240ms | Python startup + Click + SQL |
-| In-process call (`await _async_find(...)`) | ~8ms | bare async + SQL |
-| MCP stdio call | (TODO: measure end-to-end) | adds IPC; expect ~10-15ms |
+| CLI subprocess (`loomgraph find Foo`) | ~240ms | Python startup + Click + SQL each call |
+| MCP `tools/list` | **0.8ms** | server in process, just hands the registry |
+| MCP `tools/call loomgraph_find` (cold — first SQL touch opens DB) | **61ms** | dominated by sqlite-vec extension load + first connection |
+| MCP `tools/call loomgraph_graph` (warm) | **14.8ms** | IPC + SQL only; this is the steady-state cost |
+| MCP error path (unknown tool) | 0.7ms | dispatched in the server, never enters a handler |
+
+vs CLI subprocess: ~**4× speedup cold**, ~**13-16× speedup warm**.
+For agent chains of 5+ tool calls (common in spike-30 traces), the
+amortized win is closer to the upper bound — the DB stays warm across
+calls in the same MCP session.
 
 ## Limitations / known gaps
 
