@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — MCP server (EPIC-013, v0.12.0)
+- `loomgraph mcp serve` — native Model Context Protocol stdio server
+  exposing 8 read-side tools (`find`, `graph`, `topology`, `impact`,
+  `deps`, `overview`, `workspace_list`, `workspace_info`) for AI agents
+  (Claude Code / Codex / Cursor) to call as first-class tools.
+- `loomgraph mcp install-config [--path]` — print or merge the
+  Claude Code MCP config snippet for loomgraph; default location
+  `~/.claude/mcp.json`.
+- `--default-workspace` flag on `mcp serve` plus
+  `LOOMGRAPH_MCP_DEFAULT_WORKSPACE` env var — pin a workspace when
+  the stdio launch dir doesn't carry useful auto-detect signal.
+- `loomgraph.mcp` package — public surface for harnesses that want to
+  embed the MCP server in their own process (e.g. multi-tool
+  aggregators).
+- `docs/api/MCP_DESIGN.md` — full tool reference + setup walkthrough.
+
+### Notes — what MCP is NOT
+- Write tools (`index`, `update`, `import-export`) are intentionally
+  CLI-only. They're slow, mutating, and require `ai-codeindex` on the
+  runtime path. Keeping them out of MCP lets query-only users skip
+  the codeindex install entirely (`pipx install loomgraph` is enough
+  to query an existing workspace via the MCP server).
+
 ### Added
 - `loomgraph import-export <artifact>` — consumes a codeindex
   `graph-export` NDJSON file (codeindex#102 contract) and lands the
