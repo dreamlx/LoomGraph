@@ -23,12 +23,37 @@ from loomgraph.mcp.tools import graph as t_graph
 
 # ---- Registration --------------------------------------------------------
 
-def test_phase1_tools_registered():
-    """Both Phase 1 tools must be discoverable from the registry."""
-    assert "loomgraph_find" in _TOOL_HANDLERS
-    assert "loomgraph_graph" in _TOOL_HANDLERS
+EXPECTED_TOOLS = {
+    "loomgraph_find",
+    "loomgraph_graph",
+    "loomgraph_topology",
+    "loomgraph_impact",
+    "loomgraph_deps",
+    "loomgraph_overview",
+    "loomgraph_workspace_list",
+    "loomgraph_workspace_info",
+}
+
+
+def test_all_read_tools_registered():
+    """Every Phase 1+2 read tool must be discoverable from the registry."""
+    assert set(_TOOL_HANDLERS) >= EXPECTED_TOOLS
     names = {spec.name for spec in _TOOL_SPECS}
-    assert {"loomgraph_find", "loomgraph_graph"}.issubset(names)
+    assert EXPECTED_TOOLS.issubset(names)
+
+
+def test_no_write_tools_exposed():
+    """Per EPIC-013 scope, write-side tools (index/update/import-export)
+    must NOT appear in the MCP surface — they require codeindex on the
+    runtime path and have side effects. This is a regression guard."""
+    forbidden = {
+        "loomgraph_index",
+        "loomgraph_update",
+        "loomgraph_import_export",
+    }
+    assert forbidden.isdisjoint(_TOOL_HANDLERS), (
+        f"Write tools must stay CLI-only: leaked {forbidden & set(_TOOL_HANDLERS)}"
+    )
 
 
 def test_tool_specs_have_required_fields():
@@ -173,3 +198,87 @@ async def test_graph_handler_respects_explicit_direction():
 
     payload = json.loads(contents[0].text)
     assert payload["data"]["direction_seen"] == "callers"
+
+
+# ---- Phase 2 handler smoke tests (mocked) --------------------------------
+
+@pytest.mark.asyncio
+async def test_topology_handler_forwards_thresholds():
+    from loomgraph.mcp.tools import topology as t_topology
+
+    async def fake(**kwargs):
+        return {"hub_count": kwargs["hub_threshold"], "god_count": kwargs["god_threshold"]}
+
+    with patch.object(t_topology, "_async_topology", side_effect=fake):
+        contents = await t_topology.handle(
+            {"hub_threshold": 5, "god_threshold": 8}
+        )
+    payload = json.loads(contents[0].text)
+    assert payload["data"]["hub_count"] == 5
+    assert payload["data"]["god_count"] == 8
+
+
+@pytest.mark.asyncio
+async def test_impact_handler_default_target_is_head():
+    from loomgraph.mcp.tools import impact as t_impact
+
+    async def fake(**kwargs):
+        return {"target_seen": kwargs["target"], "depth_seen": kwargs["depth"]}
+
+    with patch.object(t_impact, "_async_impact", side_effect=fake):
+        contents = await t_impact.handle({})
+    payload = json.loads(contents[0].text)
+    assert payload["data"]["target_seen"] == "HEAD"
+    assert payload["data"]["depth_seen"] == 2
+
+
+@pytest.mark.asyncio
+async def test_deps_handler_passes_depth():
+    from loomgraph.mcp.tools import deps as t_deps
+
+    async def fake(**kwargs):
+        return {"depth_seen": kwargs["depth"]}
+
+    with patch.object(t_deps, "_async_deps", side_effect=fake):
+        contents = await t_deps.handle({"depth": 3})
+    payload = json.loads(contents[0].text)
+    assert payload["data"]["depth_seen"] == 3
+
+
+@pytest.mark.asyncio
+async def test_overview_handler_no_summary_passthrough():
+    from loomgraph.mcp.tools import overview as t_overview
+
+    async def fake(**kwargs):
+        return {"no_summary_seen": kwargs["no_summary"]}
+
+    with patch.object(t_overview, "_async_overview", side_effect=fake):
+        contents = await t_overview.handle({"no_summary": True})
+    payload = json.loads(contents[0].text)
+    assert payload["data"]["no_summary_seen"] is True
+
+
+@pytest.mark.asyncio
+async def test_workspace_list_handler_calls_async_list():
+    from loomgraph.mcp.tools import workspace as t_workspace
+
+    async def fake():
+        return {"workspaces": ["a", "b"], "count": 2}
+
+    with patch.object(t_workspace, "_async_workspace_list", side_effect=fake):
+        contents = await t_workspace.list_handle({})
+    payload = json.loads(contents[0].text)
+    assert payload["data"]["count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_workspace_info_handler_forwards_name():
+    from loomgraph.mcp.tools import workspace as t_workspace
+
+    async def fake(name, ws_option):
+        return {"name_seen": name}
+
+    with patch.object(t_workspace, "_async_workspace_info", side_effect=fake):
+        contents = await t_workspace.info_handle({"name": "proj:main"})
+    payload = json.loads(contents[0].text)
+    assert payload["data"]["name_seen"] == "proj:main"
