@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — release process hardening (post-v0.12.0)
+- `.github/workflows/release.yml`: new `version-check` job (runs before
+  test/build) that fails fast in <10s when the pushed tag doesn't match
+  pyproject.toml's version. Catches the v0.12.0 release scenario where
+  a tag got pushed pointing at a commit that still had the old version.
+- `.githooks/pre-push` + `scripts/install-hooks.sh`: optional local
+  pre-push hook that validates tag-vs-pyproject mismatch BEFORE the
+  push reaches GitHub. CI is the source of truth; the hook just
+  fails faster and shows fix steps inline.
+- `docs/PACKAGING.md`: documents the hook install as a one-time
+  post-clone step.
+
 ## [0.12.0] - 2026-06-29 — MCP server + codeindex 0.27.0 round-trip
 
 Major release. Two big additions: native MCP (Model Context Protocol)
