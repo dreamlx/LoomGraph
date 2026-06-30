@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-06-30
+
+Patch release. Two themes: release-process hardening (post-v0.12.0
+retro), and composite MCP tools that fold the legacy workflow skills
+into native MCP calls.
+
+### Added — composite MCP tools
+- `loomgraph_debt_audit` — full 10-dimension debt audit in one MCP
+  call. Parallel-fans-out across `debt`, `deps`, `overview`, `topology`,
+  `workspace_info`, `check`, git-metrics, and (optional) trends.
+  Replaces the multi-step `/loomgraph-debt-radar` skill with ~10× the
+  speed.
+- `loomgraph_evolution_track` — cross-workspace entity evolution
+  (similar + pairwise compare + per-workspace graph). Replaces
+  `/loomgraph-evolution`.
+- `loomgraph_sync_advice` — upstream/downstream sync analysis
+  (compare + 3-dim debt × 2 workspaces + per-entity impact).
+  Replaces `/loomgraph-sync-advisor`.
+
+Each composite returns `{data, error}` per dimension so the response
+gracefully degrades when a dim can't compute (no git, no historical
+snapshots, missing workspace), rather than failing the whole call.
+
+### Deprecated
+- Skills `loomgraph-debt-radar`, `loomgraph-evolution`,
+  `loomgraph-sync-advisor` deprecated in favor of the composite MCP
+  tools above. Skills remain functional in v0.12.x for backward
+  compat; **scheduled for removal in v0.13.0**. `loomgraph-init` and
+  `loomgraph-setup` are unaffected (they handle setup side-effects
+  that don't belong in MCP).
+
 ### Fixed — release process hardening (post-v0.12.0)
 - `.github/workflows/release.yml`: new `version-check` job (runs before
   test/build) that fails fast in <10s when the pushed tag doesn't match
@@ -18,6 +49,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   fails faster and shows fix steps inline.
 - `docs/PACKAGING.md`: documents the hook install as a one-time
   post-clone step.
+
+### Changed — measured MCP performance
+- `docs/api/MCP_DESIGN.md` replaces the hand-waved 50× speedup
+  estimate with measured numbers: tools/list 0.8ms, find cold 61ms,
+  graph warm 14.8ms vs CLI subprocess ~240ms = 4× cold / 13-16× warm.
 
 ## [0.12.0] - 2026-06-29 — MCP server + codeindex 0.27.0 round-trip
 

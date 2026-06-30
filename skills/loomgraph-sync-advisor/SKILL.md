@@ -5,6 +5,17 @@ disable-model-invocation: true
 argument-hint: "--ws1 <upstream> --ws2 <downstream>"
 ---
 
+> ⚠️ **DEPRECATED in v0.12.1 — will be REMOVED in v0.13.0**
+>
+> Superseded by the MCP tool **`loomgraph_sync_advice`** in
+> `loomgraph>=0.12.1`. Same compose + 3-dim debt + per-entity impact
+> workflow, one parallel MCP call.
+>
+> **Migrate**: configure MCP once
+> (`loomgraph mcp install-config --path ~/.claude/mcp.json`), then ask
+> Claude *"sync advice from proj:main to proj:feature-branch"*. Skill
+> remains functional in v0.12.x for backward compat.
+
 ## 智能同步顾问 v2
 
 上游发了补丁，自动分析对下游分支的影响，给出合并建议和冲突预测。
