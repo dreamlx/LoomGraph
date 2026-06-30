@@ -5,6 +5,17 @@ disable-model-invocation: true
 argument-hint: "--entity <name> [--workspaces ws1,ws2,ws3]"
 ---
 
+> ⚠️ **DEPRECATED in v0.12.1 — will be REMOVED in v0.13.0**
+>
+> Superseded by the MCP tool **`loomgraph_evolution_track`** in
+> `loomgraph>=0.12.1`. Same workflow (cross-workspace similar + pairwise
+> compare + per-workspace graph), one MCP call, parallel.
+>
+> **Migrate**: configure MCP once
+> (`loomgraph mcp install-config --path ~/.claude/mcp.json`), then ask
+> Claude *"track AuthService evolution across proj:v1, proj:v2, proj:v3"*.
+> Skill remains functional in v0.12.x for backward compat.
+
 ## 代码演化观察
 
 追踪代码实体在多个分支/版本间的分叉轨迹，量化维护代价，给出收敛建议。

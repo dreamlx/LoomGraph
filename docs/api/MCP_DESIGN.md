@@ -119,6 +119,78 @@ No arguments. Returns every workspace under `~/.loomgraph/`.
 |---|---|---|---|
 | `name` | string | server default | workspace to inspect |
 
+## Composite tools (v0.12.1)
+
+In addition to the 8 primitive read tools above, three **composite
+tools** were added in v0.12.1 to subsume the legacy workflow skills
+(`/loomgraph-debt-radar`, `/loomgraph-evolution`,
+`/loomgraph-sync-advisor`). Each composite fans out across multiple
+primitives in parallel and returns one structured response — the
+agent composes the prose narrative.
+
+### `loomgraph_debt_audit`
+
+10-dimension debt report in a single MCP call. Replaces
+`/loomgraph-debt-radar`. Runs `debt` + `deps` + `overview` +
+`topology` + `workspace_info` + `check` + (optional) git-metrics +
+(optional) trends-of-top-N-hotspots, all in parallel.
+
+| arg | type | default | desc |
+|---|---|---|---|
+| `source_path` | string | `.` | path passed to git-metrics + freshness check |
+| `with_git` | boolean | true | enable git-history dimensions; auto-disables if not a git repo |
+| `git_since` | string | "3 months" | git history window |
+| `trends_top_n` | integer | 3 | how many top-hotspot files to forecast; 0 to skip |
+| `workspace` | string | server default | — |
+
+Returns:
+```jsonc
+{
+  "workspace": "...",
+  "git_enabled": true,
+  "dimensions": {
+    "debt": {"data": {...}, "error": null},
+    "deps": {"data": {...}, "error": null},
+    "overview": {"data": {...}, "error": null},
+    "topology": {"data": {...}, "error": null},
+    "workspace_info": {"data": {...}, "error": null},
+    "check": {"data": {...}, "error": null},
+    "git_metrics": {"data": {...}, "error": null}    // if git_enabled
+  },
+  "trends": [/* one entry per hotspot */],
+  "summary": {"dimensions_succeeded": 7, "dimensions_attempted": 7, ...}
+}
+```
+
+### `loomgraph_evolution_track`
+
+Cross-workspace entity tracking. Replaces `/loomgraph-evolution`.
+
+| arg | type | default | desc |
+|---|---|---|---|
+| `entity` | string | required | entity name to track (e.g. `AuthService`) |
+| `workspaces` | array<string> | required (≥2) | workspaces in chronological order; adjacent pairs compared |
+
+### `loomgraph_sync_advice`
+
+Upstream/downstream merge advisor. Replaces `/loomgraph-sync-advisor`.
+
+| arg | type | default | desc |
+|---|---|---|---|
+| `upstream` | string | required | source-of-changes workspace |
+| `downstream` | string | required | merge-target workspace |
+| `module` | string | — | optional scope for debt analysis |
+| `git_since` | string | "3 months" | window for `debt --with-git` |
+| `impact_entities` | array<string> | `[]` | entities to do callers-of in downstream |
+
+### Graceful per-dimension degradation
+
+Each composite uses `{data, error}` envelopes per dimension so a
+single failed call doesn't kill the whole report — useful when git
+isn't available, historical snapshots don't exist yet, or a
+workspace is missing one of the dimensions. Top-level `success=true`
+as long as ≥1 dimension produces data.
+
 ## What's NOT exposed (and why)
 
 `index`, `update`, `import-export` are **CLI-only by design**:
