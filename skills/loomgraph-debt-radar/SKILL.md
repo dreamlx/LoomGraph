@@ -5,6 +5,17 @@ disable-model-invocation: true
 argument-hint: "[source-path]"
 ---
 
+> ⚠️ **DEPRECATED in v0.12.1 — will be REMOVED in v0.13.0**
+>
+> Superseded by the MCP tool **`loomgraph_debt_audit`** in `loomgraph>=0.12.1`.
+> The MCP tool runs all dimensions in parallel (~10× faster), guarantees
+> consistent dimension coverage, and lets the agent compose the narrative.
+>
+> **Migrate**: configure `~/.claude/mcp.json` once
+> (`loomgraph mcp install-config --path ~/.claude/mcp.json`), then ask
+> Claude *"audit this codebase's technical debt"* — no `/loomgraph-debt-radar`
+> invocation needed. Skill remains functional in v0.12.x for backward compat.
+
 ## 技术债务审计报告生成（v3 - 十维度全面分析）
 
 一键生成项目技术债务审计报告，结合 codeindex 静态分析、LoomGraph 知识图谱拓扑分析、Git 历史度量和代码腐化趋势预测。
