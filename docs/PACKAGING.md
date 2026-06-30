@@ -4,6 +4,12 @@
 
 LoomGraph 提供两条发布通道：
 
+> **首次 clone 后必跑**: `./scripts/install-hooks.sh` —— 装本地 git
+> pre-push hook，会在 tag push 之前自动校验 tag 名 vs pyproject.toml
+> 版本，杜绝 v0.12.0 release 那次的 tag-on-wrong-commit 事故。CI 端
+> 的 `version-check` job 是兜底，本地 hook 失败更快、错误信息更详细。
+
+
 | 通道 | 适用场景 | 客户体验 |
 |------|----------|----------|
 | **在线** | 可访问 GitHub 的客户 | `pip install git+https://...` 一行安装 |

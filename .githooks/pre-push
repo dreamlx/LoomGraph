@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# pre-push hook — fail fast on version mismatches when pushing release tags.
+#
+# Scenario this guards against:
+#   - You manually edited pyproject.toml from 0.x.y to 0.x.(y+1) but forgot
+#     to run scripts/bump_version.py, so customers/VERSION still says 0.x.y.
+#   - pre-commit hooks block the commit, but `git tag + git push --tags`
+#     bypass them. The tag ends up pointing at a commit whose pyproject
+#     doesn't match the tag name.
+#
+# This hook reads the refs being pushed; for any v*.*.* tag, it asserts:
+#   1. tag name (vX.Y.Z) matches pyproject.toml version (X.Y.Z)
+#   2. customers/VERSION matches if present
+#
+# Install with: scripts/install-hooks.sh
+
+set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+# stdin format per `man githooks`: <local_ref> <local_sha> <remote_ref> <remote_sha>
+while read -r local_ref local_sha remote_ref remote_sha; do
+  # We only care about tag refs that look like a release version.
+  case "$remote_ref" in
+    refs/tags/v[0-9]*) ;;
+    *) continue ;;
+  esac
+
+  tag_name="${remote_ref#refs/tags/}"
+  tag_version="${tag_name#v}"
+
+  # Inspect pyproject.toml AT THE COMMIT THE TAG POINTS AT (local_sha),
+  # not the working tree. Catches the case where main has the right version
+  # but the tag was placed on an older commit.
+  pyproject_version=$(
+    git show "${local_sha}:pyproject.toml" 2>/dev/null \
+      | grep -E '^version\s*=' | head -1 \
+      | sed -E 's/.*"([^"]+)".*/\1/' \
+    || echo ""
+  )
+  customers_version=$(
+    git show "${local_sha}:customers/VERSION" 2>/dev/null \
+      | tr -d ' \n' || echo ""
+  )
+
+  echo "pre-push: tag ${tag_name} → commit ${local_sha:0:8}"
+  echo "  tag version:        ${tag_version}"
+  echo "  pyproject.toml:     ${pyproject_version:-<missing>}"
+  echo "  customers/VERSION:  ${customers_version:-<missing>}"
+
+  if [ "${tag_version}" != "${pyproject_version}" ]; then
+    cat <<EOF >&2
+
+ERROR: tag ${tag_name} points at commit ${local_sha:0:8} whose
+       pyproject.toml says version="${pyproject_version}" — refusing
+       to push because the release artifact would be mis-versioned.
+
+Fix:   1. git tag -d ${tag_name}
+       2. checkout the right commit (or bump pyproject + customers/VERSION
+          via scripts/bump_version.py ${tag_version})
+       3. git tag ${tag_name} on the corrected commit
+       4. git push origin ${tag_name}
+
+Override (only if you really know): git push --no-verify origin ${tag_name}
+EOF
+    exit 1
+  fi
+
+  if [ -n "${customers_version}" ] && [ "${customers_version}" != "${pyproject_version}" ]; then
+    echo "ERROR: customers/VERSION ${customers_version} != pyproject.toml ${pyproject_version}" >&2
+    exit 1
+  fi
+done
+
+exit 0
