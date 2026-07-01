@@ -84,6 +84,11 @@ class DebtIssue:
     suggestion: str = ""
     estimated_effort: dict[str, str] = field(default_factory=dict)
     references: list[str] = field(default_factory=list)
+    # Which analysis dimension produced this issue. Only "static" issues
+    # feed quality_score — "topology"/"git" issues have their own graduated
+    # dimensions (topology_score / git_score), so counting them in
+    # quality_score too would double-penalize (see #59).
+    source: str = "static"  # static | topology | git
     # EPIC-010 Feature 2: Git enrichment fields
     confidence: str | None = None  # high/medium/low for orphan entities
     is_hotspot: bool | None = None  # True if god_function + high change_freq
@@ -448,6 +453,7 @@ class DebtAnalyzer:
                     id=f"debt-{issue_id_counter:03d}",
                     severity="P1",
                     category="orphan_entity",
+                    source="topology",
                     entity=orphan.get("entity", orphan.get("entity_name", "unknown")),
                     entity_type=orphan.get("type", orphan.get("entity_type", "unknown")),
                     location={
@@ -469,6 +475,7 @@ class DebtAnalyzer:
                     id=f"debt-{issue_id_counter:03d}",
                     severity="P1",
                     category="hub_fragility",
+                    source="topology",
                     entity=hub.get("entity", hub.get("entity_name", "unknown")),
                     entity_type=hub.get("type", hub.get("entity_type", "unknown")),
                     location={
@@ -504,6 +511,7 @@ class DebtAnalyzer:
                     id=f"debt-{issue_id_counter:03d}",
                     severity=severity,
                     category="god_function",
+                    source="topology",
                     entity=entity_name,
                     entity_type=god.get("type", god.get("entity_type", "function")),
                     location={
@@ -525,6 +533,7 @@ class DebtAnalyzer:
                     id=f"debt-{issue_id_counter:03d}",
                     severity="P2",
                     category="placeholder_module",
+                    source="topology",
                     entity=placeholder.get("entity", placeholder.get("entity_name", "unknown")),
                     entity_type="module",
                     location={
@@ -546,6 +555,7 @@ class DebtAnalyzer:
                     id=f"debt-{issue_id_counter:03d}",
                     severity="P1",
                     category="coupling_density",
+                    source="topology",
                     entity="cross-module",
                     entity_type="system",
                     location={},
@@ -607,12 +617,19 @@ class DebtAnalyzer:
         Returns:
             Overall health dict with breakdown by dimension
         """
+        # Summary counts reflect ALL issues (what the user sees listed).
         p0_issues = sum(1 for i in self.issues if i.severity == "P0")
         p1_issues = sum(1 for i in self.issues if i.severity == "P1")
         p2_issues = sum(1 for i in self.issues if i.severity == "P2")
 
-        # Quality scoring: 100 - (P0*10 + P1*5 + P2*1)
-        quality_score = max(0, 100 - (p0_issues * 10 + p1_issues * 5 + p2_issues * 1))
+        # Quality scoring penalizes ONLY static-source issues (#59).
+        # topology-/git-source issues have their own graduated dimensions
+        # (topology_score / git_score); counting them here as well would
+        # double-penalize and drag healthy codebases to grade F.
+        static_p0 = sum(1 for i in self.issues if i.severity == "P0" and i.source == "static")
+        static_p1 = sum(1 for i in self.issues if i.severity == "P1" and i.source == "static")
+        static_p2 = sum(1 for i in self.issues if i.severity == "P2" and i.source == "static")
+        quality_score = max(0, 100 - (static_p0 * 10 + static_p1 * 5 + static_p2 * 1))
 
         # Overall score: Multi-dimensional weighted formula (v0.9.2 fix)
         # - quality_score (40%): Issue penalties
@@ -646,11 +663,13 @@ class DebtAnalyzer:
         else:
             grade = "F"
 
+        # NOTE: test_coverage is intentionally NOT emitted — it was a
+        # hardcoded 0 that reads as "0% coverage" and isn't part of the
+        # score formula (#60). Add it back only when coverage is wired.
         breakdown: dict[str, int] = {
             "topology": topology_score,
             "quality": quality_score,
             "maintainability": int(maintainability_score),
-            "test_coverage": 0,  # TODO: integrate coverage data
         }
 
         # Add git dimension if enabled
@@ -717,6 +736,7 @@ class DebtAnalyzer:
                         id=issue_id,
                         severity="P0",
                         category="critical_hotspot",
+                        source="git",
                         entity=hotspot.file,
                         entity_type="file",
                         location={"file": hotspot.file},
@@ -739,6 +759,7 @@ class DebtAnalyzer:
                         id=issue_id,
                         severity="P1",
                         category="knowledge_silo",
+                        source="git",
                         entity=silo.file,
                         entity_type="file",
                         location={"file": silo.file},

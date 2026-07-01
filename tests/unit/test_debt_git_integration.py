@@ -144,10 +144,16 @@ class TestDebtAnalyzerGitIntegration:
             assert "breakdown" in result["overall_health"]
             assert "git" in result["overall_health"]["breakdown"]
 
-            # Verify three-dimensional scoring
-            # total_score = (quality + topology + git) // 3
+            # Verify three-dimensional scoring against the ACTUAL formula
+            # (when git enabled): quality*0.4 + maintainability*0.3 + git*0.3
+            # (topology is displayed in breakdown but git replaces it in the
+            # weighted total per _calculate_overall_health).
             breakdown = result["overall_health"]["breakdown"]
-            expected_total = (breakdown["quality"] + breakdown["topology"] + breakdown["git"]) // 3
+            expected_total = int(
+                breakdown["quality"] * 0.4
+                + breakdown["maintainability"] * 0.3
+                + breakdown["git"] * 0.3
+            )
             assert result["overall_health"]["total_score"] == expected_total
 
     @pytest.mark.asyncio
