@@ -365,22 +365,21 @@ class TestTopologyIntegration:
         result = await analyzer.analyze()
 
         health = result["overall_health"]
-        # With topology issues:
-        # - 1 orphan (P1) = 5
-        # - 1 hub (P1) = 5
-        # - 1 god (P0) = 10
-        # - 1 placeholder (P2) = 1
-        # - 1 coupling (P1) = 5
-        # Quality = 100 - 26 = 74
-        # Maintainability = 100 (default, no codeindex data)
-        # Topology = 75 (from mock)
-        # Total (v0.9.2) = int(74 * 0.4 + 100 * 0.3 + 75 * 0.3)
-        #                = int(29.6 + 30 + 22.5) = 82
-        assert health["breakdown"]["quality"] == 74
+        # Post-#59 fix: topology-source issues do NOT penalize quality_score;
+        # they are already captured (graduated) by topology_score. The 5
+        # topology issues leave quality untouched.
+        # Quality = 100 (no static issues; no codeindex data)
+        # Maintainability = 100 (default)
+        # Topology = 75 (from mock — where the topology issues DO count)
+        # Total = int(100 * 0.4 + 100 * 0.3 + 75 * 0.3) = int(92.5) = 92
+        assert health["breakdown"]["quality"] == 100
         assert health["breakdown"]["maintainability"] == 100
         assert health["breakdown"]["topology"] == 75
-        assert health["total_score"] == 82
-        assert health["grade"] == "B"
+        assert health["total_score"] == 92
+        assert health["grade"] == "A"
+        # Summary still lists ALL issues (topology ones aren't hidden, just
+        # not double-counted into quality):
+        assert health["summary"]["p0_issues"] >= 1
 
     @pytest.mark.asyncio
     async def test_module_filter_passed_to_topology(
