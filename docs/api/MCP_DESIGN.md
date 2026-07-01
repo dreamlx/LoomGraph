@@ -262,6 +262,37 @@ To pin a default workspace at server start:
 Restart Claude Code after the config change. Tools appear under
 `loomgraph_*` in the agent's tool list.
 
+## Upgrading loomgraph — new tools need a restart
+
+The MCP server runs as a long-lived subprocess that Claude Code (or
+Cursor / Cline) spawns once and keeps alive for the whole session. That
+process is pinned to the loomgraph version that was installed when it
+started. So **`pipx upgrade loomgraph` alone does NOT surface new
+tools** in a running session.
+
+To pick up tools added in a newer release (e.g. the composite
+`loomgraph_debt_audit` shipped in v0.12.1):
+
+```bash
+pipx upgrade loomgraph          # or: pipx install --force loomgraph
+# then fully restart Claude Code (quit + reopen, not just a new chat)
+```
+
+Symptoms you'll see if you skip the restart:
+- A tool you know shipped (`loomgraph_debt_audit`, …) isn't in the tool
+  list, or the agent reports it as unknown.
+- `loomgraph mcp serve --version`-style checks show the old version.
+
+This is inherent to the stdio MCP lifecycle, not a loomgraph bug — the
+server is whatever binary Claude Code launched. When in doubt, restart
+the client to force a fresh `loomgraph mcp serve` spawn.
+
+> **Tip for tool authors / dogfooding**: if you're iterating on a new
+> MCP tool locally, each change needs a client restart to take effect.
+> For fast inner-loop testing, drive the server directly over stdio
+> (see the programmatic dogfood in the v0.12.1 notes) instead of going
+> through Claude Code.
+
 ## Other agents
 
 The MCP protocol is portable. Anything that speaks stdio MCP works:
