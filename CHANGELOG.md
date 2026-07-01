@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.2] - 2026-07-01
+
+Patch release. Fixes a debt-scoring bug found during the v0.12.1 MCP
+debt-audit dogfood.
+
+### Fixed
+- **`loomgraph debt` gave false grade F on healthy codebases** (#59).
+  `quality_score` was computed over ALL issues, but topology- and
+  git-derived issues already have their own graduated dimensions
+  (`topology_score` / `git_score`). They were double-counted — once as
+  a soft 0-100 signal, once as an uncapped cliff in `quality_score`
+  (40% weight). 58 topology issues drove quality to 0 → total 49 → F
+  on a codebase whose only real signal was topology 65.
+
+  Fix: `DebtIssue` now carries a `source` field (`static` | `topology`
+  | `git`); `quality_score` penalizes only static-source issues.
+  Topology/git issues flow into their own dimensions. Result on
+  loomgraph self: **grade F/49 → B/89**. All issues are still listed
+  in the report — they're just not double-penalized.
+- Removed the hardcoded `test_coverage: 0` from the health breakdown
+  (#60) — it read as "0% coverage" but wasn't part of the score
+  formula. Will return when coverage is actually wired.
+
 ## [0.12.1] - 2026-06-30
 
 Patch release. Two themes: release-process hardening (post-v0.12.0
