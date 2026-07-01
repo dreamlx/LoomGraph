@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Docs
+- `docs/api/MCP_DESIGN.md`: new "Upgrading loomgraph — new tools need a
+  restart" section (#62). Documents that the stdio MCP server is pinned
+  to the version it launched with, so `pipx upgrade` alone doesn't
+  surface newly-shipped tools until Claude Code is restarted. Surfaced
+  during the v0.12.1 composite-tool dogfood.
+
 ## [0.12.2] - 2026-07-01
 
 Patch release. Fixes a debt-scoring bug found during the v0.12.1 MCP
