@@ -487,6 +487,87 @@ class TestCalculateOverallHealth:
         assert result["grade"] == "A"
         assert result["summary"]["p0_issues"] == 0
 
+    def test_topology_issues_do_not_drag_quality_score(self, analyzer: DebtAnalyzer):
+        """Regression for #59: topology-source issues must NOT be counted in
+        quality_score — they already have their own graduated dimension
+        (topology_score). Double-counting them dragged healthy codebases to
+        grade F.
+
+        58 topology issues (45 P0 + 13 P1) with a healthy topology_score of
+        65 should NOT push quality to 0.
+        """
+        analyzer.issues = [
+            DebtIssue(
+                id=f"debt-{i:03d}",
+                severity="P0" if i < 45 else "P1",
+                category="god_function",
+                entity=f"E{i}",
+                entity_type="function",
+                location={},
+                metrics={},
+                source="topology",
+            )
+            for i in range(58)
+        ]
+
+        result = analyzer._calculate_overall_health(
+            topology_score=65, maintainability_score=100.0
+        )
+
+        # quality_score sees ZERO static issues → 100 (not 0)
+        assert result["breakdown"]["quality"] == 100
+        # total = 100*0.4 + 100*0.3 + 65*0.3 = 89 → grade B (was F/49)
+        assert result["total_score"] == 89
+        assert result["grade"] == "B"
+        # p0/p1 counts still reflect ALL issues (for the summary)
+        assert result["summary"]["p0_issues"] == 45
+        assert result["summary"]["p1_issues"] == 13
+
+    def test_git_issues_do_not_drag_quality_score(self, analyzer: DebtAnalyzer):
+        """Same double-count guard for git-source issues (#59). Git has its
+        own git_score dimension."""
+        analyzer.issues = [
+            DebtIssue(
+                id=f"debt-{i:03d}",
+                severity="P0",
+                category="critical_hotspot",
+                entity=f"F{i}",
+                entity_type="file",
+                location={},
+                metrics={},
+                source="git",
+            )
+            for i in range(20)
+        ]
+        result = analyzer._calculate_overall_health(
+            topology_score=100, git_score=70, maintainability_score=100.0
+        )
+        # git issues excluded from quality → quality stays 100
+        assert result["breakdown"]["quality"] == 100
+
+    def test_static_issues_still_penalize_quality(self, analyzer: DebtAnalyzer):
+        """The fix must NOT disable quality scoring for genuine static issues —
+        source defaults to 'static' so pre-existing behavior is preserved."""
+        analyzer.issues = [
+            DebtIssue(
+                id="debt-001", severity="P0", category="god_class",
+                entity="Big", entity_type="class", location={}, metrics={},
+            ),  # default source="static"
+        ]
+        result = analyzer._calculate_overall_health(
+            topology_score=100, maintainability_score=100.0
+        )
+        # quality = 100 - 10 = 90
+        assert result["breakdown"]["quality"] == 90
+
+    def test_health_breakdown_omits_unwired_test_coverage(self, analyzer: DebtAnalyzer):
+        """Regression for #60: don't emit a hardcoded test_coverage: 0 that
+        reads as '0% coverage'. Until coverage is wired, the key must be
+        absent rather than a misleading zero."""
+        analyzer.issues = []
+        result = analyzer._calculate_overall_health()
+        assert "test_coverage" not in result["breakdown"]
+
     def test_grade_thresholds(self, analyzer: DebtAnalyzer):
         """Test all grade thresholds with multi-dimensional scoring (v0.9.2).
 
