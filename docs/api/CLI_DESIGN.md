@@ -429,6 +429,20 @@ loomgraph graph <entity_name> [options]
 loomgraph topology [options]
 ```
 
+> ⚠️ **已知限制（跨模块同名函数）**：`loomgraph index` 目前走 legacy
+> `codeindex scan --output json` 路径，实体按**简单名**建键。若一个
+> codebase 有跨模块同名函数（`handle` / `run` / `main` / `to_dict` /
+> `analyze` 等，几乎所有真实项目都有），它们会在**索引时**合并成一个
+> 节点，边取并集。后果：`topology` 可能报**假 god_function**（合并节点
+> out_degree 虚高）、`graph` 的 caller/callee 计数可能张冠李戴。数据在
+> 索引阶段已合并，分析层无法还原——真正的修复是把 `index` 迁到
+> `codeindex graph-export`（qualified 实体 id）。跟踪：
+> [#66](https://github.com/dreamlx/LoomGraph/issues/66) /
+> [EPIC-014](https://github.com/dreamlx/LoomGraph/issues/64)。
+> **临时判断法**：若某 god_function 的 out_degree 大得不合理，先
+> `loomgraph graph <name> --direction callees` 看 callees 是否横跨多个
+> 无关模块——是则为同名合并的幻影，不是真 god function。
+
 **参数**:
 | 参数 | 说明 | 默认值 |
 |------|------|--------|

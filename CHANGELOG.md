@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Known limitations (documented, fix scheduled)
+- `topology` / `debt` / `graph` can misreport on codebases with
+  cross-module same-named functions (`handle`, `run`, `main`, …).
+  `loomgraph index`'s legacy scan-JSON path keys entities by simple
+  name, so collisions merge at index time — producing phantom
+  god_functions and cross-attributed caller counts. No analysis-layer
+  fix (data lost at ingestion); the real fix is migrating `index` to
+  the graph-export contract (qualified ids). Tracked as the top item
+  of EPIC-014 (#64) / #66. Documented in CLI_DESIGN.md §5.5.
+
 ### Fixed
 - `loomgraph index` (and the batch inject path) suggested `pip install
   matrix-codeindex` on the codeindex-not-found error — wrong package
