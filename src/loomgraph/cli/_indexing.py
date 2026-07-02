@@ -40,7 +40,7 @@ def index(repo_path: str, clear: bool, workspace: str | None) -> None:
         output_error(
             code=ErrorCode.CODEINDEX_NOT_FOUND,
             message="codeindex command not found in PATH",
-            suggestion="Install codeindex: pip install matrix-codeindex",
+            suggestion="Install codeindex: pip install ai-codeindex",
             docs="https://github.com/dreamlx/codeindex#installation",
         )
         return
@@ -623,7 +623,7 @@ def update(
         output_error(
             code=ErrorCode.CODEINDEX_NOT_FOUND,
             message="codeindex command not found",
-            suggestion="Install codeindex: pip install matrix-codeindex",
+            suggestion="Install codeindex: pip install ai-codeindex",
         )
         return
 
