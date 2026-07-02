@@ -28,7 +28,7 @@ loomgraph
 ├── embed      # 生成向量 (从 ParseResult JSON)
 ├── inject     # 注入图谱 (ParseResult + Embeddings → LightRAG)
 ├── find       # 结构化实体发现 (名字匹配 + 可选关系)
-├── query      # 语义知识问答 (RAG 引擎, LLM 驱动)
+├── search     # 语义搜索 (按含义, embedding KNN; find 的对等项)
 ├── graph      # 精确关系遍历 (callers/callees + source_id)
 ├── status     # 检查系统状态
 └── version    # 版本信息
@@ -318,11 +318,46 @@ loomgraph find <query> [options]
 }
 ```
 
-> **向后兼容**: `loomgraph search` 作为隐藏别名保留一个版本，会输出 deprecation warning。
+---
+
+### 4.5. `loomgraph search` - 语义搜索 (按含义)
+
+**用途**: 按自然语言含义检索实体——`find` 的语义对等项。`find` 按名字匹配,`search` 按意图/含义(把 query 嵌入实体描述向量空间做 KNN)。互补关系:知道符号名用 `find`,知道"它做什么"用 `search`。(EPIC-015 / #70)
+
+```bash
+loomgraph search <query> [options]
+```
+
+**参数**:
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `<query>` | 自然语言意图或描述性短语 | 必填 |
+| `--type/-t` | 实体类型过滤 (class/function/method/module) | 全部 |
+| `--limit/-n` | 结果数量 | `20` |
+| `--workspace/-w` | Workspace 名称 | 当前目录名(带降级) |
+
+**前置条件**: workspace 必须在 embedding 开启时索引过(`LOOMGRAPH_EMBEDDING__ENABLED=true`)。否则返回 `EMBEDDING_NOT_INDEXED`。
+
+**输出**:
+```json
+{
+  "query": "where are hotspots computed",
+  "mode": "semantic",
+  "workspace": "loomgraph:main",
+  "vector_count": 338,
+  "matches_count": 5,
+  "matches": [
+    {"entity": "core.git_metrics.GitMetricsAnalyzer._detect_hotspots", "type": "method",
+     "source_id": "core/git_metrics.py:88", "description": "...", "score": 0.157}
+  ]
+}
+```
+
+> **历史**: `search` 曾是 `find` 的隐藏 deprecated 别名(v0.10 前)。EPIC-015 回收这个名字给语义搜索——`find`(按名)/`search`(按义)/`graph`(按关系)三个对等检索模式。旧的 deprecation warning 已移除。
 
 ---
 
-### 4.5. `loomgraph query` - 语义知识问答 (v0.10.0 已移除)
+### 4.6. `loomgraph query` - 语义知识问答 (v0.10.0 已移除)
 
 > **已移除（v0.10.0, EPIC-011 Phase 4）**: 自然语言代码问答让位给 Claude Code / Codex / Cursor 等通用 agent，LoomGraph 聚焦结构精确的 `find` / `graph` / `topology`。本节保留作为历史参考。详见 [ADR-013](../adr/ADR-013-sqlite-vec-replace-lightrag.md)。
 

@@ -146,3 +146,13 @@ class GraphStore(ABC):
         raise NotImplementedError(
             f"{type(self).__name__} does not implement search_similar()"
         )
+
+    async def vector_count(self) -> int:
+        """Number of entity-description vectors currently indexed.
+
+        Backends without vector support report 0. Used by the semantic
+        `search` command to give a clean "not indexed" error before
+        attempting a KNN query against an empty vec table (whose behaviour
+        is sqlite-vec-version-dependent).
+        """
+        return 0

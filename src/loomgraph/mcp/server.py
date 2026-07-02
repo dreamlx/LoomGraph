@@ -30,6 +30,7 @@ from loomgraph.mcp.tools import find as t_find
 from loomgraph.mcp.tools import graph as t_graph
 from loomgraph.mcp.tools import impact as t_impact
 from loomgraph.mcp.tools import overview as t_overview
+from loomgraph.mcp.tools import search as t_search
 from loomgraph.mcp.tools import sync_advice as t_sync_advice
 from loomgraph.mcp.tools import topology as t_topology
 from loomgraph.mcp.tools import workspace as t_workspace
@@ -52,6 +53,7 @@ def _register(spec: Tool, handler: Any) -> None:
 
 
 _register(t_find.TOOL_SPEC, t_find.handle)
+_register(t_search.TOOL_SPEC, t_search.handle)
 _register(t_graph.TOOL_SPEC, t_graph.handle)
 _register(t_topology.TOOL_SPEC, t_topology.handle)
 _register(t_impact.TOOL_SPEC, t_impact.handle)

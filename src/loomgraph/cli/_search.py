@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import sys
 from typing import Any
 
 import click
@@ -50,25 +49,70 @@ def find(
         )
 
 
-@main.command(hidden=True)
+class VectorsNotIndexedError(RuntimeError):
+    """Workspace has no embedded vectors — semantic search unavailable.
+
+    Raised by `_async_search` when `store.vector_count() == 0` so the CLI
+    can emit `EMBEDDING_NOT_INDEXED` with a targeted suggestion rather than
+    a generic storage error (and rather than relying on sqlite-vec's
+    version-dependent empty-table KNN behaviour).
+    """
+
+    def __init__(self, workspace: str) -> None:
+        super().__init__(workspace)
+        self.workspace = workspace
+
+
+@main.command()
 @click.argument("query")
-@click.option("--type", "-t", "entity_type", default=None, help="Filter by entity type")
-@click.option("--workspace", "-w", default=None, help="Workspace name")
+@click.option("--type", "-t", "entity_type", default=None, help="Filter by entity type (e.g. function, class, method)")
+@click.option("--workspace", "-w", default=None, help="Workspace name (default: auto-detected)")
 @click.option("--limit", "-n", default=20, help="Maximum number of results")
 def search(query: str, entity_type: str | None, workspace: str | None, limit: int) -> None:
-    """[Deprecated] Use 'find' instead."""
-    print(
-        "WARNING: 'loomgraph search' is deprecated, use 'loomgraph find' instead.",
-        file=sys.stderr,
-    )
+    """Semantic search over entity descriptions (by meaning, not name).
+
+    QUERY: Natural-language intent or descriptive phrase. Embedded and
+    matched against entity-description vectors (signature + docstring) via
+    KNN. Complementary to `find` (name matching): use `find` when you know
+    a symbol name, `search` when you know what something *does*.
+
+    Requires the workspace to have been indexed with embedding enabled
+    (LOOMGRAPH_EMBEDDING__ENABLED=true). Returns EMBEDDING_NOT_INDEXED
+    otherwise.
+    """
     try:
-        result = asyncio.run(_async_find(query, entity_type, workspace, limit))
+        result = asyncio.run(_async_search(query, entity_type, workspace, limit))
         output_success(result)
+    except VectorsNotIndexedError as e:
+        output_error(
+            code=ErrorCode.EMBEDDING_NOT_INDEXED,
+            message=(
+                f"Workspace '{e.workspace}' has no embedded vectors — "
+                "semantic search is unavailable."
+            ),
+            suggestion=(
+                "Index with embedding enabled: set LOOMGRAPH_EMBEDDING__ENABLED=true "
+                "(and LOOMGRAPH_EMBEDDING__API_URL to an OpenAI-compatible endpoint), "
+                "then `loomgraph index --clear <path>`. See EPIC-015 (#70)."
+            ),
+        )
+    except click.ClickException as e:
+        # Most commonly: no workspace found at all (first-time user, nothing
+        # indexed yet). Same user action as "not indexed" → same code, so a
+        # client doesn't mistake it for an embedding-service outage.
+        output_error(
+            code=ErrorCode.EMBEDDING_NOT_INDEXED,
+            message=str(e.message),
+            suggestion="Index first: loomgraph index <path>  (with LOOMGRAPH_EMBEDDING__ENABLED=true for semantic search).",
+        )
     except Exception as e:
         output_error(
-            code=ErrorCode.STORAGE_ERROR,
-            message=f"Search failed: {e}",
-            suggestion="Check service status with: loomgraph status",
+            code=ErrorCode.EMBEDDING_FAILED,
+            message=f"Semantic search failed: {e}",
+            suggestion=(
+                "Check the embedding service is reachable: loomgraph status. "
+                "For name-based search use: loomgraph find <query>."
+            ),
         )
 
 
@@ -145,6 +189,74 @@ async def _async_find(
     return {
         "query": query,
         "total_entities": len(entities),
+        "matches_count": len(matches),
+        "matches": matches,
+    }
+
+
+async def _async_search(
+    query: str,
+    entity_type: str | None = None,
+    workspace: str | None = None,
+    limit: int = 20,
+) -> dict[str, Any]:
+    """Semantic search: embed the query, KNN over entity-description vectors.
+
+    Complementary to `_async_find` (name fuzzy match) — use this when the
+    query is an intent/phrase whose words may not appear in any symbol name.
+    Phase 0 (EPIC-015 #70) measured intent-query wins where `find` returned
+    empty.
+
+    Raises ``VectorsNotIndexedError`` if the workspace has no vectors — the
+    CLI translates that to ``EMBEDDING_NOT_INDEXED``.
+    """
+    ws, store = await prepare_workspace_store(workspace)
+
+    vc = await store.vector_count()
+    if vc == 0:
+        raise VectorsNotIndexedError(ws)
+
+    # Embed the query into the same vector space as the entity descriptions.
+    from loomgraph.storage.factory import create_embedding_client
+
+    emb = await create_embedding_client().embed_single(query)
+
+    # Over-fetch when filtering by type so a sparse type doesn't get starved
+    # by the KNN cut (same heuristic search_similar uses for source_prefix).
+    k = limit * 5 if entity_type else limit
+    raw_hits = await store.search_similar(emb, k=k)
+
+    # Hydrate with entity metadata (type/description/source_id) for display.
+    entities = await store.get_all_entities()
+    meta_by_name: dict[str, dict[str, Any]] = {}
+    for e in entities:
+        nm = e.get("entity_name") or e.get("id") or ""
+        if nm and nm not in meta_by_name:
+            meta_by_name[nm] = e
+
+    matches: list[dict[str, Any]] = []
+    for hit in raw_hits:
+        nm = hit["entity_name"]
+        meta = meta_by_name.get(nm, {})
+        etype = meta.get("entity_type", "")
+        if entity_type and etype.lower() != entity_type.lower():
+            continue
+        distance = float(hit.get("distance", 0.0))
+        matches.append({
+            "entity": nm,
+            "type": etype,
+            "source_id": hit.get("source_id") or meta.get("source_id", ""),
+            "description": (meta.get("description") or "")[:200],
+            "score": round(max(0.0, 1.0 - distance), 3),
+        })
+        if len(matches) >= limit:
+            break
+
+    return {
+        "query": query,
+        "mode": "semantic",
+        "workspace": ws,
+        "vector_count": vc,
         "matches_count": len(matches),
         "matches": matches,
     }
