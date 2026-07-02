@@ -13,7 +13,7 @@ from typing import Any
 # codeindex Input Types (for type hints)
 # ============================================
 # These mirror the codeindex data structures.
-# In production, these would be imported from matrix-codeindex.
+# In production, these would be imported from ai-codeindex.
 
 
 @dataclass
