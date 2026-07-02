@@ -47,6 +47,32 @@ ENTITY_RECORDS = [
     },
 ]
 
+# codeindex>=0.28 records carry a parser-derived `signature` (codeindex#115).
+# These exercise the signature combine that closes the docstring-coverage hole
+# (loomgraph EPIC-015 / #70 Phase 0): a symbol with no docstring still gets a
+# non-empty description → still gets an embedding vector → still searchable.
+SIGNATURE_RECORDS = [
+    {
+        "type": "entity",
+        "id": "app.store.search_similar",
+        "entity_type": "method",
+        "source_id": "app/store.py:40",
+        "signature": "def search_similar(self, embedding: list[float], k: int = 10) -> list[dict]",
+        "description": "Return the k nearest entities by cosine distance.",
+        "provenance": "ast",
+    },
+    # Coverage-hole case: docstring empty, signature present.
+    {
+        "type": "entity",
+        "id": "app.store.search_similar",
+        "entity_type": "method",
+        "source_id": "app/store.py:40",
+        "signature": "def search_similar(self, embedding: list[float], k: int = 10) -> list[dict]",
+        "description": "",
+        "provenance": "ast",
+    },
+]
+
 EDGE_RECORDS = [
     {
         "type": "edge",
@@ -104,6 +130,35 @@ def test_map_entity_preserves_qualified_name():
 def test_map_entity_handles_empty_description():
     ent = map_entity(ENTITY_RECORDS[1])
     assert ent.entity_data["description"] == ""
+
+
+def test_map_entity_combines_signature_and_docstring():
+    """codeindex#115: signature is projected into entity_data and combined
+    with the docstring into `description` so the embedding pipeline (which
+    embeds description) gets signature+docstring, not docstring alone."""
+    ent = map_entity(SIGNATURE_RECORDS[0])
+    sig = SIGNATURE_RECORDS[0]["signature"]
+    doc = SIGNATURE_RECORDS[0]["description"]
+    assert ent.entity_data["signature"] == sig
+    assert sig in ent.entity_data["description"]
+    assert doc in ent.entity_data["description"]
+
+
+def test_map_entity_signature_rescues_docstring_less_symbol():
+    """The coverage hole: a symbol with an empty docstring still gets a
+    non-empty description (from signature), so it still receives an embedding
+    vector and remains searchable. Phase 0 measured 15% of symbols hit this."""
+    ent = map_entity(SIGNATURE_RECORDS[1])
+    assert ent.entity_data["description"]  # non-empty despite empty docstring
+    assert ent.entity_data["description"] == SIGNATURE_RECORDS[1]["signature"]
+
+
+def test_map_entity_without_signature_stays_backwards_compatible():
+    """Pre-0.28 artifacts (no signature field) keep the old description
+    semantics — combine just yields the docstring."""
+    ent = map_entity(ENTITY_RECORDS[0])
+    assert ent.entity_data.get("signature", "") == ""
+    assert ent.entity_data["description"] == "Authenticates users."
 
 
 # ----- map_edge (the qualifier matrix) -----------------------------------

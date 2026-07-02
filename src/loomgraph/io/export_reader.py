@@ -98,15 +98,31 @@ def map_entity(rec: dict) -> EntityData:
                         `relpath:line`; loomgraph's idiomatic form is
                         `relpath:line_start-line_end` but the
                         single-line form parses fine in queries)
-      description     → entity_data.description (may be empty)
+      signature       → entity_data.signature (codeindex>=0.28 / codeindex#115)
+      description     → folded into entity_data.description together with
+                        signature (see below)
       provenance      → entity_data.provenance
+
+    `description` is rebuilt as `signature | docstring` (empty parts dropped)
+    so the embedding pipeline — which embeds `description` — gets the
+    signature too. This closes the docstring-coverage hole measured in
+    EPIC-015 Phase 0: ~15% of symbols have no docstring, and without the
+    signature they got an empty description → no vector → invisible to
+    semantic search. A signature is present for ~all symbols. Pre-0.28
+    records (no `signature` field) keep the old behaviour: description is
+    just the docstring. (codeindex intentionally did NOT bump schema_version
+    for this additive field — the combine is the consumer's call, ADR-007.)
     """
     source_id = rec["source_id"]
+    signature = rec.get("signature", "")
+    docstring = rec.get("description", "")
+    description = " | ".join(p for p in (signature, docstring) if p)
     return EntityData(
         entity_name=rec["id"],
         entity_data={
             "entity_type": rec["entity_type"],
-            "description": rec.get("description", ""),
+            "description": description,
+            "signature": signature,
             "source_id": source_id,
             "file_path": source_id.split(":", 1)[0],
             "provenance": rec.get("provenance", "ast"),

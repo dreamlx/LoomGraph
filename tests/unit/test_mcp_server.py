@@ -20,11 +20,13 @@ from loomgraph.mcp.server import _TOOL_HANDLERS, _TOOL_SPECS, build_server
 from loomgraph.mcp.tools import _common
 from loomgraph.mcp.tools import find as t_find
 from loomgraph.mcp.tools import graph as t_graph
+from loomgraph.mcp.tools import search as t_search
 
 # ---- Registration --------------------------------------------------------
 
 EXPECTED_TOOLS = {
     "loomgraph_find",
+    "loomgraph_search",
     "loomgraph_graph",
     "loomgraph_topology",
     "loomgraph_impact",
@@ -167,6 +169,76 @@ async def test_find_handler_wraps_exceptions_into_error_envelope():
     assert payload["error"]["code"] == "FIND_FAILED"
     assert "RuntimeError" in payload["error"]["message"]
     assert "workspace not indexed" in payload["error"]["message"]
+    assert "suggestion" in payload["error"]
+
+
+@pytest.mark.asyncio
+async def test_search_handler_forwards_arguments_and_envelopes_success():
+    fake_result = {
+        "query": "where are hotspots",
+        "mode": "semantic",
+        "matches_count": 1,
+        "matches": [{"entity": "DebtAnalyzer"}],
+    }
+
+    async def fake_async_search(**kwargs):
+        assert kwargs["query"] == "where are hotspots"
+        assert kwargs["entity_type"] is None
+        assert kwargs["limit"] == 20
+        assert kwargs["workspace"] is None
+        return fake_result
+
+    with patch.object(t_search, "_async_search", side_effect=fake_async_search):
+        contents = await t_search.handle({"query": "where are hotspots"})
+
+    payload = json.loads(contents[0].text)
+    assert payload["success"] is True
+    assert payload["data"] == fake_result
+
+
+@pytest.mark.asyncio
+async def test_search_handler_passes_workspace_through():
+    async def fake_async_search(**kwargs):
+        return {"workspace_seen": kwargs.get("workspace")}
+
+    with patch.object(t_search, "_async_search", side_effect=fake_async_search):
+        contents = await t_search.handle(
+            {"query": "x", "workspace": "explicit-ws"}
+        )
+
+    payload = json.loads(contents[0].text)
+    assert payload["data"]["workspace_seen"] == "explicit-ws"
+
+
+@pytest.mark.asyncio
+async def test_search_handler_not_indexed_returns_typed_error():
+    """VectorsNotIndexedError → EMBEDDING_NOT_INDEXED (not generic SEARCH_FAILED),
+    so a client gets the actionable 'enable embedding + reindex' signal."""
+    from loomgraph.cli._search import VectorsNotIndexedError
+
+    async def boom(**kwargs):
+        raise VectorsNotIndexedError("proj:main")
+
+    with patch.object(t_search, "_async_search", side_effect=boom):
+        contents = await t_search.handle({"query": "x"})
+
+    payload = json.loads(contents[0].text)
+    assert payload["success"] is False
+    assert payload["error"]["code"] == "EMBEDDING_NOT_INDEXED"
+    assert "proj:main" in payload["error"]["message"]
+
+
+@pytest.mark.asyncio
+async def test_search_handler_wraps_other_exceptions_into_error_envelope():
+    async def boom(**kwargs):
+        raise RuntimeError("embed service down")
+
+    with patch.object(t_search, "_async_search", side_effect=boom):
+        contents = await t_search.handle({"query": "x"})
+
+    payload = json.loads(contents[0].text)
+    assert payload["success"] is False
+    assert payload["error"]["code"] == "SEARCH_FAILED"
     assert "suggestion" in payload["error"]
 
 

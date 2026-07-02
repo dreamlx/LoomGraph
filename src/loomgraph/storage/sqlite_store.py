@@ -608,6 +608,20 @@ class SqliteGraphStore(GraphStore):
 
     # ----- Vector search -----
 
+    async def vector_count(self) -> int:
+        """Number of entity-description vectors indexed.
+
+        Counts the `_rowids` shadow table — the reliable counter for a vec0
+        virtual table (counting the vec0 table directly is unreliable).
+        """
+        def _query(conn: sqlite3.Connection) -> int:
+            row = conn.execute(
+                "SELECT COUNT(*) FROM vec_node_descriptions_rowids"
+            ).fetchone()
+            return int(row[0]) if row else 0
+
+        return await self._run(_query)
+
     async def search_similar(
         self,
         embedding: list[float],

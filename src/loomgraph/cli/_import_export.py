@@ -24,7 +24,7 @@ from typing import Any
 
 import click
 
-from loomgraph.cli._common import ErrorCode, output_error, output_success
+from loomgraph.cli._common import ErrorCode, maybe_embed_entities, output_error, output_success
 from loomgraph.cli.main import main
 
 
@@ -140,20 +140,21 @@ async def _async_import_export(
     if clear:
         await store.delete_all()
 
-    # insert_custom_kg signature is (entities, relations, chunks);
-    # we have no chunks (codeindex export carries no vector data —
-    # sqlite-vec embedding is loomgraph's own concern).
-    await store.insert_custom_kg(
-        [
-            {"entity_name": e.entity_name, **e.entity_data}
-            for e in entities
-        ],
-        [
-            {"src_id": r.src_id, "tgt_id": r.tgt_id, **r.edge_data}
-            for r in relations
-        ],
-        [],
-    )
+    # Build the entity dicts once; maybe_embed_entities attaches `embedding`
+    # in place (gated on settings.embedding.enabled — no-op when off, so the
+    # default install profile is unaffected). Mirrors `loomgraph index`/`update`.
+    entity_dicts = [
+        {"entity_name": e.entity_name, **e.entity_data} for e in entities
+    ]
+    relation_dicts = [
+        {"src_id": r.src_id, "tgt_id": r.tgt_id, **r.edge_data} for r in relations
+    ]
+    embedded_count = await maybe_embed_entities(entity_dicts)
+
+    # insert_custom_kg signature is (entities, relations, chunks); we have no
+    # chunks (codeindex export carries no vector data — sqlite-vec embedding
+    # is loomgraph's own concern, applied above).
+    await store.insert_custom_kg(entity_dicts, relation_dicts, [])
 
     stats = await store.get_graph_stats()
 
@@ -161,6 +162,7 @@ async def _async_import_export(
         "workspace": workspace,
         "artifact": str(artifact),
         "cleared": clear,
+        "embedded": embedded_count,
         "summary": summary.to_dict(),
         "store_stats": stats,
     }

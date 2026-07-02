@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — EPIC-015 Phase 1: end-to-end semantic search (#70)
+- `loomgraph search` — semantic retrieval over entity-description
+  vectors. Reclaims the `search` name (the hidden deprecated alias to
+  `find` is removed); `find` (by name) / `search` (by meaning) / `graph`
+  (by relation) are now peers. Returns `EMBEDDING_NOT_INDEXED` on a
+  workspace with no vectors (or no workspace at all) instead of a
+  generic error. Phase 0 (#70) measured intent-query wins where `find`
+  returned empty.
+- `loomgraph_search` MCP tool — same surface over the MCP server.
+  Requires restart to surface in a running client (see MCP_DESIGN.md
+  "Upgrading").
+- `GraphStore.vector_count()` — reliable empty-state detection for the
+  semantic-search pre-check (counts the vec0 `_rowids` shadow table).
+- `import-export` now auto-embeds entity descriptions when embedding is
+  enabled (mirrors `index`), so an imported graph-export artifact is
+  semantically searchable in one step.
+- `export_reader.map_entity` projects codeindex#115's `signature` field
+  and folds it into `description` (`signature | docstring`). Closes the
+  docstring-coverage hole (Phase 0: ~15% of symbols had no docstring →
+  no vector → invisible to search; signature is present for ~all).
+
 ### Known limitations (documented, fix scheduled)
 - `topology` / `debt` / `graph` can misreport on codebases with
   cross-module same-named functions (`handle`, `run`, `main`, …).

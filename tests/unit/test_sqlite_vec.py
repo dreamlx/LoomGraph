@@ -78,6 +78,27 @@ class TestEmbeddingWrite:
         result = await store.search_similar(_vec(0.5), k=10)
         assert result == []
 
+
+# ---------- vector_count (EPIC-015: clean empty-state detection) ----------
+
+
+class TestVectorCount:
+    async def test_fresh_store_has_zero_vectors(self, store: SqliteGraphStore) -> None:
+        assert await store.vector_count() == 0
+
+    async def test_counts_embedded_entities(self, store: SqliteGraphStore) -> None:
+        await store.create_entity("A", {"entity_type": "function", "embedding": _vec(0.1)})
+        await store.create_entity("B", {"entity_type": "function", "embedding": _vec(0.2)})
+        assert await store.vector_count() == 2
+
+    async def test_entities_without_embeddings_not_counted(
+        self, store: SqliteGraphStore
+    ) -> None:
+        # Entities exist but none carry an embedding → vector_count stays 0.
+        await store.create_entity("NoEmb", {"entity_type": "function"})
+        await store.create_entity("BadDim", {"embedding": [0.1, 0.2, 0.3]})
+        assert await store.vector_count() == 0
+
     async def test_invalid_embedding_dim_ignored(
         self, store: SqliteGraphStore
     ) -> None:

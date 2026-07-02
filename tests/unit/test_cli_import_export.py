@@ -158,3 +158,59 @@ def test_clear_default_is_false_in_command_signature() -> None:
     assert clear_param.default is False, (
         "--clear must default to False (non-destructive)."
     )
+
+
+# ----- Auto-embed (EPIC-015: imported artifacts become searchable in one step)
+
+def test_import_export_embeds_descriptions_when_enabled(
+    runner: CliRunner, tmp_path: Path, monkeypatch
+) -> None:
+    """When embedding is enabled, import-export attaches vectors so the
+    workspace is semantically searchable without a separate step (mirrors
+    `loomgraph index`). Verifies the wiring: maybe_embed_entities runs
+    BEFORE insert_custom_kg."""
+    import asyncio
+
+    from loomgraph.storage.factory import create_graph_store
+    from loomgraph.storage.sqlite_store import DEFAULT_VECTOR_DIM
+
+    artifact = _write_artifact(tmp_path, name="with-emb")
+    ws = "test-auto-embed:imported"
+
+    # Stub the embed step: attach a dummy vector to each described entity.
+    # This tests the WIRING (embed before insert), not the embed client.
+    fake_vec = [0.1] * DEFAULT_VECTOR_DIM
+
+    def fake_maybe_embed(entities):
+        for e in entities:
+            if e.get("description"):
+                e["embedding"] = fake_vec
+        return sum(1 for e in entities if "embedding" in e)
+
+    async def fake_maybe_embed_async(entities):
+        return fake_maybe_embed(entities)
+
+    monkeypatch.setattr(
+        "loomgraph.cli._import_export.maybe_embed_entities",
+        fake_maybe_embed_async,
+    )
+
+    result = runner.invoke(main, ["import-export", str(artifact), "-w", ws, "--clear"])
+    _invoke_success(result)  # asserts success=true; we only need the write side-effect
+
+    # The imported workspace must actually have vectors written.
+    async def _count() -> int:
+        store = await create_graph_store(workspace=ws)
+        try:
+            return await store.vector_count()
+        finally:
+            await store.close()
+
+    vc = asyncio.run(_count())
+    assert vc > 0, f"expected embedded vectors, got vector_count={vc}"
+
+    # cleanup
+    import os
+    db = os.path.expanduser(f"~/.loomgraph/{ws}.db")
+    if os.path.exists(db):
+        os.remove(db)
