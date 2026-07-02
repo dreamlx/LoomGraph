@@ -99,6 +99,22 @@ class TestEmbed:
         assert kwargs["json"]["input"] == ["hi"]
         assert kwargs["headers"]["Authorization"] == "Bearer sk-1"
 
+    async def test_url_no_double_v1(
+        self, post_mock: AsyncMock, patched_post: Any
+    ) -> None:
+        """Regression (#71): base_url already carries /v1 (OpenAI convention,
+        matches every EmbeddingConfig default), so the client must append only
+        /embeddings — not /v1/embeddings, which produced /v1/v1/embeddings → 404
+        and silently left every vec table empty."""
+        post_mock.return_value = _make_response(
+            json_body={"data": [{"embedding": [0.0]}]}
+        )
+        c = DirectEmbeddingClient(base_url="http://localhost:11434/v1", model="m")
+        await c.embed(["hi"])
+        url = post_mock.call_args[0][0]
+        assert url == "http://localhost:11434/v1/embeddings"
+        assert "/v1/v1/" not in url
+
     async def test_batches_split_at_batch_size(
         self, post_mock: AsyncMock, patched_post: Any
     ) -> None:

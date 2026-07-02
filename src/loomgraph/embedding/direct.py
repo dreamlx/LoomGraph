@@ -84,7 +84,10 @@ class DirectEmbeddingClient(EmbeddingClient):
         return result.embeddings[0]
 
     async def _embed_batch(self, texts: list[str]) -> dict[str, Any]:
-        url = f"{self.base_url}/v1/embeddings"
+        # base_url carries the OpenAI-style base incl. /v1 (every
+        # EmbeddingConfig default does), so append only /embeddings. Appending
+        # /v1/embeddings here yielded /v1/v1/embeddings → 404 (#71).
+        url = f"{self.base_url}/embeddings"
         payload = {"model": self.model, "input": texts}
         async with httpx.AsyncClient(timeout=self.timeout, trust_env=False) as http:
             try:
