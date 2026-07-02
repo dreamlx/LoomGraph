@@ -1586,3 +1586,25 @@ class TestCheckCommand:
         result = runner.invoke(main, ["check", "--help"])
         assert result.exit_code == 0
         assert "--repo-path" in result.stdout
+
+
+class TestCodeindexPackageName:
+    """Regression guard for #65: the codeindex PyPI package is `ai-codeindex`,
+    not `matrix-codeindex` (historical name kept only in ADRs / archive).
+    A wrong package name in a user-facing install suggestion sends users to
+    a `pip install` that fails."""
+
+    def test_no_stale_package_name_in_live_source(self) -> None:
+        """No live source module may reference the old `matrix-codeindex`
+        package name. Historical records under docs/adr + docs/archive are
+        intentionally exempt (point-in-time decisions)."""
+        src_root = Path(__file__).resolve().parents[2] / "src" / "loomgraph"
+        offenders = [
+            str(p.relative_to(src_root))
+            for p in src_root.rglob("*.py")
+            if "matrix-codeindex" in p.read_text(encoding="utf-8")
+        ]
+        assert offenders == [], (
+            f"Stale 'matrix-codeindex' package name in: {offenders}. "
+            "The PyPI package is 'ai-codeindex'."
+        )
