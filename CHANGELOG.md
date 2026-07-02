@@ -18,6 +18,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   of EPIC-014 (#64) / #66. Documented in CLI_DESIGN.md §5.5.
 
 ### Fixed
+- `DirectEmbeddingClient` double-appended `/v1`: it composed
+  `{base_url}/v1/embeddings` while every `EmbeddingConfig` default
+  `api_url` already carries `/v1` (OpenAI convention), yielding
+  `/v1/v1/embeddings` → 404. `maybe_embed_entities` swallows embedding
+  errors, so `loomgraph index` reported success while writing **zero**
+  vectors — the vec0 tables silently stayed empty in every workspace.
+  Client now appends only `/embeddings`; regression test locks the
+  composed URL (#71). Prerequisite unblock for EPIC-015 (#70) semantic
+  search.
 - `loomgraph index` (and the batch inject path) suggested `pip install
   matrix-codeindex` on the codeindex-not-found error — wrong package
   name; the PyPI package is `ai-codeindex`. Two suggestions in
