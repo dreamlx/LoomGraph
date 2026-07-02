@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `loomgraph index` (and the batch inject path) suggested `pip install
+  matrix-codeindex` on the codeindex-not-found error — wrong package
+  name; the PyPI package is `ai-codeindex`. Two suggestions in
+  `cli/_indexing.py` (:43, :626) + a stale comment in `core/models.py`
+  corrected. Regression-guarded by a test asserting no live source
+  references the old name (#65). Historical ADR/archive references left
+  as point-in-time records.
+
 ### Docs
 - `docs/api/MCP_DESIGN.md`: new "Upgrading loomgraph — new tools need a
   restart" section (#62). Documents that the stdio MCP server is pinned
