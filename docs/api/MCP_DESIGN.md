@@ -45,7 +45,7 @@ subprocess overhead alone is ~7.5s. MCP makes that vanish.
 
 ## Tool reference
 
-All 8 tools follow the same response envelope:
+All 9 read tools follow the same response envelope:
 
 ```jsonc
 // success
@@ -63,6 +63,22 @@ All 8 tools follow the same response envelope:
 | `entity_type` | enum | — | class \| function \| method \| module |
 | `limit` | integer | 20 | 1..100 |
 | `with_relations` | boolean | false | include callers + callees |
+| `workspace` | string | server default | per-call workspace override |
+
+### `loomgraph_search`
+
+Semantic peer of `find` (EPIC-015 / #70). Embeds the query and returns
+the nearest entities by vector distance over `vec_node_descriptions`
+(signature + docstring). Use for intent questions whose words may not
+appear in any symbol name. **Requires the workspace indexed with
+embedding enabled** (`LOOMGRAPH_EMBEDDING__ENABLED=true`); returns
+`EMBEDDING_NOT_INDEXED` otherwise.
+
+| arg | type | default | desc |
+|---|---|---|---|
+| `query` | string | required | natural-language intent or descriptive phrase |
+| `entity_type` | enum | — | class \| function \| method \| module |
+| `limit` | integer | 20 | 1..100 |
 | `workspace` | string | server default | per-call workspace override |
 
 ### `loomgraph_graph`

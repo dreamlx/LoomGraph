@@ -610,19 +610,53 @@ class TestFindCommand:
         data = json.loads(result.stdout)
         assert data["data"]["matches_count"] == 2
 
-    @patch("loomgraph.cli._search.asyncio.run")
-    def test_search_alias_deprecated(self, mock_run: MagicMock, runner: CliRunner) -> None:
-        """Test that search alias works but shows deprecation warning."""
-        mock_run.return_value = {
-            "query": "auth",
-            "total_entities": 10,
-            "matches_count": 1,
-            "matches": [{"entity": "AuthService", "type": "class", "source_id": "", "description": "", "score": 0.9}],
-        }
 
-        result = runner.invoke(main, ["search", "auth"])
+class TestSearchCommandSemantic:
+    """`loomgraph search` was reclaimed in EPIC-015 (#70) for semantic search
+    over entity-description vectors. The old deprecated alias (which just
+    redirected to `find`) is gone — `search` and `find` are now peers:
+    find = name fuzzy match, search = meaning (embedding KNN)."""
+
+    @patch("loomgraph.cli._search.asyncio.run")
+    def test_search_returns_semantic_matches(self, mock_run: MagicMock, runner: CliRunner) -> None:
+        mock_run.return_value = {
+            "query": "where are hotspots computed",
+            "mode": "semantic",
+            "vector_count": 1200,
+            "matches_count": 2,
+            "matches": [
+                {"entity": "DebtAnalyzer", "type": "class", "source_id": "debt.py:40",
+                 "description": "debt scoring", "score": 0.82},
+                {"entity": "GitMetricsAnalyzer", "type": "class", "source_id": "git.py:12",
+                 "description": "git churn", "score": 0.71},
+            ],
+        }
+        result = runner.invoke(main, ["search", "where are hotspots computed"])
         assert result.exit_code == 0
-        assert "deprecated" in result.output.lower()
+        data = json.loads(result.stdout)
+        assert data["success"] is True
+        assert data["data"]["mode"] == "semantic"
+        assert data["data"]["matches_count"] == 2
+
+    @patch("loomgraph.cli._search.asyncio.run")
+    def test_search_not_indexed_returns_typed_error(
+        self, mock_run: MagicMock, runner: CliRunner
+    ) -> None:
+        from loomgraph.cli._search import VectorsNotIndexedError
+
+        mock_run.side_effect = VectorsNotIndexedError("loomgraph:main")
+        result = runner.invoke(main, ["search", "anything"])
+        assert result.exit_code == 1
+        data = json.loads(result.stdout)
+        assert data["success"] is False
+        assert data["error"]["code"] == "EMBEDDING_NOT_INDEXED"
+
+    def test_search_no_longer_emits_deprecation_warning(self, runner: CliRunner) -> None:
+        """The deprecated alias is gone — `search` is a first-class command now."""
+        result = runner.invoke(main, ["search", "--help"])
+        assert result.exit_code == 0
+        assert "deprecated" not in (result.output or "").lower()
+        assert "semantic" in (result.output or "").lower()
 
 
 class TestQueryCommandRemoved:
