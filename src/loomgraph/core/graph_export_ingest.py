@@ -14,7 +14,6 @@ Two pieces:
 
 from __future__ import annotations
 
-import inspect
 import os
 import subprocess
 import tempfile
@@ -26,9 +25,9 @@ from loomgraph.core.embedding_pipeline import maybe_embed_entities
 from loomgraph.core.models import EntityData, RelationData
 from loomgraph.io.export_reader import GraphExportReader, ImportSummary
 
-# Progress callback: (phase, n_entities, n_relations) -> Optional[Awaitable].
-# Sync or async both accepted (awaited if the result is awaitable).
-ProgressFn = Callable[[str, int, int], Any]
+# Progress callback: (phase, n_entities, n_relations) -> None. Sync-only —
+# the sole caller (cli/_indexing._progress) just click.echo's to stderr.
+ProgressFn = Callable[[str, int, int], None]
 
 
 class GraphExportError(RuntimeError):
@@ -77,7 +76,7 @@ def run_graph_export(
         os.unlink(tmp_path)
 
 
-async def _emit(
+def _emit(
     on_progress: ProgressFn | None,
     phase: str,
     n_entities: int,
@@ -85,9 +84,7 @@ async def _emit(
 ) -> None:
     if on_progress is None:
         return
-    res = on_progress(phase, n_entities, n_relations)
-    if inspect.isawaitable(res):
-        await res
+    on_progress(phase, n_entities, n_relations)
 
 
 async def ingest(
@@ -106,7 +103,7 @@ async def ingest(
     carries no vector data; embedding is loomgraph's concern).
     """
     if clear:
-        await _emit(on_progress, "clear", len(entities), len(relations))
+        _emit(on_progress, "clear", len(entities), len(relations))
         await store.delete_all()
 
     entity_dicts = [
@@ -116,10 +113,10 @@ async def ingest(
         {"src_id": r.src_id, "tgt_id": r.tgt_id, **r.edge_data} for r in relations
     ]
 
-    await _emit(on_progress, "embed", len(entity_dicts), len(relation_dicts))
+    _emit(on_progress, "embed", len(entity_dicts), len(relation_dicts))
     embedded = await maybe_embed_entities(entity_dicts)
 
-    await _emit(on_progress, "insert", len(entity_dicts), len(relation_dicts))
+    _emit(on_progress, "insert", len(entity_dicts), len(relation_dicts))
     await store.insert_custom_kg(entity_dicts, relation_dicts, [])
 
     stats = await store.get_graph_stats()
