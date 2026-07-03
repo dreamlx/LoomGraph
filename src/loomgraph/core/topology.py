@@ -313,7 +313,12 @@ class TopologyAnalyzer:
         client: GraphStore instance
         hub_threshold: Minimum in-degree to flag as hub
         god_threshold: Minimum out-degree to flag as god function
-        module: Optional module prefix filter (e.g. "cli" filters source_id)
+        module: Optional RELATIVE module name appended to the auto-detected
+            common source prefix (e.g. "cli" -> "<prefix>/cli/"). Legacy mode.
+        scope: Optional ABSOLUTE source_id path prefix (e.g. "src/",
+            "src/loomgraph/cli/"). Used verbatim as both the endpoint filter
+            and the module-extraction strip prefix; skips auto-detection.
+            Wins over ``module`` when both are set (EPIC-014 #61).
         source_prefix: Common prefix to strip from source_ids for module
             extraction. Auto-detected from source_ids if None.
     """
@@ -322,6 +327,7 @@ class TopologyAnalyzer:
     hub_threshold: int = 8
     god_threshold: int = 10
     module: str | None = None
+    scope: str | None = None
     source_prefix: str | None = None
 
     async def analyze(self) -> TopologyResult:
@@ -342,18 +348,28 @@ class TopologyAnalyzer:
         """Server-side topology analysis using dedicated endpoints."""
         import asyncio
 
-        # Auto-detect source_prefix for correct module extraction in coupling
-        effective_prefix = self.source_prefix
-        if effective_prefix is None:
-            source_ids = await self.client.get_source_ids()
-            effective_prefix = _common_source_prefix(source_ids)
-            logger.debug("Auto-detected source_prefix: %r", effective_prefix)
+        filter_prefix: str | None
+        stats_prefix: str | None
+        if self.scope:
+            # Absolute prefix (EPIC-014 #61): serves both as the endpoint
+            # filter (orphans/hubs/gods) AND as the module-extraction strip
+            # prefix for coupling. No auto-detection needed.
+            filter_prefix = self.scope
+            stats_prefix = self.scope
+        else:
+            # Auto-detect source_prefix for correct module extraction in coupling
+            effective_prefix = self.source_prefix
+            if effective_prefix is None:
+                source_ids = await self.client.get_source_ids()
+                effective_prefix = _common_source_prefix(source_ids)
+                logger.debug("Auto-detected source_prefix: %r", effective_prefix)
 
-        # For filtering endpoints (orphans/degree), combine prefix + module
-        filter_prefix = effective_prefix or ""
-        if self.module:
-            filter_prefix = filter_prefix + self.module + "/"
-        filter_prefix = filter_prefix or None
+            # For filtering endpoints (orphans/degree), combine prefix + module
+            filter_prefix = effective_prefix or ""
+            if self.module:
+                filter_prefix = filter_prefix + self.module + "/"
+            filter_prefix = filter_prefix or None
+            stats_prefix = effective_prefix or None
 
         orphans, hubs, gods, stats = await asyncio.gather(
             self.client.get_orphan_entities(
@@ -370,7 +386,7 @@ class TopologyAnalyzer:
                 source_prefix=filter_prefix,
             ),
             self.client.get_graph_stats(
-                source_prefix=effective_prefix or None,
+                source_prefix=stats_prefix,
                 module_depth=2,
             ),
         )

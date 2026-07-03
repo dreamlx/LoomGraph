@@ -40,8 +40,15 @@ TOOL_SPEC = Tool(
             "module": {
                 "type": "string",
                 "description": (
-                    "Optional source_id prefix filter "
-                    "(e.g. `src/loomgraph/cli`)."
+                    "[deprecated, use scope] Optional source_id prefix filter."
+                ),
+            },
+            "scope": {
+                "type": "string",
+                "description": (
+                    "Absolute source_id path prefix to scope to "
+                    "(e.g. `src/`, `src/loomgraph/cli/`). Filters "
+                    "orphans/hubs/gods + coupling. Recommended over module."
                 ),
             },
             "workspace": {"type": "string"},
@@ -54,6 +61,7 @@ async def handle(arguments: dict[str, Any]) -> list[TextContent]:
     hub = arguments.get("hub_threshold", DEFAULT_HUB_THRESHOLD)
     god = arguments.get("god_threshold", DEFAULT_GOD_THRESHOLD)
     module = arguments.get("module")
+    scope = arguments.get("scope")
     workspace = resolve_workspace(arguments)
     return await safe_call(
         lambda: _async_topology(
@@ -61,6 +69,7 @@ async def handle(arguments: dict[str, Any]) -> list[TextContent]:
             god_threshold=god,
             module=module,
             workspace=workspace,
+            scope=scope,
         ),
         failure_code="TOPOLOGY_FAILED",
         failure_hint="Confirm the workspace is indexed: `loomgraph workspace info`.",

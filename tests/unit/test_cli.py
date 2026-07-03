@@ -1562,6 +1562,50 @@ class TestTopologyCommand:
         assert "--module" in result.stdout
 
 
+class TestTopologyScopeOption:
+    """EPIC-014 #61: topology --scope = absolute source_id prefix."""
+
+    @patch("loomgraph.cli._analysis._async_topology", new_callable=AsyncMock)
+    def test_topology_forwards_scope(self, mock_async: AsyncMock, runner: CliRunner) -> None:
+        mock_async.return_value = {
+            "summary": {"total_entities": 0, "total_relations": 0, "orphan_count": 0,
+                        "hub_count": 0, "god_function_count": 0,
+                        "placeholder_module_count": 0, "coupling_density": 0.0,
+                        "topology_score": 100},
+            "orphans": [], "hubs": [], "god_functions": [],
+            "placeholder_modules": [],
+            "coupling": {"cross_module_relations": 0, "intra_module_relations": 0,
+                         "density": 0.0, "most_coupled_pairs": []},
+        }
+        result = runner.invoke(main, ["topology", "--scope", "src/loomgraph/"])
+        assert result.exit_code == 0
+        # signature: (hub_threshold, god_threshold, module, workspace, scope)
+        assert mock_async.call_args.args[4] == "src/loomgraph/"
+
+    def test_topology_help_lists_scope(self, runner: CliRunner) -> None:
+        result = runner.invoke(main, ["topology", "--help"])
+        assert result.exit_code == 0
+        assert "--scope" in result.stdout
+
+
+class TestDebtScopeOption:
+    """EPIC-014 #61: debt --scope filters static + topology."""
+
+    @patch("loomgraph.cli._debt._async_debt", new_callable=AsyncMock)
+    def test_debt_forwards_scope(self, mock_async: AsyncMock, runner: CliRunner) -> None:
+        mock_async.return_value = {}
+        result = runner.invoke(main, ["debt", "--scope", "src/"])
+        assert result.exit_code == 0
+        # signature: (codeindex_data, output_format, workspace, module,
+        #             skip_topology, with_git, git_since, scope)
+        assert mock_async.call_args.args[7] == "src/"
+
+    def test_debt_help_lists_scope(self, runner: CliRunner) -> None:
+        result = runner.invoke(main, ["debt", "--help"])
+        assert result.exit_code == 0
+        assert "--scope" in result.stdout
+
+
 class TestCheckCommand:
     """Tests for the check command."""
 

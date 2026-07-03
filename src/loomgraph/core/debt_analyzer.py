@@ -277,6 +277,7 @@ class DebtAnalyzer:
         module: str | None = None,
         with_git: bool = False,
         git_since: str = "3 months",
+        scope: str | None = None,
     ) -> dict[str, Any]:
         """
         Main analysis entry point.
@@ -286,17 +287,22 @@ class DebtAnalyzer:
 
         Args:
             codeindex_data: Optional codeindex JSON output
-            module: Optional module filter for topology analysis (e.g. "cli")
+            module: Optional RELATIVE module filter for topology (legacy)
             with_git: Enable git metrics analysis (default: False)
             git_since: Time window for git analysis (default: "3 months")
+            scope: Optional ABSOLUTE path prefix (e.g. "src/") filtering BOTH
+                the codeindex static dimension and topology (EPIC-014 #61).
+                Use to exclude docs/scripts/tests from a debt audit.
 
         Returns:
             Debt report in standardized format (ADR-012)
         """
-        # Step 1: Import codeindex data (if provided)
+        # Step 1: Import codeindex data (if provided), scoped to a path prefix
         imported_data = None
         if codeindex_data:
             imported_data = self.import_codeindex_data(codeindex_data)
+            if scope:
+                imported_data = self._filter_codeindex_by_scope(imported_data, scope)
 
         # Step 2: Analyze issues from codeindex data
         if imported_data:
@@ -305,7 +311,9 @@ class DebtAnalyzer:
         # Step 3: Analyze graph topology (if client available)
         topology_score = 100  # Default perfect score
         if self.client:
-            topology_score = await self._analyze_topology_issues(module=module)
+            topology_score = await self._analyze_topology_issues(
+                module=module, scope=scope
+            )
 
         # Step 3.5: Analyze git history (EPIC-010 Feature 2)
         git_score = 100  # Default perfect score (no git penalties)
@@ -422,14 +430,17 @@ class DebtAnalyzer:
             )
             issue_id_counter += 1
 
-    async def _analyze_topology_issues(self, module: str | None = None) -> int:
+    async def _analyze_topology_issues(
+        self, module: str | None = None, scope: str | None = None
+    ) -> int:
         """
         Analyze graph topology for structural code smells.
 
         Converts topology analysis results into DebtIssue objects.
 
         Args:
-            module: Optional module filter (e.g. "cli" for src/cli/)
+            module: Optional RELATIVE module filter (legacy, e.g. "cli")
+            scope: Optional ABSOLUTE path prefix (EPIC-014 #61); wins over module
 
         Returns:
             Topology score (0-100)
@@ -441,6 +452,7 @@ class DebtAnalyzer:
             hub_threshold=8,
             god_threshold=10,
             module=module,
+            scope=scope,
         )
         result = await analyzer.analyze()
 
@@ -572,6 +584,40 @@ class DebtAnalyzer:
             )
 
         return result.topology_score
+
+    def _filter_codeindex_by_scope(
+        self, data: CodeindexData, scope: str | None
+    ) -> CodeindexData:
+        """Restrict codeindex static arrays to entries under ``scope``.
+
+        EPIC-014 #61: ``debt --scope src/`` filters the static dimension
+        (the topology dimension gets the same scope via TopologyAnalyzer).
+        Each element carries a ``path``; an element with no ``path``
+        (aggregate) is kept. Identity return when scope is None/empty.
+        """
+        if not scope:
+            return data
+        scope = scope.rstrip("/")
+        prefix = scope + "/"
+
+        def _under(arr: list[dict[str, Any]]) -> list[dict[str, Any]]:
+            out: list[dict[str, Any]] = []
+            for e in arr:
+                p = e.get("path")
+                if p is None or p == scope or p.startswith(prefix):
+                    out.append(e)
+            return out
+
+        return CodeindexData(
+            target_path=data.target_path,
+            timestamp=data.timestamp,
+            summary=data.summary,
+            giant_files=_under(data.giant_files),
+            giant_functions=_under(data.giant_functions),
+            test_smells=_under(data.test_smells),
+            maintainability_scores=_under(data.maintainability_scores),
+            file_reports=_under(data.file_reports),
+        )
 
     def _lookup_maintainability(self, data: CodeindexData, path: str) -> float:
         """Lookup maintainability score from codeindex data."""

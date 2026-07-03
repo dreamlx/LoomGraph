@@ -41,7 +41,13 @@ from loomgraph.core.debt_analyzer import DebtAnalyzer
 @click.option(
     "--module",
     default=None,
-    help="Module filter for topology analysis (e.g., 'cli' for src/cli/)",
+    help="[deprecated, use --scope] Module filter for topology analysis",
+)
+@click.option(
+    "--scope",
+    default=None,
+    help="Absolute path prefix to scope the audit (e.g. 'src/'). Filters BOTH "
+         "codeindex static findings and topology; excludes docs/scripts/tests.",
 )
 @click.option(
     "--skip-topology",
@@ -66,6 +72,7 @@ def debt(
     skip_topology: bool,
     with_git: bool,
     git_since: str,
+    scope: str | None,
 ) -> None:
     """Analyze technical debt from codeindex data.
 
@@ -96,7 +103,7 @@ def debt(
     try:
         result = asyncio.run(
             _async_debt(
-                codeindex_data, output_format, workspace, module, skip_topology, with_git, git_since
+                codeindex_data, output_format, workspace, module, skip_topology, with_git, git_since, scope
             )
         )
         output_success(result)
@@ -117,6 +124,7 @@ async def _async_debt(
     skip_topology: bool,
     with_git: bool,
     git_since: str,
+    scope: str | None = None,
 ) -> dict[str, Any]:
     """Async implementation of debt analysis.
 
@@ -157,6 +165,7 @@ async def _async_debt(
         module=module,
         with_git=with_git,
         git_since=git_since,
+        scope=scope,
     )
 
     # Format output

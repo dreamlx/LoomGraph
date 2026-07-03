@@ -211,9 +211,25 @@ async def _async_overview(
 @main.command()
 @click.option("--hub-threshold", default=8, help="Min in-degree to flag as hub")
 @click.option("--god-threshold", default=10, help="Min out-degree to flag as god function")
-@click.option("--module", default=None, help="Module prefix filter (e.g. 'cli')")
+@click.option(
+    "--scope",
+    default=None,
+    help="Absolute source_id path prefix to scope to (e.g. 'src/', 'src/loomgraph/cli/'). "
+         "Filters orphans/hubs/gods + coupling. Recommended over --module.",
+)
+@click.option(
+    "--module",
+    default=None,
+    help="[deprecated, use --scope] Relative module name appended to the common prefix (e.g. 'cli')",
+)
 @click.option("--workspace", "-w", default=None, help="Workspace name (default: current directory name)")
-def topology(hub_threshold: int, god_threshold: int, module: str | None, workspace: str | None) -> None:
+def topology(
+    hub_threshold: int,
+    god_threshold: int,
+    scope: str | None,
+    module: str | None,
+    workspace: str | None,
+) -> None:
     """Analyze knowledge graph topology for structural code smells.
 
     Detects orphan entities, hub fragility, god functions,
@@ -221,7 +237,7 @@ def topology(hub_threshold: int, god_threshold: int, module: str | None, workspa
     """
     try:
         result = asyncio.run(
-            _async_topology(hub_threshold, god_threshold, module, workspace)
+            _async_topology(hub_threshold, god_threshold, module, workspace, scope)
         )
         output_success(result)
     except Exception as e:
@@ -237,6 +253,7 @@ async def _async_topology(
     god_threshold: int,
     module: str | None = None,
     workspace: str | None = None,
+    scope: str | None = None,
 ) -> dict[str, Any]:
     """Run async topology analysis."""
     from loomgraph.core.topology import TopologyAnalyzer
@@ -248,6 +265,7 @@ async def _async_topology(
         hub_threshold=hub_threshold,
         god_threshold=god_threshold,
         module=module,
+        scope=scope,
     )
     result = await analyzer.analyze()
     return result.to_dict()

@@ -389,7 +389,7 @@ class TestTopologyIntegration:
         captured_module = None
 
         class MockTopologyAnalyzer:
-            def __init__(self, client, hub_threshold, god_threshold, module):
+            def __init__(self, client, hub_threshold, god_threshold, module, scope=None):
                 nonlocal captured_module
                 captured_module = module
 

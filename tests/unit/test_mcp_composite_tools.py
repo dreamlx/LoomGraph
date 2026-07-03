@@ -50,6 +50,40 @@ async def test_debt_audit_runs_all_dimensions_in_parallel(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_debt_audit_forwards_scope_to_debt_and_topology(monkeypatch):
+    """scope (EPIC-014 #61) reaches both the debt and topology dimensions."""
+    captured: dict[str, dict] = {}
+
+    async def fake_debt(**kw):
+        captured["debt"] = kw
+        return {"score": 80}
+
+    async def fake_topology(**kw):
+        captured["topology"] = kw
+        return {"orphans": []}
+
+    async def fake_ok(**_):
+        return {}
+
+    async def fake_info(_name, _opt):
+        return {"entities": 0}
+
+    with patch.object(t_debt, "_async_debt", side_effect=fake_debt), \
+         patch.object(t_debt, "_async_deps", side_effect=fake_ok), \
+         patch.object(t_debt, "_async_overview", side_effect=fake_ok), \
+         patch.object(t_debt, "_async_topology", side_effect=fake_topology), \
+         patch.object(t_debt, "_async_workspace_info", side_effect=fake_info), \
+         patch.object(t_debt, "_async_check", side_effect=fake_ok), \
+         patch.object(t_debt, "_is_git_repo", return_value=False):
+        contents = await t_debt.handle({"scope": "src/", "trends_top_n": 0})
+
+    payload = json.loads(contents[0].text)
+    assert payload["success"] is True
+    assert captured["debt"]["scope"] == "src/"
+    assert captured["topology"]["scope"] == "src/"
+
+
+@pytest.mark.asyncio
 async def test_debt_audit_degrades_per_dimension_not_whole_call(monkeypatch):
     """If one dimension raises, the others still land + report success."""
     async def fake_ok(*a, **kw): return {"ok": True}

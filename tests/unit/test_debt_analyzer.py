@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -644,3 +645,129 @@ class TestIssueToDict:
         assert result["location"]["file"] == "user.py"
         assert result["metrics"]["lines"] == 2500
         assert result["suggestion"] == "Split into smaller classes"
+
+
+class TestFilterCodeindexByScope:
+    """_filter_codeindex_by_scope restricts static arrays to a path prefix.
+
+    EPIC-014 #61: ``debt --scope src/`` must filter the codeindex static
+    dimension (giant_files / giant_functions / test_smells /
+    maintainability_scores / file_reports), not just topology. Every array
+    uses a ``path`` field (verified in _analyze_codeindex_issues and
+    _lookup_maintainability).
+    """
+
+    def _make_data(self) -> CodeindexData:
+        return CodeindexData(
+            target_path=".",
+            timestamp="t",
+            summary={},
+            giant_files=[{"path": "src/a.py"}, {"path": "scripts/x.py"}],
+            giant_functions=[{"path": "src/b.py"}, {"path": "docs/y.py"}],
+            test_smells=[{"path": "tests/z.py"}],
+            maintainability_scores=[
+                {"path": "src/a.py", "score": 8},
+                {"path": "scripts/x.py", "score": 3},
+            ],
+            file_reports=[{"path": "src/a.py"}, {"path": "examples/e.py"}],
+        )
+
+    def test_none_scope_is_identity(self, analyzer: DebtAnalyzer) -> None:
+        data = self._make_data()
+        assert analyzer._filter_codeindex_by_scope(data, None) is data
+
+    def test_empty_scope_is_identity(self, analyzer: DebtAnalyzer) -> None:
+        data = self._make_data()
+        assert analyzer._filter_codeindex_by_scope(data, "") is data
+
+    def test_filters_every_array_by_prefix(self, analyzer: DebtAnalyzer) -> None:
+        out = analyzer._filter_codeindex_by_scope(self._make_data(), "src")
+        assert [e["path"] for e in out.giant_files] == ["src/a.py"]
+        assert [e["path"] for e in out.giant_functions] == ["src/b.py"]
+        assert out.test_smells == []
+        assert [e["path"] for e in out.maintainability_scores] == ["src/a.py"]
+        assert [e["path"] for e in out.file_reports] == ["src/a.py"]
+
+    def test_prefix_boundary_no_false_match(self, analyzer: DebtAnalyzer) -> None:
+        """'src' must NOT match 'src_bench/x.py' (bare startswith would)."""
+        data = CodeindexData(
+            target_path=".",
+            timestamp="t",
+            summary={},
+            giant_files=[{"path": "src/a.py"}, {"path": "src_bench/b.py"}],
+        )
+        out = analyzer._filter_codeindex_by_scope(data, "src")
+        assert [e["path"] for e in out.giant_files] == ["src/a.py"]
+
+    def test_trailing_slash_equivalent(self, analyzer: DebtAnalyzer) -> None:
+        out = analyzer._filter_codeindex_by_scope(self._make_data(), "src/")
+        assert [e["path"] for e in out.giant_files] == ["src/a.py"]
+
+
+class TestAnalyzeScope:
+    """analyze(scope=) filters the static dimension + forwards scope to topology."""
+
+    def _mock_store(self) -> AsyncMock:
+        s = AsyncMock()
+        s.get_source_ids.return_value = []
+        s.get_orphan_entities.return_value = []
+        s.get_degree_distribution.return_value = []
+        s.get_graph_stats.return_value = {
+            "entity_count": 0,
+            "relation_count": 0,
+            "cross_module_relations": 0,
+            "intra_module_relations": 0,
+            "coupling_density": 0.0,
+        }
+        s.get_all_entities.return_value = []
+        s.get_all_relations.return_value = []
+        return s
+
+    @pytest.mark.asyncio
+    async def test_scope_drops_out_of_scope_static_issues(self) -> None:
+        """scripts/ giant_file must be dropped under scope='src' (#61)."""
+        analyzer = DebtAnalyzer(client=self._mock_store())
+        data = {
+            "giant_files": [
+                {"path": "src/a.py", "lines": 2000, "severity": "critical"},
+                {"path": "scripts/x.py", "lines": 2000, "severity": "critical"},
+            ],
+            "giant_functions": [],
+            "test_smells": [],
+            "maintainability_scores": [],
+            "file_reports": [],
+        }
+        await analyzer.analyze(codeindex_data=data, scope="src")
+        god_class_files = [
+            i.location["file"] for i in analyzer.issues if i.category == "god_class"
+        ]
+        assert "src/a.py" in god_class_files
+        assert "scripts/x.py" not in god_class_files
+
+    @pytest.mark.asyncio
+    async def test_scope_forwarded_to_topology(self) -> None:
+        store = self._mock_store()
+        analyzer = DebtAnalyzer(client=store)
+        await analyzer.analyze(codeindex_data=None, scope="src/loomgraph")
+        _, kwargs = store.get_orphan_entities.call_args
+        assert kwargs["source_prefix"] == "src/loomgraph"
+
+    @pytest.mark.asyncio
+    async def test_no_scope_keeps_all_static(self) -> None:
+        analyzer = DebtAnalyzer(client=self._mock_store())
+        data = {
+            "giant_files": [
+                {"path": "src/a.py", "lines": 2000, "severity": "critical"},
+                {"path": "scripts/x.py", "lines": 2000, "severity": "critical"},
+            ],
+            "giant_functions": [],
+            "test_smells": [],
+            "maintainability_scores": [],
+            "file_reports": [],
+        }
+        await analyzer.analyze(codeindex_data=data)
+        god_class_files = [
+            i.location["file"] for i in analyzer.issues if i.category == "god_class"
+        ]
+        assert "src/a.py" in god_class_files
+        assert "scripts/x.py" in god_class_files

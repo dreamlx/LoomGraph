@@ -803,3 +803,73 @@ class TestCouplingMetrics:
         assert d["intra_module_relations"] == 90
         assert d["density"] == 0.1
         assert len(d["most_coupled_pairs"]) == 1
+
+
+class TestTopologyScopeFilter:
+    """`scope` = absolute source_id prefix filter (EPIC-014 #61).
+
+    Distinct from `module` (a *relative* name appended to the auto-detected
+    common prefix): `scope` is an absolute path prefix like ``src/`` and is
+    used verbatim. Needed because ``--module src/`` would wrongly expand to
+    ``<effective_prefix>/src/``. Scope replaces effective_prefix entirely —
+    it serves both as the endpoint filter (orphans/hubs/gods) and as the
+    module-extraction strip prefix for coupling.
+    """
+
+    @pytest.fixture
+    def mock_client(self) -> AsyncMock:
+        c = AsyncMock()
+        c.get_source_ids.return_value = [
+            "src/loomgraph/cli/main.py:1-50",
+            "src/loomgraph/core/config.py:10-30",
+        ]
+        c.get_orphan_entities.return_value = []
+        c.get_degree_distribution.return_value = []
+        c.get_graph_stats.return_value = {
+            "entity_count": 0,
+            "relation_count": 0,
+            "cross_module_relations": 0,
+            "intra_module_relations": 0,
+            "coupling_density": 0.0,
+        }
+        c.get_all_entities.return_value = []
+        c.get_all_relations.return_value = []
+        return c
+
+    @pytest.mark.asyncio
+    async def test_scope_used_verbatim_as_endpoint_filter(
+        self, mock_client: AsyncMock
+    ) -> None:
+        analyzer = TopologyAnalyzer(client=mock_client, scope="src/loomgraph/cli/")
+        await analyzer.analyze()
+        _, kwargs = mock_client.get_orphan_entities.call_args
+        assert kwargs["source_prefix"] == "src/loomgraph/cli/"
+
+    @pytest.mark.asyncio
+    async def test_scope_skips_effective_prefix_detection(
+        self, mock_client: AsyncMock
+    ) -> None:
+        """scope is absolute — no need to auto-detect the common prefix."""
+        analyzer = TopologyAnalyzer(client=mock_client, scope="src/")
+        await analyzer.analyze()
+        mock_client.get_source_ids.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_scope_used_as_coupling_strip_prefix(
+        self, mock_client: AsyncMock
+    ) -> None:
+        """get_graph_stats gets scope as the module-extraction strip prefix."""
+        analyzer = TopologyAnalyzer(client=mock_client, scope="src/loomgraph/")
+        await analyzer.analyze()
+        _, kwargs = mock_client.get_graph_stats.call_args
+        assert kwargs["source_prefix"] == "src/loomgraph/"
+
+    @pytest.mark.asyncio
+    async def test_scope_overrides_module_when_both_set(
+        self, mock_client: AsyncMock
+    ) -> None:
+        """scope (absolute) wins over module (relative); CLI won't pass both."""
+        analyzer = TopologyAnalyzer(client=mock_client, scope="src/", module="cli")
+        await analyzer.analyze()
+        _, kwargs = mock_client.get_orphan_entities.call_args
+        assert kwargs["source_prefix"] == "src/"

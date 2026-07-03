@@ -77,6 +77,14 @@ TOOL_SPEC = Tool(
                 "minimum": 0,
                 "maximum": 10,
             },
+            "scope": {
+                "type": "string",
+                "description": (
+                    "Absolute path prefix to scope the audit (e.g. 'src/'). "
+                    "Filters BOTH codeindex static findings and topology; "
+                    "excludes docs/scripts/tests. EPIC-014 #61."
+                ),
+            },
             "workspace": {
                 "type": "string",
                 "description": "Override the workspace to query.",
@@ -184,6 +192,7 @@ async def handle(arguments: dict[str, Any]) -> list[TextContent]:
     with_git_arg = arguments.get("with_git", True)
     git_since = arguments.get("git_since", "3 months")
     trends_top_n = int(arguments.get("trends_top_n", 3))
+    scope = arguments.get("scope")
     workspace = resolve_workspace(arguments)
 
     git_enabled = with_git_arg and _is_git_repo(source_path)
@@ -198,11 +207,13 @@ async def handle(arguments: dict[str, Any]) -> list[TextContent]:
             skip_topology=False,
             with_git=git_enabled,
             git_since=git_since,
+            scope=scope,
         )),
         ("deps", _async_deps(depth=2, workspace=workspace)),
         ("overview", _async_overview(depth=1, workspace=workspace, no_summary=True)),
         ("topology", _async_topology(
             hub_threshold=10, god_threshold=10, module=None, workspace=workspace,
+            scope=scope,
         )),
         ("workspace_info", _async_workspace_info(workspace, None)),
         ("check", _async_check(repo_path=source_path, workspace=workspace)),
