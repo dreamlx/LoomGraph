@@ -205,16 +205,29 @@ async def test_ingest_clear_false_skips_delete_all() -> None:
     store.insert_custom_kg.assert_awaited_once()
 
 
-async def test_ingest_progress_callback_fires() -> None:
-    """on_progress is invoked for each phase (used by `index`'s [1/3]… echoes)."""
+async def test_ingest_progress_callback_fires_clear() -> None:
+    """clear=True → on_progress fires clear → embed → insert, in that order."""
     store = _FakeStore()
     phases: list[str] = []
 
-    async def _cb(phase: str, n_entities: int, n_relations: int) -> None:
+    def _cb(phase: str, n_entities: int, n_relations: int) -> None:
         phases.append(phase)
 
-    # on_progress may be sync or async; ingest should await it if coroutine.
     await ingest(
         _sample_entities(), _sample_relations(), store, clear=True, on_progress=_cb
     )
-    assert phases  # at least one phase reported
+    assert phases == ["clear", "embed", "insert"]
+
+
+async def test_ingest_progress_callback_fires_no_clear() -> None:
+    """clear=False → on_progress skips `clear` (delete_all is not called)."""
+    store = _FakeStore()
+    phases: list[str] = []
+
+    def _cb(phase: str, n_entities: int, n_relations: int) -> None:
+        phases.append(phase)
+
+    await ingest(
+        _sample_entities(), _sample_relations(), store, clear=False, on_progress=_cb
+    )
+    assert phases == ["embed", "insert"]
