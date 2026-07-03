@@ -24,7 +24,8 @@
 
 ```
 loomgraph
-├── index      # 一键索引 (调用 codeindex → embed → inject)
+├── index      # 一键索引 (codeindex graph-export → embed → inject; qualified id, #66)
+├── update     # whole-tree re-export + upsert (post-commit; --since/--files 已废弃)
 ├── embed      # 生成向量 (从 ParseResult JSON)
 ├── inject     # 注入图谱 (ParseResult + Embeddings → LightRAG)
 ├── find       # 结构化实体发现 (名字匹配 + 可选关系)
@@ -41,7 +42,7 @@ loomgraph
 
 ### 1. `loomgraph index` - 一键索引
 
-**用途**: 调用完整 Pipeline (scan → parse → embed → inject)
+**用途**: 调用完整 Pipeline (`codeindex graph-export` → embed → inject)。实体用 **module-qualified id**（修复跨模块同名函数冲突，#66），边带 `resolution_qualifier` + 跨文件 callee 解析。需要 `ai-codeindex >= 0.28.0`。
 
 ```bash
 loomgraph index <repo_path> [options]
@@ -51,28 +52,28 @@ loomgraph index <repo_path> [options]
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
 | `<repo_path>` | 仓库路径 | 必填 |
-| `--output-format` | 输出格式 | `json` |
-| `--clear` | 清除旧数据后重建 | `true` |
-| `--verbose` | 显示详细日志 | `false` |
+| `--clear` | 清除旧数据后重建（Cold Rebuild） | `true` |
+| `-w, --workspace` | workspace 名（默认: 当前目录名） | 自动 |
 
 **成功输出** (exit code: 0):
 ```json
 {
   "success": true,
   "data": {
+    "mode": "cold_rebuild",
+    "workspace": "myproj:main",
     "repo_path": "/path/to/repo",
-    "files_scanned": 150,
-    "files_indexed": 148,
-    "files_skipped": 2,
+    "cleared": true,
     "entities_created": 1250,
     "relations_created": 3400,
+    "embedded": 1250,
+    "store_stats": {"entities": 1250, "relations": 3400},
     "duration_seconds": 45.2
-  },
-  "skipped_files": [
-    {"path": "src/broken.py", "reason": "parse_error", "detail": "SyntaxError line 42"}
-  ]
+  }
 }
 ```
+
+> **#66 Breaking**: 旧版本（legacy `codeindex scan` 路径）索引的 workspace 用简单名 key，升级后**必须 `loomgraph index --clear .` 一次**重建，否则同名符号（`handle`/`run`/`__init__` 等）仍冲突。
 
 **错误输出** (exit code: 1):
 ```json
@@ -81,11 +82,13 @@ loomgraph index <repo_path> [options]
   "error": {
     "code": "CODEINDEX_NOT_FOUND",
     "message": "codeindex command not found in PATH",
-    "suggestion": "Install codeindex: pip install matrix-codeindex",
+    "suggestion": "Install codeindex: pip install ai-codeindex",
     "docs": "https://github.com/dreamlx/codeindex#installation"
   }
 }
 ```
+
+`loomgraph update` 走同一管线（`clear=False`，upsert 语义），但每次 **whole-tree re-export**（不再是 per-file 增量；`--since`/`--files` 已废弃但保留兼容，会被忽略）。warm-incremental 由 content_hash diff 恢复（跟进项）。
 
 ---
 
@@ -528,19 +531,7 @@ loomgraph graph <entity_name> [options]
 loomgraph topology [options]
 ```
 
-> ⚠️ **已知限制（跨模块同名函数）**：`loomgraph index` 目前走 legacy
-> `codeindex scan --output json` 路径，实体按**简单名**建键。若一个
-> codebase 有跨模块同名函数（`handle` / `run` / `main` / `to_dict` /
-> `analyze` 等，几乎所有真实项目都有），它们会在**索引时**合并成一个
-> 节点，边取并集。后果：`topology` 可能报**假 god_function**（合并节点
-> out_degree 虚高）、`graph` 的 caller/callee 计数可能张冠李戴。数据在
-> 索引阶段已合并，分析层无法还原——真正的修复是把 `index` 迁到
-> `codeindex graph-export`（qualified 实体 id）。跟踪：
-> [#66](https://github.com/dreamlx/LoomGraph/issues/66) /
-> [EPIC-014](https://github.com/dreamlx/LoomGraph/issues/64)。
-> **临时判断法**：若某 god_function 的 out_degree 大得不合理，先
-> `loomgraph graph <name> --direction callees` 看 callees 是否横跨多个
-> 无关模块——是则为同名合并的幻影，不是真 god function。
+> ✅ **#66 已修复**：`loomgraph index`/`update` 已迁到 `codeindex graph-export` 契约，实体用 module-qualified id。跨模块同名函数不再合并成幻影 god_function。升级后需 `loomgraph index --clear .` 重建一次 workspace。
 
 **参数**:
 | 参数 | 说明 | 默认值 |

@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import json
-import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +13,11 @@ from loomgraph.cli._common import ErrorCode, get_auto_workspace, output_error, o
 from loomgraph.cli._deps_check import check_codeindex
 from loomgraph.cli.main import main
 from loomgraph.core.config import get_settings
+from loomgraph.core.graph_export_ingest import (
+    GraphExportError,
+    ingest,
+    run_graph_export,
+)
 
 
 @main.command()
@@ -24,7 +27,8 @@ from loomgraph.core.config import get_settings
 def index(repo_path: str, clear: bool, workspace: str | None) -> None:
     """Index a code repository (one-step pipeline).
 
-    Calls: codeindex scan → embed → inject
+    Calls: codeindex graph-export → embed → inject (module-qualified entity
+    ids — fixes the cross-module same-name collision, #66).
 
     REPO_PATH: Directory path to index
     """
@@ -45,52 +49,27 @@ def index(repo_path: str, clear: bool, workspace: str | None) -> None:
         )
         return
 
-    # Step 2: Run codeindex scan
-    click.echo(f"[2/3] Scanning {repo.name}/ with codeindex (this may take a while)...", err=True)
+    # Step 2: Run codeindex graph-export (qualified entity ids + edges)
+    click.echo(f"[2/3] Exporting {repo.name}/ with codeindex graph-export...", err=True)
     try:
-        result = subprocess.run(
-            ["codeindex", "scan", str(repo), "--output", "json"],
-            capture_output=True,
-            text=True,
-            timeout=300,  # 5 minute timeout
-        )
-        if result.returncode != 0:
-            output_error(
-                code=ErrorCode.CODEINDEX_FAILED,
-                message=f"codeindex scan failed: {result.stderr}",
-                suggestion="Check codeindex logs for details",
-            )
-            return
-
-        parse_results = json.loads(result.stdout)
-        file_count = len(parse_results.get("results", []))
-        click.echo(f"       Scan complete: {file_count} files parsed.", err=True)
-
-    except subprocess.TimeoutExpired:
-        output_error(
-            code=ErrorCode.CODEINDEX_TIMEOUT,
-            message="codeindex scan timed out after 5 minutes",
-            suggestion="Try indexing a smaller directory",
-        )
-        return
-    except json.JSONDecodeError as e:
+        entities, relations, summary = run_graph_export(repo)
+    except GraphExportError as e:
         output_error(
             code=ErrorCode.CODEINDEX_FAILED,
-            message=f"Failed to parse codeindex output: {e}",
-            suggestion="Check codeindex version compatibility",
+            message=str(e),
+            suggestion="Check codeindex logs; ensure ai-codeindex >= 0.28.0",
         )
         return
-    except Exception as e:
-        output_error(
-            code=ErrorCode.CODEINDEX_FAILED,
-            message=f"codeindex error: {e}",
-        )
-        return
+    click.echo(
+        f"       Export complete: {summary.entity_count} entities, "
+        f"{summary.relation_count} relations.",
+        err=True,
+    )
 
-    # Step 3: Run embed + inject asynchronously
+    # Step 3: Embed + inject asynchronously
     click.echo("[3/3] Injecting into knowledge graph...", err=True)
     try:
-        result = asyncio.run(_async_index_pipeline(parse_results, clear, workspace, repo_path=repo))
+        result = asyncio.run(_async_index(entities, relations, workspace, clear))
     except Exception as e:
         output_error(
             code=ErrorCode.STORAGE_ERROR,
@@ -106,212 +85,34 @@ def index(repo_path: str, clear: bool, workspace: str | None) -> None:
     output_success(result)
 
 
-async def _async_index_pipeline(
-    parse_results: dict[str, Any],
+async def _async_index(
+    entities: list[Any],
+    relations: list[Any],
+    workspace: str | None,
     clear: bool,
-    workspace: str | None = None,
-    repo_path: Path | None = None,
 ) -> dict[str, Any]:
-    """Run the async indexing pipeline via insert_custom_kg.
+    """Resolve workspace, build the store, run the shared ingest pipeline.
 
-    Single-pass batch approach:
-    1. Collect all entities, relations, and chunks from all files
-    2. Create external stubs for missing targets
-    3. Inject everything in one insert_custom_kg call
-
-    Args:
-        parse_results: Output from codeindex scan --output json
-        clear: Whether to clear existing data before indexing
-        workspace: Optional workspace name
-        repo_path: Repo root path; if set, file paths are stored as relative paths
+    Receives already-mapped entities/relations from ``run_graph_export``
+    (module-qualified ids — fixes the cross-module same-name collision, #66).
+    Delegates embed + insert to :func:`ingest`.
     """
-    from loomgraph.core.injector import build_chunks, collect_kg_data, create_external_stubs
-    from loomgraph.core.models import (
-        Call,
-        Import,
-        Inheritance,
-        ParseResult,
-        Symbol,
-    )
     from loomgraph.storage.factory import create_graph_store
 
-    store = await create_graph_store(workspace=get_auto_workspace(workspace))
+    ws = get_auto_workspace(workspace)
+    store = await create_graph_store(workspace=ws)
 
-    # Step 0: Clear existing data if requested (Cold Rebuild)
-    cleared = False
-    if clear:
-        try:
-            await store.delete_all()
-            cleared = True
-        except Exception:
-            pass  # Will be reported in result
-
-    # Step 1: Collect all entities, relations, and chunks from all files
-    files_scanned = 0
-    files_indexed = 0
-    files_skipped = 0
-    skipped_files: list[dict[str, str]] = []
-    all_entities: list[dict[str, Any]] = []
-    all_relations: list[dict[str, Any]] = []
-    all_chunks: list[dict[str, Any]] = []
-
-    results = parse_results.get("results", [])
-    files_scanned = len(results)
-
-    for i, file_result in enumerate(results, 1):
-        # Progress feedback every 100 files
-        if i % 100 == 0 or i == files_scanned:
-            click.echo(
-                f"       Collecting: {i}/{files_scanned} files, "
-                f"{len(all_entities)} entities...",
-                err=True,
-            )
-        path = Path(file_result.get("path", ""))
-
-        # Convert absolute path to relative (for clean source_id in graph)
-        if repo_path and path.is_absolute():
-            with contextlib.suppress(ValueError):
-                path = path.relative_to(repo_path)
-
-        if file_result.get("error"):
-            files_skipped += 1
-            skipped_files.append({
-                "path": str(path),
-                "reason": "parse_error",
-                "detail": file_result["error"],
-            })
-            continue
-
-        symbols = [
-            Symbol(
-                name=s.get("name", ""),
-                kind=s.get("kind", ""),
-                signature=s.get("signature", ""),
-                docstring=s.get("docstring", ""),
-                line_start=s.get("line_start", 0),
-                line_end=s.get("line_end", 0),
-            )
-            for s in file_result.get("symbols", [])
-        ]
-
-        calls = [
-            Call(
-                caller=c.get("caller", ""),
-                callee=c.get("callee", ""),
-                line=c.get("line", 0),
-                is_method=c.get("is_method", False),
-            )
-            for c in file_result.get("calls", [])
-        ]
-
-        inheritances = [
-            Inheritance(
-                child=i.get("child", ""),
-                parent=i.get("parent", ""),
-            )
-            for i in file_result.get("inheritances", [])
-        ]
-
-        imports = [
-            Import(
-                module=i.get("module", ""),
-                alias=i.get("alias"),
-                names=i.get("names", []),
-            )
-            for i in file_result.get("imports", [])
-        ]
-
-        parse_result = ParseResult(
-            path=path,
-            symbols=symbols,
-            calls=calls,
-            inheritances=inheritances,
-            imports=imports,
-            module_docstring=file_result.get("module_docstring", ""),
-            file_lines=file_result.get("file_lines", 0),
-        )
-
-        try:
-            entities, relations = collect_kg_data(parse_result)
-            chunks = build_chunks(parse_result)
-            all_entities.extend(entities)
-            all_relations.extend(relations)
-            all_chunks.extend(chunks)
-            files_indexed += 1
-        except Exception as e:
-            files_skipped += 1
-            skipped_files.append({
-                "path": str(path),
-                "reason": "mapping_error",
-                "detail": str(e),
-            })
-
-    # Step 2: Create external stubs for missing relation targets
-    stubs = create_external_stubs(all_entities, all_relations)
-    all_entities.extend(stubs)
-    external_stubs = len(stubs)
-
-    # Step 2b: Attach embeddings for sqlite vec0
-    from loomgraph.cli._common import maybe_embed_entities
-
-    embedded_count = await maybe_embed_entities(all_entities)
-    if embedded_count:
-        click.echo(f"       Embedded {embedded_count} entity descriptions", err=True)
-
-    # Step 3: Batch insert_custom_kg call(s)
-    entities_created = 0
-    relations_created = 0
-    injection_errors: list[str] = []
-
-    if all_entities or all_relations:
-        total = len(all_entities)
+    def _progress(phase: str, n_entities: int, n_relations: int) -> None:
         click.echo(
-            f"       Uploading {total} entities, "
-            f"{len(all_relations)} relations, "
-            f"{len(all_chunks)} chunks...",
+            f"       {phase}: {n_entities} entities, {n_relations} relations",
             err=True,
         )
 
-        def _progress(batch_num: int, total_batches: int, count: int) -> None:
-            click.echo(
-                f"       Batch {batch_num}/{total_batches} "
-                f"({count} entities)...",
-                err=True,
-            )
-
-        try:
-            await store.insert_custom_kg(
-                all_entities, all_relations, all_chunks,
-                progress_callback=_progress,
-            )
-            # GraphStore contract returns None — count is the input size
-            # since insert_custom_kg upserts every supplied row.
-            entities_created = len(all_entities)
-            relations_created = len(all_relations)
-        except Exception as e:
-            injection_errors.append(f"insert_custom_kg failed: {e}")
-
-    result: dict[str, Any] = {
-        "mode": "cold_rebuild" if clear else "append",
-        "files_scanned": files_scanned,
-        "files_indexed": files_indexed,
-        "files_skipped": files_skipped,
-        "entities_created": entities_created,
-        "relations_created": relations_created,
-        "skipped_files": skipped_files,
-    }
-
-    if external_stubs:
-        result["external_stubs"] = external_stubs
-
-    if clear:
-        result["cleared"] = cleared
-
-    if injection_errors:
-        result["injection_errors"] = injection_errors[:10]
-        if len(injection_errors) > 10:
-            result["injection_errors_total"] = len(injection_errors)
-
+    result = await ingest(
+        entities, relations, store, clear=clear, on_progress=_progress
+    )
+    result["workspace"] = ws
+    result["mode"] = "cold_rebuild" if clear else "append"
     return result
 
 
@@ -499,337 +300,96 @@ def update(
     embedding_url: str | None,
     use_affected: bool,
 ) -> None:
-    """Warm update: index only changed files since last commit.
+    """Update the knowledge graph (whole-tree re-export, #66).
 
-    Detects git changes and incrementally adds new entities/relations
-    without clearing existing data.
+    Previously a per-file warm update via ``codeindex parse <file>`` + git diff.
+    Now: whole-tree ``codeindex graph-export`` + upsert — converges with
+    ``index`` minus ``--clear`` for additions/modifications. Deleted symbols
+    are NOT garbage-collected (upsert overwrites same-id, never removes); run
+    ``index --clear`` for a fully clean state. Warm-incrementality will be
+    restored via a content_hash-based diff (EPIC-015 follow-up).
 
-    Examples:
-        loomgraph update                 # Changes since last commit
-        loomgraph update --since HEAD~3  # Changes in last 3 commits
-        loomgraph update --since main    # Changes since branching from main
-        loomgraph update --workspace erp # Update in specific workspace
-        loomgraph update --files src/foo.py,src/bar.py  # Specific files (CI/CD)
+    ``--since`` / ``--files`` / ``--use-affected`` / ``--embedding-url`` are
+    accepted but inert (a deprecation note is emitted when any non-default is
+    set). ``--files`` path-existence is still validated, for CI scripts that
+    gate on the exit code.
     """
     import time
 
-    from loomgraph.core.git import (
-        GitError,
-        get_changed_files,
-        get_current_commit,
-        is_git_repository,
-    )
-    from loomgraph.core.indexer import CODE_EXTENSIONS
-
     start_time = time.time()
-    repo_path = Path(".")
-    current_commit = None
 
-    # If --files provided, parse and use directly (skip git detection)
+    # Inert-flag detection (kept for CI-script + muscle-memory compatibility).
+    inert: list[str] = []
+    if since != "HEAD~1":
+        inert.append(f"--since={since}")
+    if use_affected:
+        inert.append("--use-affected")
+    if embedding_url:
+        inert.append("--embedding-url=…")
     if files:
-        changed_files = [Path(f.strip()) for f in files.split(",")]
-        # Validate files exist
-        for file_path in changed_files:
-            full_path = repo_path / file_path
-            if not full_path.exists():
+        # Validate paths exist (CI scripts may gate on the exit code) — then drop.
+        for f in [s.strip() for s in files.split(",") if s.strip()]:
+            if not Path(f).exists():
                 output_error(
                     code=ErrorCode.INVALID_INPUT,
-                    message=f"File not found: {file_path}",
+                    message=f"File not found: {f}",
                     suggestion="Check file paths and ensure they exist",
                 )
                 return
-    else:
-        # Git-based detection (original flow)
-        # Check if in git repo
-        if not is_git_repository(repo_path):
-            output_error(
-                code=ErrorCode.GIT_ERROR,
-                message="Not a git repository",
-                suggestion="Run this command from within a git repository or use --files",
-            )
-            return
+        inert.append("--files=…")
+    if inert:
+        click.echo(
+            "note: update now does whole-tree graph-export re-export; "
+            f"ignoring inert flags ({', '.join(inert)}). "
+            "Warm-incremental restoration tracked in EPIC-015 follow-up.",
+            err=True,
+        )
 
-        # Get current commit for reference
-        try:
-            current_commit = get_current_commit(repo_path)
-        except GitError as e:
-            output_error(
-                code=ErrorCode.GIT_ERROR,
-                message=str(e),
-            )
-            return
+    repo = Path(".").resolve()
 
-        # Get changed files
-        if use_affected:
-            # Use codeindex affected for smarter detection
-            import json
-            import subprocess
-
-            try:
-                result = subprocess.run(
-                    ["codeindex", "affected", "--json", "--since", since],
-                    capture_output=True,
-                    text=True,
-                    timeout=30,
-                )
-
-                if result.returncode != 0:
-                    output_error(
-                        code=ErrorCode.CODEINDEX_FAILED,
-                        message="codeindex affected failed",
-                        suggestion="Check if codeindex is installed: pip install ai-codeindex",
-                    )
-                    return
-
-                affected_data = json.loads(result.stdout)
-                changed_files = [Path(f) for f in affected_data.get("affected_files", [])]
-
-            except (subprocess.TimeoutExpired, json.JSONDecodeError, FileNotFoundError) as e:
-                output_error(
-                    code=ErrorCode.CODEINDEX_FAILED,
-                    message=f"Failed to run codeindex affected: {e}",
-                    suggestion="Try without --use-affected flag",
-                )
-                return
-        else:
-            # Use git diff (faster, simpler)
-            try:
-                changed_files = get_changed_files(
-                    since=since,
-                    repo_path=repo_path,
-                    extensions=CODE_EXTENSIONS,
-                )
-            except GitError as e:
-                output_error(
-                    code=ErrorCode.GIT_ERROR,
-                    message=str(e),
-                    suggestion="Check if the git reference exists: git log --oneline",
-                )
-                return
-
-    if not changed_files:
-        output_success({
-            "mode": "warm",
-            "message": "No code files changed",
-            "since": since,
-            "current_commit": current_commit,
-            "files_changed": 0,
-        })
-        return
-
-    # Check codeindex
+    # Step 1: Check codeindex
+    click.echo("[1/3] Checking codeindex installation...", err=True)
     codeindex_status = check_codeindex()
     if not codeindex_status.get("installed"):
         output_error(
             code=ErrorCode.CODEINDEX_NOT_FOUND,
-            message="codeindex command not found",
+            message="codeindex command not found in PATH",
             suggestion="Install codeindex: pip install ai-codeindex",
+            docs="https://github.com/dreamlx/codeindex#installation",
         )
         return
 
-    # Run warm update pipeline
+    # Step 2: Run codeindex graph-export (whole tree)
+    click.echo("[2/3] Exporting whole tree with codeindex graph-export...", err=True)
     try:
-        result = asyncio.run(
-            _async_warm_update(
-                changed_files,
-                repo_path,
-                workspace,
-                embedding_url=embedding_url,
-            )
+        entities, relations, summary = run_graph_export(repo)
+    except GraphExportError as e:
+        output_error(
+            code=ErrorCode.CODEINDEX_FAILED,
+            message=str(e),
+            suggestion="Check codeindex logs; ensure ai-codeindex >= 0.28.0",
         )
+        return
+    click.echo(
+        f"       Export complete: {summary.entity_count} entities, "
+        f"{summary.relation_count} relations.",
+        err=True,
+    )
+
+    # Step 3: Embed + upsert (clear=False → no delete_all)
+    click.echo("[3/3] Upserting into knowledge graph...", err=True)
+    try:
+        result = asyncio.run(_async_index(entities, relations, workspace, False))
     except Exception as e:
         output_error(
             code=ErrorCode.STORAGE_ERROR,
-            message=f"Warm update failed: {e}",
+            message=f"Pipeline error: {e}",
         )
         return
 
     duration = time.time() - start_time
     result["duration_seconds"] = round(duration, 2)
-    if not files:  # Only add git info if git-based
-        result["since"] = since
-        result["current_commit"] = current_commit
+    result["repo_path"] = str(repo)
+    click.echo(f"       Done in {result['duration_seconds']}s.", err=True)
 
     output_success(result)
-
-
-async def _async_warm_update(
-    changed_files: list[Path],
-    repo_path: Path,
-    workspace: str | None,
-    embedding_url: str | None = None,
-) -> dict[str, Any]:
-    """Run async warm update pipeline via delete_by_source + insert_custom_kg.
-
-    Three-step approach:
-    1. Parse changed files, collect entities/relations/chunks
-    2. Delete old data for changed files (delete_by_source)
-    3. Re-inject via single insert_custom_kg call
-    """
-    from loomgraph.core.injector import build_chunks, collect_kg_data, create_external_stubs
-    from loomgraph.core.models import (
-        Call,
-        Import,
-        Inheritance,
-        ParseResult,
-        Symbol,
-    )
-    from loomgraph.storage.factory import create_graph_store
-
-    ws = get_auto_workspace(workspace)
-    store = await create_graph_store(workspace=ws)
-
-    files_indexed = 0
-    files_skipped = 0
-    errors: list[str] = []
-    all_entities: list[dict[str, Any]] = []
-    all_relations: list[dict[str, Any]] = []
-    all_chunks: list[dict[str, Any]] = []
-    source_ids: list[str] = []
-
-    # Step 1: Parse all changed files and collect KG data
-    for file_path in changed_files:
-        full_path = repo_path / file_path
-
-        if not full_path.exists():
-            files_skipped += 1
-            errors.append(f"File not found: {file_path}")
-            continue
-
-        try:
-            result = subprocess.run(
-                ["codeindex", "parse", str(full_path)],
-                capture_output=True,
-                text=True,
-                timeout=60,
-            )
-
-            if result.returncode != 0:
-                files_skipped += 1
-                errors.append(f"Parse failed: {file_path}")
-                continue
-
-            file_result = json.loads(result.stdout)
-
-        except (subprocess.TimeoutExpired, json.JSONDecodeError) as e:
-            files_skipped += 1
-            errors.append(f"Parse error {file_path}: {e}")
-            continue
-
-        if file_result.get("error"):
-            files_skipped += 1
-            errors.append(f"Parse error: {file_result.get('error')}")
-            continue
-
-        path = Path(file_result.get("file_path", str(full_path)))
-
-        symbols = [
-            Symbol(
-                name=s.get("name", ""),
-                kind=s.get("kind", ""),
-                signature=s.get("signature", ""),
-                docstring=s.get("docstring", ""),
-                line_start=s.get("line_start", 0),
-                line_end=s.get("line_end", 0),
-            )
-            for s in file_result.get("symbols", [])
-        ]
-
-        calls = [
-            Call(
-                caller=c.get("caller", ""),
-                callee=c.get("callee", ""),
-                line=c.get("line", 0),
-                is_method=c.get("is_method", False),
-            )
-            for c in file_result.get("calls", [])
-        ]
-
-        inheritances = [
-            Inheritance(
-                child=i.get("child", ""),
-                parent=i.get("parent", ""),
-            )
-            for i in file_result.get("inheritances", [])
-        ]
-
-        imports = [
-            Import(
-                module=i.get("module", ""),
-                alias=i.get("alias"),
-                names=i.get("names", []),
-            )
-            for i in file_result.get("imports", [])
-        ]
-
-        parse_result = ParseResult(
-            path=path,
-            symbols=symbols,
-            calls=calls,
-            inheritances=inheritances,
-            imports=imports,
-            module_docstring=file_result.get("module_docstring", ""),
-            file_lines=file_result.get("file_lines", 0),
-        )
-
-        try:
-            entities, relations = collect_kg_data(parse_result)
-            chunks = build_chunks(parse_result)
-            all_entities.extend(entities)
-            all_relations.extend(relations)
-            all_chunks.extend(chunks)
-            source_ids.append(str(path))
-            files_indexed += 1
-        except Exception as e:
-            files_skipped += 1
-            errors.append(f"Mapping failed {path}: {e}")
-
-    # Step 2: Delete old data for changed files
-    if source_ids:
-        try:
-            await store.delete_by_source(source_ids)
-        except Exception as e:  # noqa: BLE001
-            errors.append(f"delete_by_source failed: {e}")
-
-    # Step 3: Create external stubs + single insert_custom_kg call
-    stubs = create_external_stubs(all_entities, all_relations)
-    all_entities.extend(stubs)
-    external_stubs = len(stubs)
-
-    # Attach embeddings for sqlite vec0
-    from loomgraph.cli._common import maybe_embed_entities
-
-    await maybe_embed_entities(all_entities)
-
-    entities_created = 0
-    relations_created = 0
-
-    if all_entities or all_relations:
-        try:
-            await store.insert_custom_kg(
-                all_entities, all_relations, all_chunks,
-            )
-            # GraphStore contract returns None; upsert count == input count.
-            entities_created = len(all_entities)
-            relations_created = len(all_relations)
-        except Exception as e:  # noqa: BLE001
-            errors.append(f"insert_custom_kg failed: {e}")
-
-    result: dict[str, Any] = {
-        "mode": "warm",
-        "files_changed": len(changed_files),
-        "files_indexed": files_indexed,
-        "files_skipped": files_skipped,
-        "entities_created": entities_created,
-        "relations_created": relations_created,
-    }
-
-    if external_stubs:
-        result["external_stubs"] = external_stubs
-
-    if errors:
-        result["errors"] = errors[:5]
-        if len(errors) > 5:
-            result["errors_total"] = len(errors)
-
-    return result

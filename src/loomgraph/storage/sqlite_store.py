@@ -5,7 +5,6 @@ EPIC-011 / ADR-013: full GraphStore implementation backed by stdlib sqlite3.
 - Phase 1: schema + CRUD + analytics (entities / relations / file_hashes)
 - Phase 2: sqlite-vec vec0 virtual tables for vector KNN
     * vec_node_descriptions(embedding float[768], +entity_name, +source_id)
-    * vec_code_snippets(embedding float[768], +chunk_id, +source_id)
 
 Embeddings are caller-provided: when `entity_data["embedding"]` is a
 list of floats matching the configured dimension, it's written to vec0.
@@ -120,12 +119,6 @@ INSERT OR IGNORE INTO meta(key, value) VALUES('schema_version', '2');
 CREATE VIRTUAL TABLE IF NOT EXISTS vec_node_descriptions USING vec0(
     embedding float[{dim}],
     +entity_name TEXT,
-    +source_id TEXT
-);
-
-CREATE VIRTUAL TABLE IF NOT EXISTS vec_code_snippets USING vec0(
-    embedding float[{dim}],
-    +chunk_id TEXT,
     +source_id TEXT
 );
 """
@@ -476,7 +469,6 @@ class SqliteGraphStore(GraphStore):
                 conn.execute("DELETE FROM entities")
                 conn.execute("DELETE FROM relations")
                 conn.execute("DELETE FROM vec_node_descriptions")
-                conn.execute("DELETE FROM vec_code_snippets")
 
         await self._run(_exec)
 
@@ -497,10 +489,6 @@ class SqliteGraphStore(GraphStore):
                 )
                 conn.execute(
                     f"DELETE FROM vec_node_descriptions WHERE source_id IN ({placeholders})",
-                    source_ids,
-                )
-                conn.execute(
-                    f"DELETE FROM vec_code_snippets WHERE source_id IN ({placeholders})",
                     source_ids,
                 )
 

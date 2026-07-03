@@ -34,7 +34,7 @@ ENTITY_REQUIRED = {"type", "id", "entity_type", "source_id", "provenance"}
 EDGE_REQUIRED = {"type", "kind", "src", "resolution_qualifier", "source_id"}
 
 VALID_ENTITY_TYPES = {"class", "function", "method"}
-VALID_EDGE_KINDS = {"CALLS", "INHERITS"}
+VALID_EDGE_KINDS = {"CALLS", "INHERITS", "IMPORTS"}
 VALID_QUALIFIERS = {"resolved", "ambiguous", "unresolved"}
 
 # Historic sentinel for unresolved-edge targets. Pre-0.27.0 (no `dst_raw`

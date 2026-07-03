@@ -161,48 +161,10 @@ def create_llm_client_for_workspace(workspace: str | None = None) -> Any:
     return create_llm_client(workspace=workspace)
 
 
-async def maybe_embed_entities(entities: list[dict[str, Any]]) -> int:
-    """Attach OpenAI-compatible embeddings to entity dicts in place.
-
-    Gated on `settings.embedding.enabled` (default False) — pipx install
-    yields a fully usable LoomGraph with no embedding service running.
-    When enabled, embedding failure logs a warning and returns 0 —
-    entity rows still write, the vec0 column just stays empty.
-    Returns count of embeddings attached.
-    """
-    import logging
-
-    from loomgraph.core.config import get_settings
-
-    settings = get_settings()
-    if not settings.embedding.enabled:
-        return 0
-
-    targets: list[tuple[int, dict[str, Any]]] = [
-        (i, e)
-        for i, e in enumerate(entities)
-        if e.get("description") and "embedding" not in e
-    ]
-    if not targets:
-        return 0
-
-    texts = [e["description"] for _, e in targets]
-
-    try:
-        from loomgraph.storage.factory import create_embedding_client
-
-        async with create_embedding_client() as client:
-            result = await client.embed(texts)
-    except Exception as ex:
-        logging.getLogger(__name__).warning(
-            "Embedding skipped (%s entities): %s", len(targets), ex
-        )
-        return 0
-
-    for (i, _entity), emb in zip(targets, result.embeddings, strict=False):
-        entities[i]["embedding"] = emb
-    return len(targets)
-
+# Re-exported from core so the graph-export ingestion pipeline can share the
+# same embedding step without a core→cli import cycle. Callers that import
+# `from loomgraph.cli._common import maybe_embed_entities` keep working.
+from loomgraph.core.embedding_pipeline import maybe_embed_entities  # noqa: E402,F401
 
 # ============================================
 # Error Codes (from CLI_DESIGN.md)

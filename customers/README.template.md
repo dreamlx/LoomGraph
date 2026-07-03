@@ -287,29 +287,33 @@ loomgraph status
 ### 知识图谱更新策略
 
 > **给 Claude Code**: 请根据以下规则维护知识图谱的时效性。
+>
+> ⚠️ **#66 Breaking**: `index`/`update` 已迁到 `codeindex graph-export` 契约（module-qualified 实体 id，修复跨模块同名冲突）。**从旧版本升级后，必须执行一次 `loomgraph index --clear .`** 重建 workspace（旧简单名 key 数据会保留冲突）。`update` 现为 whole-tree re-export（不再 per-file 增量；大仓库建议 hook 用 `LOOMGRAPH_HOOK_MODE=async`）。
 
-#### 何时执行 Warm Update（增量）
+#### 何时执行 Update（whole-tree re-export + upsert）
 
 | 场景 | 命令 |
 |------|------|
 | 完成代码修改并 commit 后 | `loomgraph update` |
-| 多次 commit 后批量同步 | `loomgraph update --since HEAD~5` |
 | 搜索前发现索引可能过期 | `loomgraph update` |
+
+> `update` 现在每次全量 re-export 整棵树（`--since`/`--files` 已废弃但保留兼容，会被忽略并打印提示）。upsert 保证新增/修改收敛、不丢数据；**删除**的符号不会自动清理（upsert 只覆盖同 id、不删除），搜索结果与代码不符时用 `loomgraph index --clear .` 重建。
 
 #### 何时执行 Cold Rebuild（完全重建）
 
 | 场景 | 命令 |
 |------|------|
 | 首次索引项目 | `loomgraph index .` |
+| **从旧版本升级（#66）** | `loomgraph index --clear .` |
 | 大规模重构后（文件移动/重命名） | `loomgraph index --clear .` |
 | 搜索结果明显不准确 | `loomgraph index --clear .` |
 | 项目结构变化（新增/删除大量文件） | `loomgraph index --clear .` |
 
 #### 自动判断提示
 
-1. **每次 `git commit` 后**：建议执行 `loomgraph update`
+1. **每次 `git commit` 后**：建议执行 `loomgraph update`（或 post-commit hook 自动跑）
 2. **搜索结果与代码不符**：执行 `loomgraph index --clear .`
-3. **不确定时**：执行 `loomgraph update`（安全，不会丢数据）
+3. **不确定时**：执行 `loomgraph update`（安全，upsert 不丢数据）
 
 ---
 
@@ -321,9 +325,9 @@ loomgraph status
 |------|------|---------|
 | `loomgraph status` | 检查服务状态 | 无 |
 | `loomgraph version` | 显示当前版本 | 无 |
-| `loomgraph index <path>` | 索引代码库 | codeindex + LightRAG |
-| `loomgraph index --clear <path>` | Cold Rebuild（清空重建） | codeindex + LightRAG |
-| `loomgraph update` | Warm Update（仅索引 git 变更） | 已索引 + Git |
+| `loomgraph index <path>` | 索引代码库（`codeindex graph-export` 契约，module-qualified 实体 id） | codeindex ≥ 0.28 |
+| `loomgraph index --clear <path>` | Cold Rebuild（清空重建） | codeindex ≥ 0.28 |
+| `loomgraph update` | Whole-tree re-export + upsert（不再 per-file 增量；`--since`/`--files` 已废弃但兼容） | codeindex ≥ 0.28 |
 
 ### 搜索命令
 
