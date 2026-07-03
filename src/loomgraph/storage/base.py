@@ -156,3 +156,22 @@ class GraphStore(ABC):
         is sqlite-vec-version-dependent).
         """
         return 0
+
+    async def write_embeddings(
+        self,
+        embeddings: list[tuple[str, str | None, list[float]]],
+    ) -> int:
+        """Write entity-description embeddings into the vector store.
+
+        Each tuple is ``(entity_name, source_id, embedding)`` where
+        ``embedding`` is a list of floats matching the configured
+        dimension. Existing vectors for the same entity_name are
+        replaced (idempotent by name). Default implementation raises
+        ``NotImplementedError`` — backends without vector support
+        should leave this method alone.
+
+        Returns the number of embeddings written.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not implement write_embeddings()"
+        )

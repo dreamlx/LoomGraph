@@ -12,6 +12,7 @@
 | 功能 | 命令 | 前置条件 | 说明 |
 |------|------|---------|------|
 | 结构化搜索 | `loomgraph find` | codeindex + LightRAG | 按名称/类型搜索实体 |
+| 语义搜索 | `loomgraph search` | **embedding.enabled + provider** | 按语义/意图搜索实体（向量检索，非名称匹配） |
 | 调用关系图 | `loomgraph graph` | codeindex 需提取 call relations | 查询 callers/callees |
 | 语义问答 | `loomgraph query` | **LightRAG 需配置 LLM** | 自然语言提问（需 LLM 推理） |
 | 拓扑分析 | `loomgraph topology` | codeindex + LightRAG | 检测孤立实体、God 函数等 |
@@ -19,6 +20,7 @@
 | 变更影响 | `loomgraph impact` | 已索引 + Git 仓库 | 分析代码变更影响范围 |
 | 技术债务 | `loomgraph debt` | codeindex 静态分析数据 | 多维度债务评分 |
 | Git 度量 | `loomgraph git-metrics` | Git 仓库 | 热点/总线因子/缺陷率 |
+| 向量补齐 | `loomgraph embed-backfill` | 已索引 + embedding.enabled + provider | 为无向量的 workspace（如 import-export 导入）补向量，使其可被 `search` 命中；不触发全量重建，幂等 |
 
 ### 常见问题速查
 
@@ -27,6 +29,7 @@
 | `query` 返回错误或空 | LightRAG 服务端未配置 LLM | 联系技术团队配置 LLM endpoint |
 | `graph` 返回空关系 | codeindex 未提取该语言的 call relations | 确认 codeindex 版本 ≥ 0.20.0 + 语言解析器已安装 |
 | `find` 正常但 `graph` 空 | 只有 entity 数据，缺少 relation 数据 | 重新索引: `loomgraph index --clear .` |
+| `search` 报 `EMBEDDING_NOT_INDEXED` 或返回空 | workspace 无向量（embedding 未启用 / import-export 导入） | `loomgraph embed-backfill -w <ws>` 补向量；或 `loomgraph index .`（需 `LOOMGRAPH_EMBEDDING__ENABLED=true`） |
 | 索引很慢 | 未配置 `.codeindex.yaml` | 先执行 `/loomgraph-setup` 再索引 |
 
 ---
