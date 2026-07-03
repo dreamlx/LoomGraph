@@ -313,3 +313,77 @@ class TestUnsupportedBackends:
         store = NoVecStore()
         with pytest.raises(NotImplementedError):
             await store.search_similar(_vec_normalized(0), k=1)
+
+
+# ---------- write_embeddings (EPIC-015 Phase 3 backfill) ----------
+
+
+class TestWriteEmbeddings:
+    """Bulk embedding write for backfill: entities already exist, vec0 is empty."""
+
+    async def test_write_embeddings_populates_vec0(
+        self, store: SqliteGraphStore
+    ) -> None:
+        # Pre-create entities without embeddings (simulates import-export path)
+        await store.create_entity("Alpha", {"entity_type": "class", "source_id": "a.py", "description": "first"})
+        await store.create_entity("Beta", {"entity_type": "function", "source_id": "b.py", "description": "second"})
+
+        assert await store.vector_count() == 0
+
+        # Write embeddings in bulk
+        count = await store.write_embeddings([
+            ("Alpha", "a.py", _vec(1.0)),
+            ("Beta", "b.py", _vec(2.0)),
+        ])
+        assert count == 2
+        assert await store.vector_count() == 2
+
+        # KNN: Alpha should be closest to _vec(1.0)
+        hits = await store.search_similar(_vec(1.0), k=2)
+        assert hits[0]["entity_name"] == "Alpha"
+        assert hits[1]["entity_name"] == "Beta"
+
+    async def test_write_embeddings_idempotent_by_name(
+        self, store: SqliteGraphStore
+    ) -> None:
+        await store.create_entity("Alpha", {"entity_type": "class", "source_id": "a.py"})
+        await store.write_embeddings([("Alpha", "a.py", _vec(1.0))])
+        assert await store.vector_count() == 1
+
+        # Re-write with a different vector -> still 1 row, vec updated
+        await store.write_embeddings([("Alpha", "a.py", _vec(9.0))])
+        assert await store.vector_count() == 1
+
+        hits = await store.search_similar(_vec(9.0), k=1)
+        assert hits[0]["entity_name"] == "Alpha"
+        assert hits[0]["distance"] == pytest.approx(0.0, abs=1e-5)
+
+    async def test_write_embeddings_skips_invalid(
+        self, store: SqliteGraphStore
+    ) -> None:
+        await store.create_entity("Alpha", {"entity_type": "class", "source_id": "a.py"})
+        # Wrong-dimension vector is silently skipped
+        count = await store.write_embeddings([
+            ("Alpha", "a.py", [0.5]),  # too short
+        ])
+        assert count == 0
+        assert await store.vector_count() == 0
+
+    async def test_write_embeddings_empty_list_returns_zero(
+        self, store: SqliteGraphStore
+    ) -> None:
+        count = await store.write_embeddings([])
+        assert count == 0
+
+    async def test_write_embeddings_entity_not_in_entities_table_ok(
+        self, store: SqliteGraphStore
+    ) -> None:
+        """write_embeddings writes to vec0 directly; entity existence not enforced."""
+        count = await store.write_embeddings([
+            ("Ghost", "ghost.py", _vec(3.0)),
+        ])
+        assert count == 1
+        assert await store.vector_count() == 1
+
+        hits = await store.search_similar(_vec(3.0), k=1)
+        assert hits[0]["entity_name"] == "Ghost"

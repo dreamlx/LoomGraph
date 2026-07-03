@@ -669,6 +669,40 @@ class SqliteGraphStore(GraphStore):
 
         return await self._run(_query)
 
+    # ----- Bulk embedding write (EPIC-015 Phase 3 backfill) -----
+
+    async def write_embeddings(
+        self,
+        embeddings: list[tuple[str, str | None, list[float]]],
+    ) -> int:
+        """Write entity-description embeddings to vec_node_descriptions.
+
+        Each tuple is ``(entity_name, source_id, embedding)``. Existing
+        vectors for the same entity_name are replaced (DELETE-then-INSERT
+        via ``_write_node_embedding``). Invalid or wrong-dimension vectors
+        are silently skipped.
+
+        Returns the number of embeddings actually written.
+        """
+        if not embeddings:
+            return 0
+
+        valid: list[tuple[str, str | None, list[float]]] = []
+        for name, sid, emb in embeddings:
+            if self._valid_embedding(emb) is not None:
+                valid.append((name, sid, emb))
+
+        if not valid:
+            return 0
+
+        def _exec(conn: sqlite3.Connection) -> None:
+            with conn:
+                for name, sid, emb in valid:
+                    self._write_node_embedding(conn, name, sid, emb)
+
+        await self._run(_exec)
+        return len(valid)
+
     async def get_graph_stats(
         self,
         source_prefix: str | None = None,

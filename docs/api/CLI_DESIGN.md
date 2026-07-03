@@ -29,6 +29,7 @@ loomgraph
 ├── inject     # 注入图谱 (ParseResult + Embeddings → LightRAG)
 ├── find       # 结构化实体发现 (名字匹配 + 可选关系)
 ├── search     # 语义搜索 (按含义, embedding KNN; find 的对等项)
+├── embed-backfill  # 为已有 workspace 补充向量 (不重新解析)
 ├── graph      # 精确关系遍历 (callers/callees + source_id)
 ├── status     # 检查系统状态
 └── version    # 版本信息
@@ -354,6 +355,69 @@ loomgraph search <query> [options]
 ```
 
 > **历史**: `search` 曾是 `find` 的隐藏 deprecated 别名(v0.10 前)。EPIC-015 回收这个名字给语义搜索——`find`(按名)/`search`(按义)/`graph`(按关系)三个对等检索模式。旧的 deprecation warning 已移除。
+
+---
+### 4.5b. `loomgraph embed-backfill` - 为已有 workspace 补充向量
+
+**用途**: 对于已有 entities 但缺少 embedding vectors 的 workspace（例如通过 `import-export` 导入的 workspace，导入时不携带向量数据），嵌入现有 entity 描述并写入 `vec_node_descriptions`。**不重新解析、不重新注入**——只对已存在的 entities 做向量化。(EPIC-015 Phase 3 / #70)
+
+```bash
+loomgraph embed-backfill [options]
+```
+
+**参数**:
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--workspace/-w` | Workspace 名称 | 当前目录名(带降级) |
+
+**前置条件**:
+- Workspace 必须已有 entities（通过 `loomgraph index .` 或 `loomgraph import-export` 创建）
+- 必须启用 embedding: `LOOMGRAPH_EMBEDDING__ENABLED=true` + 配置 provider
+
+**幂等性**: 如果 workspace 已有向量（`vector_count() > 0`），直接跳过，不报错、不重新嵌入。
+
+**成功输出**（首次回填）:
+```json
+{
+  "success": true,
+  "data": {
+    "workspace": "customer:imported",
+    "embedded": 2931,
+    "total_entities": 2931,
+    "model": "jina-code-v2"
+  }
+}
+```
+
+**成功输出**（已嵌入，跳过）:
+```json
+{
+  "success": true,
+  "data": {
+    "workspace": "customer:imported",
+    "skipped": true,
+    "reason": "workspace already embedded",
+    "vector_count": 2931,
+    "total_entities": 2931
+  }
+}
+```
+
+**错误输出**:
+```json
+{
+  "success": false,
+  "error": {
+    "code": "EMBEDDING_NOT_INDEXED",
+    "message": "Workspace 'customer:imported' has no entities.",
+    "suggestion": "Index first: loomgraph index <path>  (with LOOMGRAPH_EMBEDDING__ENABLED=true for semantic search)."
+  }
+}
+```
+
+错误码: `EMBEDDING_NOT_INDEXED` / `EMBEDDING_FAILED`
+
+---
 
 ---
 
