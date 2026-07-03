@@ -288,16 +288,16 @@ loomgraph status
 
 > **给 Claude Code**: 请根据以下规则维护知识图谱的时效性。
 >
-> ⚠️ **#66 Breaking**: `index`/`update` 已迁到 `codeindex graph-export` 契约（module-qualified 实体 id，修复跨模块同名冲突）。**从旧版本升级后，必须执行一次 `loomgraph index --clear .`** 重建 workspace（旧简单名 key 数据会保留冲突）。`update` 现为 whole-tree re-export（不再 per-file 增量；大仓库建议 hook 用 `LOOMGRAPH_HOOK_MODE=async`）。
+> ⚠️ **#66 Breaking**: `index`/`update` 已迁到 `codeindex graph-export` 契约（module-qualified 实体 id，修复跨模块同名冲突）。**从旧版本升级后，必须执行一次 `loomgraph index --clear .`** 重建 workspace（旧简单名 key 数据会保留冲突）。`update` 走 per-file 增量（git diff → 只 re-embed 变更文件 + GC 删除符号；非 git 仓库 fallback whole-tree upsert）。
 
-#### 何时执行 Update（whole-tree re-export + upsert）
+#### 何时执行 Update（per-file warm-diff）
 
 | 场景 | 命令 |
 |------|------|
 | 完成代码修改并 commit 后 | `loomgraph update` |
 | 搜索前发现索引可能过期 | `loomgraph update` |
 
-> `update` 现在每次全量 re-export 整棵树（`--since`/`--files` 已废弃但保留兼容，会被忽略并打印提示）。upsert 保证新增/修改收敛、不丢数据；**删除**的符号不会自动清理（upsert 只覆盖同 id、不删除），搜索结果与代码不符时用 `loomgraph index --clear .` 重建。
+> git 仓库里 `update` 只 re-embed/re-inject `git diff` 出的变更文件，并 GC 已删除符号（路 B：文件级粒度；symbol-span 由 codeindex content_hash 后续提供）。非 git 仓库或 `--files` 指定时 fallback 到 whole-tree upsert（此路径下删除符号不 GC，需 `loomgraph index --clear .` 重建）。`--since` 指定 diff ref（默认 `HEAD~1`）；`--use-affected` / `--embedding-url` 保留兼容但 inert。
 
 #### 何时执行 Cold Rebuild（完全重建）
 
@@ -327,7 +327,7 @@ loomgraph status
 | `loomgraph version` | 显示当前版本 | 无 |
 | `loomgraph index <path>` | 索引代码库（`codeindex graph-export` 契约，module-qualified 实体 id） | codeindex ≥ 0.28 |
 | `loomgraph index --clear <path>` | Cold Rebuild（清空重建） | codeindex ≥ 0.28 |
-| `loomgraph update` | Whole-tree re-export + upsert（不再 per-file 增量；`--since`/`--files` 已废弃但兼容） | codeindex ≥ 0.28 |
+| `loomgraph update` | Per-file warm-diff（git diff → 只 re-embed 变更文件 + GC 删除符号；非 git fallback whole-tree） | codeindex ≥ 0.28 |
 
 ### 搜索命令
 

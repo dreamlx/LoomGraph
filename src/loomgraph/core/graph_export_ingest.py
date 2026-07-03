@@ -127,3 +127,82 @@ async def ingest(
         "embedded": embedded,
         "store_stats": stats,
     }
+
+
+def _file_of(source_id: str) -> str:
+    """Extract the file path from a ``pkg/a.py:line`` source_id."""
+    return source_id.split(":", 1)[0]
+
+
+async def ingest_incremental(
+    entities: list[EntityData],
+    relations: list[RelationData],
+    store: Any,
+    *,
+    changed_files: set[str],
+    on_progress: ProgressFn | None = None,
+) -> dict[str, Any]:
+    """Per-file incremental ingest for ``update`` (路 B, no codeindex content_hash).
+
+    vs :func:`ingest` with ``clear=False`` (whole-tree upsert): only
+    re-embeds/re-inserts entities whose source file is in ``changed_files``,
+    and garbage-collects symbols deleted since the last index by first
+    deleting every entity under each changed file's source-id prefix.
+
+    Flow:
+    1. GC — for each changed file: ``delete_by_source(get_source_ids(file))``
+       removes stale entities, **including symbols deleted since the last
+       index** (upsert alone never removes them).
+    2. Filter — keep only entities/relations whose ``source_id`` file ∈
+       ``changed_files``.
+    3. ``maybe_embed_entities`` + ``insert_custom_kg`` the filtered subset
+       only — so unchanged files cost zero embed calls.
+
+    Granularity is file-level (a one-line edit re-embeds that file's
+    entities); symbol-span granularity via codeindex content_hash is the
+    follow-up (codeindex#110).
+    """
+    # Step 1: GC changed files' old entities (source-id prefix delete).
+    stale: list[str] = []
+    for f in sorted(changed_files):
+        stale.extend(await store.get_source_ids(f))
+    if stale:
+        _emit(on_progress, "clear", len(stale), 0)
+        await store.delete_by_source(stale)
+
+    # Step 2: filter to changed files.
+    changed_entities = [
+        e
+        for e in entities
+        if _file_of(str(e.entity_data.get("source_id", ""))) in changed_files
+    ]
+    changed_relations = [
+        r
+        for r in relations
+        if _file_of(str(r.edge_data.get("source_id", ""))) in changed_files
+    ]
+
+    # Step 3: embed + insert the subset (mirrors `ingest`).
+    entity_dicts = [
+        {"entity_name": e.entity_name, **e.entity_data} for e in changed_entities
+    ]
+    relation_dicts = [
+        {"src_id": r.src_id, "tgt_id": r.tgt_id, **r.edge_data} for r in changed_relations
+    ]
+
+    _emit(on_progress, "embed", len(entity_dicts), len(relation_dicts))
+    embedded = await maybe_embed_entities(entity_dicts)
+
+    _emit(on_progress, "insert", len(entity_dicts), len(relation_dicts))
+    await store.insert_custom_kg(entity_dicts, relation_dicts, [])
+
+    stats = await store.get_graph_stats()
+    return {
+        "incremental": True,
+        "changed_files": sorted(changed_files),
+        "gc_source_ids": len(stale),
+        "entities_created": len(entity_dicts),
+        "relations_created": len(relation_dicts),
+        "embedded": embedded,
+        "store_stats": stats,
+    }

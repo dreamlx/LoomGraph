@@ -527,99 +527,156 @@ class TestIndexCommand:
 
 
 class TestUpdateCommand:
-    """Tests for the update command (now whole-tree graph-export re-export, #66)."""
+    """update command: per-file warm-diff (git) with whole-tree fallback (路 B)."""
 
-    @patch("loomgraph.cli._indexing._async_index", new_callable=AsyncMock)
+    @patch("loomgraph.cli._indexing.ingest_incremental", new_callable=AsyncMock)
+    @patch("loomgraph.cli._indexing.ingest", new_callable=AsyncMock)
+    @patch("loomgraph.storage.factory.create_graph_store", new_callable=AsyncMock)
+    @patch("loomgraph.cli._indexing.get_changed_files")
+    @patch("loomgraph.cli._indexing.is_git_repository")
     @patch("loomgraph.cli._indexing.run_graph_export")
     @patch("loomgraph.cli._indexing.check_codeindex")
-    def test_update_is_whole_tree_reexport(
+    def test_update_git_uses_incremental_with_changed_files(
         self,
         mock_check: MagicMock,
         mock_export: MagicMock,
-        mock_async_index: AsyncMock,
+        mock_isgit: MagicMock,
+        mock_gcf: MagicMock,
+        mock_store: AsyncMock,
+        mock_ingest: AsyncMock,
+        mock_incr: AsyncMock,
         runner: CliRunner,
-        tmp_path: Path,
     ) -> None:
-        """`--files` is accepted but the export is still whole-tree (the
-        per-file warm path is gone). Pins the documented regression."""
-        mock_check.return_value = {"installed": True, "version": "0.28.0"}
+        """Git repo → ingest_incremental over the get_changed_files(since) subset."""
+        mock_check.return_value = {"installed": True, "version": "0.29.0"}
         mock_export.return_value = (
             [],
             [],
-            ImportSummary(entity_count=1, relation_count=0),
+            ImportSummary(entity_count=2, relation_count=0),
         )
-        mock_async_index.return_value = {
-            "cleared": False,
+        mock_isgit.return_value = True
+        mock_gcf.return_value = [Path("src/loomgraph/cli/_common.py")]
+        mock_incr.return_value = {
+            "incremental": True,
+            "changed_files": ["src/loomgraph/cli/_common.py"],
             "entities_created": 1,
             "relations_created": 0,
             "embedded": 0,
+            "gc_source_ids": 1,
             "store_stats": {},
-            "workspace": "demo:main",
-            "mode": "append",
         }
 
-        # Pass an explicit --files (a real path under cwd); update must STILL
-        # call run_graph_export with the repo root, not a per-file parse.
-        a_real_file = str(Path(__file__))
-        result = runner.invoke(
-            main, ["update", "--files", a_real_file]
-        )
+        result = runner.invoke(main, ["update", "--since", "HEAD~3"])
         assert result.exit_code == 0, result.output
 
-        mock_export.assert_called_once()
-        repo_arg = mock_export.call_args.args[0]
-        assert Path(repo_arg).is_absolute(), "update must export the whole repo"
+        mock_incr.assert_awaited_once()
+        mock_ingest.assert_not_awaited()  # whole-tree ingest not used on the git path
+        # changed_files passed through as a posix-path set
+        assert mock_incr.call_args.kwargs["changed_files"] == {
+            "src/loomgraph/cli/_common.py"
+        }
+        # --since is active: forwarded to get_changed_files
+        assert mock_gcf.call_args.kwargs["since"] == "HEAD~3"
 
-    @patch("loomgraph.cli._indexing._async_index", new_callable=AsyncMock)
+    @patch("loomgraph.cli._indexing.ingest_incremental", new_callable=AsyncMock)
+    @patch("loomgraph.cli._indexing.ingest", new_callable=AsyncMock)
+    @patch("loomgraph.storage.factory.create_graph_store", new_callable=AsyncMock)
+    @patch("loomgraph.cli._indexing.is_git_repository")
     @patch("loomgraph.cli._indexing.run_graph_export")
     @patch("loomgraph.cli._indexing.check_codeindex")
-    def test_update_never_clears_workspace(
+    def test_update_non_git_falls_back_to_whole_tree_upsert(
         self,
         mock_check: MagicMock,
         mock_export: MagicMock,
-        mock_async_index: AsyncMock,
+        mock_isgit: MagicMock,
+        mock_store: AsyncMock,
+        mock_ingest: AsyncMock,
+        mock_incr: AsyncMock,
         runner: CliRunner,
     ) -> None:
-        """update converges with index but always passes clear=False (upsert)."""
-        mock_check.return_value = {"installed": True, "version": "0.28.0"}
+        """Non-git repo → whole-tree ingest(clear=False); incremental not used."""
+        mock_check.return_value = {"installed": True, "version": "0.29.0"}
         mock_export.return_value = ([], [], ImportSummary())
-        mock_async_index.return_value = {"mode": "append", "entities_created": 0,
-                                          "relations_created": 0, "embedded": 0,
-                                          "cleared": False, "store_stats": {},
-                                          "workspace": "demo:main"}
+        mock_isgit.return_value = False
+        mock_ingest.return_value = {
+            "cleared": False,
+            "entities_created": 0,
+            "relations_created": 0,
+            "embedded": 0,
+            "store_stats": {},
+        }
 
         result = runner.invoke(main, ["update"])
         assert result.exit_code == 0, result.output
 
-        # _async_index signature: (entities, relations, workspace, clear)
-        assert mock_async_index.call_args.args[3] is False, (
+        mock_ingest.assert_awaited_once()
+        assert mock_ingest.call_args.kwargs["clear"] is False, (
             "update must never clear (it upserts over the existing workspace)"
         )
+        mock_incr.assert_not_awaited()
 
-    @patch("loomgraph.cli._indexing._async_index", new_callable=AsyncMock)
+    @patch("loomgraph.cli._indexing.ingest_incremental", new_callable=AsyncMock)
+    @patch("loomgraph.cli._indexing.ingest", new_callable=AsyncMock)
+    @patch("loomgraph.storage.factory.create_graph_store", new_callable=AsyncMock)
+    @patch("loomgraph.cli._indexing.get_changed_files")
+    @patch("loomgraph.cli._indexing.is_git_repository")
+    @patch("loomgraph.cli._indexing.run_graph_export")
+    @patch("loomgraph.cli._indexing.check_codeindex")
+    def test_update_files_flag_forces_whole_tree_fallback(
+        self,
+        mock_check: MagicMock,
+        mock_export: MagicMock,
+        mock_isgit: MagicMock,
+        mock_gcf: MagicMock,
+        mock_store: AsyncMock,
+        mock_ingest: AsyncMock,
+        mock_incr: AsyncMock,
+        runner: CliRunner,
+    ) -> None:
+        """--files forces whole-tree upsert even in a git repo (simple fallback)."""
+        mock_check.return_value = {"installed": True, "version": "0.29.0"}
+        mock_export.return_value = ([], [], ImportSummary())
+        mock_isgit.return_value = True  # git repo, but --files overrides
+        mock_ingest.return_value = {
+            "cleared": False,
+            "entities_created": 0,
+            "relations_created": 0,
+            "embedded": 0,
+            "store_stats": {},
+        }
+
+        a_real_file = str(Path(__file__))
+        result = runner.invoke(main, ["update", "--files", a_real_file])
+        assert result.exit_code == 0, result.output
+
+        mock_ingest.assert_awaited_once()  # whole-tree upsert
+        mock_incr.assert_not_awaited()
+        mock_gcf.assert_not_called()  # git diff skipped under --files
+
+    @patch("loomgraph.cli._indexing._async_update", new_callable=AsyncMock)
     @patch("loomgraph.cli._indexing.run_graph_export")
     @patch("loomgraph.cli._indexing.check_codeindex")
     def test_update_inert_flags_warn_but_succeed(
         self,
         mock_check: MagicMock,
         mock_export: MagicMock,
-        mock_async_index: AsyncMock,
+        mock_async_update: AsyncMock,
         runner: CliRunner,
     ) -> None:
-        """--since/--use-affected are accepted (inert) with a deprecation note;
-        the command still succeeds."""
-        mock_check.return_value = {"installed": True, "version": "0.28.0"}
+        """--use-affected / --embedding-url are inert (compat); --since is ACTIVE."""
+        mock_check.return_value = {"installed": True, "version": "0.29.0"}
         mock_export.return_value = ([], [], ImportSummary())
-        mock_async_index.return_value = {"mode": "append", "entities_created": 0,
-                                          "relations_created": 0, "embedded": 0,
-                                          "cleared": False, "store_stats": {},
-                                          "workspace": "demo:main"}
+        mock_async_update.return_value = {
+            "mode": "warm_incremental",
+            "entities_created": 0,
+            "duration_seconds": 0.1,
+        }
 
         result = runner.invoke(
-            main, ["update", "--since", "HEAD~5", "--use-affected"]
+            main, ["update", "--use-affected", "--embedding-url", "http://x"]
         )
         assert result.exit_code == 0, result.output
-        assert "inert" in result.output.lower() or "ignoring" in result.output.lower()
+        assert "inert" in result.output.lower()
 
 
 class TestFindCommand:
