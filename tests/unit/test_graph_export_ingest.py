@@ -231,3 +231,70 @@ async def test_ingest_progress_callback_fires_no_clear() -> None:
         _sample_entities(), _sample_relations(), store, clear=False, on_progress=_cb
     )
     assert phases == ["embed", "insert"]
+
+
+# ----- ingest_incremental (per-file warm-diff, 路 B) -------------------------
+
+
+class _FakeStoreIncremental:
+    """Store stub for ingest_incremental: tracks get_source_ids + delete_by_source."""
+
+    def __init__(self, source_ids_by_prefix: dict[str, list[str]] | None = None) -> None:
+        self._by_prefix = source_ids_by_prefix or {}
+        self.deleted_source_ids: list[str] = []
+        self.insert_custom_kg = AsyncMock()
+        self.get_graph_stats = AsyncMock(return_value={"entities": 1, "relations": 0})
+
+    async def get_source_ids(self, source_prefix: str | None = None) -> list[str]:
+        if source_prefix is None:
+            return [sid for sids in self._by_prefix.values() for sid in sids]
+        return list(self._by_prefix.get(source_prefix, []))
+
+    async def delete_by_source(self, source_ids: list[str]) -> None:
+        self.deleted_source_ids.extend(source_ids)
+
+
+def _ent(name: str, source_id: str) -> EntityData:
+    return EntityData(entity_name=name, entity_data={"source_id": source_id})
+
+
+async def test_ingest_incremental_only_touches_changed_files() -> None:
+    """Only changed-file entities are re-embedded/re-inserted; others untouched."""
+    from loomgraph.core.graph_export_ingest import ingest_incremental
+
+    store = _FakeStoreIncremental(source_ids_by_prefix={"pkg/a.py": ["pkg/a.py:1"]})
+    entities = [
+        _ent("pkg.a.handle", "pkg/a.py:1"),
+        _ent("pkg.b.handle", "pkg/b.py:1"),  # unchanged file — must be filtered out
+    ]
+
+    result = await ingest_incremental(entities, [], store, changed_files={"pkg/a.py"})
+
+    # GC: only pkg/a.py's old source_id deleted
+    assert store.deleted_source_ids == ["pkg/a.py:1"]
+    # Insert: only pkg.a.handle (pkg/b.py filtered out)
+    inserted = store.insert_custom_kg.call_args.args
+    assert len(inserted[0]) == 1
+    assert inserted[0][0]["entity_name"] == "pkg.a.handle"
+    assert result["entities_created"] == 1
+    assert result["changed_files"] == ["pkg/a.py"]
+
+
+async def test_ingest_incremental_garbage_collects_deleted_symbol() -> None:
+    """Deleted symbols (in store but absent from export) are removed via prefix-delete."""
+    from loomgraph.core.graph_export_ingest import ingest_incremental
+
+    # Store has 2 symbols under pkg/a.py (:1, :50); export has only :1 — :50 deleted.
+    store = _FakeStoreIncremental(
+        source_ids_by_prefix={"pkg/a.py": ["pkg/a.py:1", "pkg/a.py:50"]}
+    )
+    entities = [_ent("pkg.a.kept", "pkg/a.py:1")]
+
+    await ingest_incremental(entities, [], store, changed_files={"pkg/a.py"})
+
+    # Both old source_ids deleted (GC incl. the deleted symbol at :50)
+    assert sorted(store.deleted_source_ids) == ["pkg/a.py:1", "pkg/a.py:50"]
+    # Only the kept symbol re-inserted
+    inserted = store.insert_custom_kg.call_args.args
+    assert len(inserted[0]) == 1
+    assert inserted[0][0]["entity_name"] == "pkg.a.kept"

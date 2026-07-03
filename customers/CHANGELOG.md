@@ -25,6 +25,15 @@
 - **移除 models**：`Symbol` / `Call` / `Inheritance` / `Import` / `ParseResult` / `InjectResult` / `IndexResult`（legacy codeindex input types）。保留 `EntityData` / `RelationData` + analysis metrics。
 - **客户影响**：CLI 用户只用 `index` / `update` / `search` / `find`，不受影响；programmatic API 此前未出现在客户文档。
 
+### 恢复 — `update` per-file warm-diff（路 B, #66 收尾）
+
+`loomgraph update` 恢复 per-file 增量（#66 期间临时降级为 whole-tree）：
+
+- **git 仓库**：whole-tree `graph-export` 后，按 `git diff --since` 筛变更文件 → 只 re-embed/re-inject 变更部分 + GC 已删除符号（`delete_by_source` 按 source-id prefix）。命中 re-embed 成本（codeindex#110 点名的真正开销；parse 本身 ms 级）。
+- **非 git 仓库 / `--files`**：fallback whole-tree upsert（`clear=False`，删除符号不 GC，需 `index --clear` 重建）。
+- `--since` 重新生效（默认 `HEAD~1`）；`--use-affected` / `--embedding-url` 保留兼容但 inert。
+- **粒度**：文件级；symbol-span（codeindex `content_hash`, #110 门控项）为后续 follow-up。
+
 ### 新增 — 语义搜索补齐
 
 - **`loomgraph search "<意图>"`** —— 语义向量搜索，按含义/意图查实体（区别于按名称的 `find`）。需 `embedding.enabled: true` + 配置 provider。
