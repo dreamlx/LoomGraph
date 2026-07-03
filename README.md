@@ -150,9 +150,12 @@ Restart Claude Code. `loomgraph_find` / `loomgraph_graph` /
 no subprocess overhead, no `/skill-name` invocation. Full reference:
 [docs/api/MCP_DESIGN.md](docs/api/MCP_DESIGN.md).
 
-Legacy skill commands (debt audit, sync advisor, evolution) still ship
-via `loomgraph install-skills` for users who prefer the explicit-invoke
-model.
+The legacy workflow skills (`/loomgraph-debt-radar`,
+`/loomgraph-sync-advisor`, `/loomgraph-evolution`) were **removed in
+v0.13.0** — use the composite MCP tools (`loomgraph_debt_audit` /
+`loomgraph_sync_advice` / `loomgraph_evolution_track`) instead.
+`loomgraph install-skills` now ships only the `loomgraph-init` and
+`loomgraph-setup` helpers.
 
 ## Architecture (v0.11.0+)
 

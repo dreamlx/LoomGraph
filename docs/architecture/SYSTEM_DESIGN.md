@@ -13,7 +13,7 @@
 | 仓库 | 角色 | 职责 |
 |------|------|------|
 | **codeindex** | 看 | AST 解析，提取代码结构（Symbol / Call / Inheritance / Import） |
-| **LoomGraph** | 想 + 说 | 写入调度 + 读取分析 + Skill 编排，对外提供 CLI 和 Claude Code Skills |
+| **LoomGraph** | 想 + 说 | 写入调度 + 读取分析 + 编排（MCP composite），对外提供 CLI 和 MCP server |
 | **LightRAG** | 记 | 图谱存储 + 向量检索，通过 HTTP API 提供 CRUD |
 
 **存储所有权**：LoomGraph 不直接操作数据库。全部存储由 LightRAG 管理，LoomGraph 通过 `LightRAGClient`（HTTP）读写。
@@ -24,14 +24,15 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                     Skill 层 (Claude Code Skills)                   │
+│                编排层 (MCP composite + Skills)                      │
 │                                                                     │
-│  /loomgraph-debt-radar       技术债务审计报告                        │
-│  /loomgraph-sync-advisor     跨分支同步建议 + 冲突预测               │
-│  /loomgraph-evolution        代码演化趋势分析                        │
+│  loomgraph_debt_audit        技术债务审计 (10 维并行)                │
+│  loomgraph_sync_advice       跨分支同步建议 + 冲突预测               │
+│  loomgraph_evolution_track   代码演化趋势分析                        │
+│  loomgraph-init / setup      CLAUDE.md 注入 / 配置向导 (Skill)       │
 │                                                                     │
-│  原则: Skill 是编排者，不做数据计算                                   │
-│        编排 CLI 命令 + codeindex + LLM → 生成 Markdown 报告          │
+│  原则: 编排层是流程控制器，不做数据计算                              │
+│        composite 并行扇出 primitive → JSON，agent 渲染报告           │
 ├─────────────────────────────────────────────────────────────────────┤
 │                     能力层 (LoomGraph CLI)                           │
 │                                                                     │
@@ -120,19 +121,19 @@
 
 **设计原则**：LightRAG 只做存储检索，LoomGraph 在本地完成所有分析逻辑（聚合、diff、匹配、排序）。
 
-### 3.3 读取路径 — Skill 层
+### 3.3 读取路径 — MCP composite 层
 
 ```
-/skill 触发 → 编排多个 CLI 命令 + codeindex → 收集 JSON → LLM 综合分析 → Markdown 报告
+agent 调 composite tool → server 并行扇出多个 primitive + codeindex → 每维 {data, error} 信封 → agent 综合渲染
 ```
 
-| Skill | 编排的命令 | LLM 分析内容 |
-|-------|-----------|-------------|
-| `/loomgraph-debt-radar` | `codeindex tech-debt` + `loomgraph deps` + `loomgraph overview` + `loomgraph workspace info` | 债务等级评定 + 模块健康度排名 + 重构优先级 |
-| `/loomgraph-sync-advisor` | `loomgraph compare` + `loomgraph graph` + `git diff` | 冲突预测 + 合并策略 + 操作顺序 |
-| `/loomgraph-evolution` | `loomgraph similar` + `loomgraph compare` (逐对) + `loomgraph graph` | 分叉类型判断 + 维护代价量化 + 收敛建议 |
+| composite | 扇出的 primitive | 用途 |
+|-----------|-----------------|------|
+| `loomgraph_debt_audit` | `debt` + `deps` + `overview` + `topology` + `workspace_info` + `check` (+ git/trends) | 技术债务审计 + 模块健康度排名 + 重构优先级 |
+| `loomgraph_sync_advice` | `compare` + `graph` + `debt` (+ `git diff`) | 冲突预测 + 合并策略 + 操作顺序 |
+| `loomgraph_evolution_track` | `similar` + `compare`（逐对）+ `graph` | 分叉类型判断 + 维护代价量化 + 收敛建议 |
 
-**Skill 不做数据计算**，只做流程控制和 LLM 推理。数据全部来自 CLI 的 JSON 输出。
+**编排层不做数据计算**，只扇出 + 聚合。数据全部来自 primitive 的 JSON 输出，LLM 推理在 agent 侧。（v0.13.0 移除了对应的 `/skill` 工作流 skill，composite 是唯一编排面。）
 
 ---
 
@@ -285,30 +286,29 @@ LoomGraph 的主要用户是 AI Agent（Claude Code Skills / MCP 客户端）。
 
 ---
 
-## 8. Skill 设计
+## 8. 编排面设计（MCP composite + Skills）
 
 ### 8.1 交付形态
 
+v0.13.0 起，编排面以 **MCP composite tool** 为主（`loomgraph_debt_audit` / `loomgraph_sync_advice` / `loomgraph_evolution_track`），由 server 并行扇出 primitive。仅保留两个 setup 类 Skill：
+
 ```
 skills/
-├── loomgraph-debt-radar/SKILL.md      # Skill A: 债务雷达
-├── loomgraph-sync-advisor/SKILL.md    # Skill B: 智能同步
-├── loomgraph-evolution/SKILL.md       # Skill C: 演化观察
 ├── loomgraph-setup/SKILL.md           # 配置向导
 └── loomgraph-init/SKILL.md            # CLAUDE.md 注入
 ```
 
 打包进 wheel → `loomgraph install-skills` → 安装到 `~/.claude/skills/` → Claude Code 自动发现。
+（v0.12.1 的 `/loomgraph-debt-radar`、`/loomgraph-sync-advisor`、`/loomgraph-evolution` 工作流 skill 已在 v0.13.0 移除，由上列 composite tool 替代。）
 
-### 8.2 Skill 工作模式
+### 8.2 composite 工作模式
 
-每个 Skill 是一个 SKILL.md 文件，包含：
-1. **前置检查** — 验证工具可用、workspace 存在
-2. **数据收集** — 分步执行 CLI 命令，收集 JSON 结果
-3. **LLM 分析** — 将收集的数据汇总，按模板生成报告
-4. **输出** — Markdown 格式的分析报告
+每个 composite tool 在 MCP server 端并行扇出多个 primitive，每维返回 `{data, error}` 信封：
+1. **并行扇出** — `asyncio.gather` 同时调多个 primitive（debt / deps / overview / topology / …）
+2. **逐维降级** — 单维失败不影响其他维（`{data: null, error: ...}`）
+3. **agent 渲染** — agent 收到全部维度后综合成 Markdown 报告
 
-Skill 运行在 Claude Code Agent 上下文中，Agent 负责执行 bash 命令和 LLM 推理。
+LLM 推理仍在 agent 侧；composite 只做扇出 + 聚合，不做推理。setup 类 Skill（init / setup）保留 SKILL.md 形态，由 Claude Code 直接发现。
 
 ---
 

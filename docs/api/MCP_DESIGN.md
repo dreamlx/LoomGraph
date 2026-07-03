@@ -135,14 +135,14 @@ No arguments. Returns every workspace under `~/.loomgraph/`.
 |---|---|---|---|
 | `name` | string | server default | workspace to inspect |
 
-## Composite tools (v0.12.1)
+## Composite tools (v0.12.1; legacy skills removed v0.13.0)
 
-In addition to the 8 primitive read tools above, three **composite
-tools** were added in v0.12.1 to subsume the legacy workflow skills
+Three **composite tools** fan out across multiple primitives in
+parallel and return one structured response — the agent composes the
+prose narrative. They subsume the legacy workflow skills
 (`/loomgraph-debt-radar`, `/loomgraph-evolution`,
-`/loomgraph-sync-advisor`). Each composite fans out across multiple
-primitives in parallel and returns one structured response — the
-agent composes the prose narrative.
+`/loomgraph-sync-advisor`), which were **removed in v0.13.0** — these
+composites are the only surface for those workflows now.
 
 ### `loomgraph_debt_audit`
 
