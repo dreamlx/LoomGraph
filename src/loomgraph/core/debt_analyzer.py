@@ -118,6 +118,9 @@ class DebtAnalyzer:
         """
         self.client = client
         self.issues: list[DebtIssue] = []
+        # EPIC-014 #60: entity count from the last topology run (0 when
+        # topology was skipped — no client). Read by _calculate_overall_health.
+        self._topology_total_entities = 0
 
     @staticmethod
     def _is_whitelisted_god_function(entity_name: str) -> bool:
@@ -455,6 +458,7 @@ class DebtAnalyzer:
             scope=scope,
         )
         result = await analyzer.analyze()
+        self._topology_total_entities = result.total_entities  # EPIC-014 #60
 
         issue_id_counter = len(self.issues) + 1
 
@@ -727,7 +731,7 @@ class DebtAnalyzer:
             "grade": grade,
             "breakdown": breakdown,
             "summary": {
-                "total_entities": 0,  # TODO: get from topology result
+                "total_entities": self._topology_total_entities,
                 "p0_issues": p0_issues,
                 "p1_issues": p1_issues,
                 "p2_issues": p2_issues,

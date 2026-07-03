@@ -771,3 +771,38 @@ class TestAnalyzeScope:
         ]
         assert "src/a.py" in god_class_files
         assert "scripts/x.py" in god_class_files
+
+
+class TestTotalEntitiesWired:
+    """EPIC-014 #60: overall_health.summary.total_entities reflects topology."""
+
+    def _mock_store(self) -> AsyncMock:
+        s = AsyncMock()
+        s.get_source_ids.return_value = ["src/a.py:1"]
+        s.get_orphan_entities.return_value = []
+        s.get_degree_distribution.return_value = []
+        s.get_graph_stats.return_value = {
+            "entity_count": 42,
+            "relation_count": 0,
+            "cross_module_relations": 0,
+            "intra_module_relations": 0,
+            "coupling_density": 0.0,
+        }
+        s.get_all_entities.return_value = []
+        s.get_all_relations.return_value = []
+        return s
+
+    @pytest.mark.asyncio
+    async def test_total_entities_from_topology(self) -> None:
+        """When topology runs, total_entities == topology result count."""
+        analyzer = DebtAnalyzer(client=self._mock_store())
+        report = await analyzer.analyze(codeindex_data=None)
+        assert report["overall_health"]["summary"]["total_entities"] == 42
+
+    @pytest.mark.asyncio
+    async def test_total_entities_zero_without_client(
+        self, analyzer: DebtAnalyzer
+    ) -> None:
+        """No client → topology skipped → total_entities stays 0."""
+        report = await analyzer.analyze(codeindex_data=None)
+        assert report["overall_health"]["summary"]["total_entities"] == 0
