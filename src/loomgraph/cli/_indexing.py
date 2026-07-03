@@ -304,8 +304,10 @@ def update(
 
     Previously a per-file warm update via ``codeindex parse <file>`` + git diff.
     Now: whole-tree ``codeindex graph-export`` + upsert — converges with
-    ``index`` minus ``--clear``. Warm-incrementality will be restored via a
-    content_hash-based diff (EPIC-015 follow-up).
+    ``index`` minus ``--clear`` for additions/modifications. Deleted symbols
+    are NOT garbage-collected (upsert overwrites same-id, never removes); run
+    ``index --clear`` for a fully clean state. Warm-incrementality will be
+    restored via a content_hash-based diff (EPIC-015 follow-up).
 
     ``--since`` / ``--files`` / ``--use-affected`` / ``--embedding-url`` are
     accepted but inert (a deprecation note is emitted when any non-default is

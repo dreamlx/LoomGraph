@@ -297,7 +297,7 @@ loomgraph status
 | 完成代码修改并 commit 后 | `loomgraph update` |
 | 搜索前发现索引可能过期 | `loomgraph update` |
 
-> `update` 现在每次全量 re-export 整棵树（`--since`/`--files` 已废弃但保留兼容，会被忽略并打印提示）。upsert 语义保证不丢数据。
+> `update` 现在每次全量 re-export 整棵树（`--since`/`--files` 已废弃但保留兼容，会被忽略并打印提示）。upsert 保证新增/修改收敛、不丢数据；**删除**的符号不会自动清理（upsert 只覆盖同 id、不删除），搜索结果与代码不符时用 `loomgraph index --clear .` 重建。
 
 #### 何时执行 Cold Rebuild（完全重建）
 
