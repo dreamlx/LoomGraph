@@ -39,7 +39,6 @@ NOISE_SUFFIXES = frozenset({
 # Data classes and DTOs that are legitimately orphaned (used via serialization)
 WHITELIST_ORPHANS = frozenset({
     # Core data models (models.py)
-    "Call", "Import", "Inheritance", "Symbol", "ParseResult",
     "EntityData", "RelationData",
     # Result DTOs (to_dict for JSON serialization)
     "CompareResult", "DepsResult", "TopologyResult", "ImpactResult",
