@@ -11,9 +11,11 @@ import click
 from loomgraph.cli._common import ErrorCode, get_auto_workspace, output_error, output_success
 from loomgraph.cli._deps_check import check_codeindex
 from loomgraph.cli.main import main
+from loomgraph.core.git import get_changed_files, is_git_repository
 from loomgraph.core.graph_export_ingest import (
     GraphExportError,
     ingest,
+    ingest_incremental,
     run_graph_export,
 )
 
@@ -127,34 +129,38 @@ def update(
     embedding_url: str | None,
     use_affected: bool,
 ) -> None:
-    """Update the knowledge graph (whole-tree re-export, #66).
+    """Update the knowledge graph (per-file warm-diff via git, 路 B).
 
-    Previously a per-file warm update via ``codeindex parse <file>`` + git diff.
-    Now: whole-tree ``codeindex graph-export`` + upsert — converges with
-    ``index`` minus ``--clear`` for additions/modifications. Deleted symbols
-    are NOT garbage-collected (upsert overwrites same-id, never removes); run
-    ``index --clear`` for a fully clean state. Warm-incrementality will be
-    restored via a content_hash-based diff (EPIC-015 follow-up).
+    In a git repo: re-export the whole tree, then re-embed/re-inject only
+    the files that changed since ``--since`` (default ``HEAD~1``) and
+    garbage-collect symbols deleted since the last index. Unchanged files
+    cost zero embed calls (the expensive part, per codeindex#110).
 
-    ``--since`` / ``--files`` / ``--use-affected`` / ``--embedding-url`` are
-    accepted but inert (a deprecation note is emitted when any non-default is
-    set). ``--files`` path-existence is still validated, for CI scripts that
-    gate on the exit code.
+    Non-git repo, or ``--files`` set: falls back to whole-tree upsert
+    (``clear=False``) — additions/modifications converge, but deleted
+    symbols are NOT GC'd; run ``index --clear .`` for a fully clean state.
+
+    ``--use-affected`` / ``--embedding-url`` are accepted but inert (kept
+    for CI-script / muscle-memory compat). ``--files`` path-existence is
+    validated (CI scripts may gate on the exit code) and forces the
+    whole-tree fallback.
     """
     import time
 
     start_time = time.time()
 
-    # Inert-flag detection (kept for CI-script + muscle-memory compatibility).
+    # Inert flags (compat) — note: --since is now ACTIVE (git diff ref).
     inert: list[str] = []
-    if since != "HEAD~1":
-        inert.append(f"--since={since}")
     if use_affected:
         inert.append("--use-affected")
     if embedding_url:
         inert.append("--embedding-url=…")
+    if inert:
+        click.echo(f"note: ignoring inert flags ({', '.join(inert)}).", err=True)
+
+    # --files path validation (CI gate compat) → forces whole-tree fallback.
+    forced_whole_tree = False
     if files:
-        # Validate paths exist (CI scripts may gate on the exit code) — then drop.
         for f in [s.strip() for s in files.split(",") if s.strip()]:
             if not Path(f).exists():
                 output_error(
@@ -163,14 +169,7 @@ def update(
                     suggestion="Check file paths and ensure they exist",
                 )
                 return
-        inert.append("--files=…")
-    if inert:
-        click.echo(
-            "note: update now does whole-tree graph-export re-export; "
-            f"ignoring inert flags ({', '.join(inert)}). "
-            "Warm-incremental restoration tracked in EPIC-015 follow-up.",
-            err=True,
-        )
+        forced_whole_tree = True
 
     repo = Path(".").resolve()
 
@@ -203,10 +202,12 @@ def update(
         err=True,
     )
 
-    # Step 3: Embed + upsert (clear=False → no delete_all)
-    click.echo("[3/3] Upserting into knowledge graph...", err=True)
+    # Step 3: Incremental (git) or whole-tree upsert (non-git / --files)
+    click.echo("[3/3] Updating knowledge graph...", err=True)
     try:
-        result = asyncio.run(_async_index(entities, relations, workspace, False))
+        result = asyncio.run(
+            _async_update(entities, relations, workspace, repo, since, forced_whole_tree)
+        )
     except Exception as e:
         output_error(
             code=ErrorCode.STORAGE_ERROR,
@@ -217,6 +218,54 @@ def update(
     duration = time.time() - start_time
     result["duration_seconds"] = round(duration, 2)
     result["repo_path"] = str(repo)
-    click.echo(f"       Done in {result['duration_seconds']}s.", err=True)
+    click.echo(f"       Done in {result['duration_seconds']}s ({result['mode']}).", err=True)
 
     output_success(result)
+
+
+async def _async_update(
+    entities: list[Any],
+    relations: list[Any],
+    workspace: str | None,
+    repo: Path,
+    since: str,
+    forced_whole_tree: bool,
+) -> dict[str, Any]:
+    """Branch update into per-file incremental (git) or whole-tree upsert.
+
+    - git repo and not ``forced_whole_tree``: ``ingest_incremental`` over the
+      ``get_changed_files(since)`` subset (路 B).
+    - otherwise: ``ingest(clear=False)`` whole-tree upsert (non-git fallback,
+      or explicit ``--files``).
+    """
+    from loomgraph.storage.factory import create_graph_store
+
+    ws = get_auto_workspace(workspace)
+    store = await create_graph_store(workspace=ws)
+
+    def _progress(phase: str, n_entities: int, n_relations: int) -> None:
+        click.echo(
+            f"       {phase}: {n_entities} entities, {n_relations} relations",
+            err=True,
+        )
+
+    use_incremental = (not forced_whole_tree) and is_git_repository(repo)
+    if use_incremental:
+        changed_paths = get_changed_files(since=since, repo_path=repo)
+        changed_files = {p.as_posix() for p in changed_paths}
+        result = await ingest_incremental(
+            entities,
+            relations,
+            store,
+            changed_files=changed_files,
+            on_progress=_progress,
+        )
+        result["mode"] = "warm_incremental"
+    else:
+        result = await ingest(
+            entities, relations, store, clear=False, on_progress=_progress
+        )
+        result["mode"] = "whole_tree_upsert"
+
+    result["workspace"] = ws
+    return result
