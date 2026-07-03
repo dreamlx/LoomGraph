@@ -1,16 +1,20 @@
-"""Batch injection of codeindex results into LightRAG.
+"""Batch injection of codeindex results (legacy programmatic API).
 
-This module implements the inject_parse_result() function defined in
-docs/api/DATA_CONTRACT.md Section 4.
-
-Uses LightRAG HTTP API for all storage operations.
+DEPRECATED (#66): the batch helpers ``collect_kg_data`` / ``build_chunks`` /
+``create_external_stubs`` were removed — ``loomgraph index``/``update`` now
+consume the ``codeindex graph-export`` contract via
+:mod:`loomgraph.core.graph_export_ingest`. What remains here is the legacy
+file-level programmatic API (``inject_parse_result`` /
+``inject_parse_results_batch``), retained for backwards compatibility. It still
+uses simple-name keying (the collision-prone path #66 fixed for the CLI) and is
+slated for removal in a follow-up.
 """
 
 from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from loomgraph.storage.base import GraphStore
 
@@ -29,143 +33,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def collect_kg_data(
-    result: ParseResult,
-) -> tuple[list[dict], list[dict]]:
-    """Collect entities and relations from a ParseResult without injecting.
-
-    Returns data in insert_custom_kg format for batch injection.
-    This avoids the ordering problem where cross-file relations fail
-    because target entities haven't been created yet.
-
-    Args:
-        result: ParseResult from codeindex
-
-    Returns:
-        Tuple of (entities, relations) in insert_custom_kg dict format
-    """
-    file_path = str(result.path)
-    language = detect_language(file_path)
-    module_name = _path_to_module_name(result.path)
-
-    entities: list[dict[str, Any]] = []
-    relations: list[dict[str, Any]] = []
-
-    # Module entity
-    entities.append({
-        "entity_name": module_name,
-        "entity_type": "module",
-        "description": f"{language.capitalize()} module | {file_path}",
-        "source_id": file_path,
-        "file_path": file_path,
-    })
-
-    # Symbol entities
-    for symbol in result.symbols:
-        entity = map_symbol_to_entity(symbol, file_path, language)
-        entities.append({
-            "entity_name": entity.entity_name,
-            **entity.entity_data,
-        })
-
-    # Call relations
-    for call in result.calls:
-        rel = map_call_to_relation(call, file_path)
-        relations.append({
-            "src_id": rel.src_id,
-            "tgt_id": rel.tgt_id,
-            **rel.edge_data,
-        })
-
-    # Inheritance relations
-    for inh in result.inheritances:
-        rel = map_inheritance_to_relation(inh, file_path)
-        relations.append({
-            "src_id": rel.src_id,
-            "tgt_id": rel.tgt_id,
-            **rel.edge_data,
-        })
-
-    # Import relations
-    for imp in result.imports:
-        rels = map_import_to_relation(imp, module_name, file_path)
-        for rel in rels:
-            relations.append({
-                "src_id": rel.src_id,
-                "tgt_id": rel.tgt_id,
-                **rel.edge_data,
-            })
-
-    return entities, relations
-
-
-def build_chunks(result: ParseResult) -> list[dict[str, Any]]:
-    """Build insert_custom_kg chunks for a single file.
-
-    Each file produces one chunk containing module docstring + symbol signatures,
-    enabling semantic search over file contents.
-
-    Args:
-        result: ParseResult from codeindex
-
-    Returns:
-        List with one chunk dict (content, source_id, tokens, chunk_order_index, full_doc_id)
-    """
-    content_parts: list[str] = []
-    if result.module_docstring:
-        content_parts.append(result.module_docstring)
-    for symbol in result.symbols:
-        line = symbol.signature if symbol.signature else f"{symbol.kind} {symbol.name}"
-        if symbol.docstring:
-            line += f"\n  {symbol.docstring[:200]}"
-        content_parts.append(line)
-
-    content = "\n".join(content_parts)
-    if not content:
-        content = str(result.path)
-
-    return [{
-        "content": content,
-        "source_id": str(result.path),
-        "tokens": len(content.split()),
-        "chunk_order_index": 0,
-        "full_doc_id": str(result.path),
-    }]
-
-
-def create_external_stubs(
-    all_entities: list[dict[str, Any]],
-    all_relations: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    """Create stub entities for external dependencies referenced in relations.
-
-    Scans all relation src_id/tgt_id fields and creates an "external" stub entity
-    for any name not found in the entity list.
-
-    Args:
-        all_entities: Collected entities from collect_kg_data()
-        all_relations: Collected relations from collect_kg_data()
-
-    Returns:
-        List of stub entity dicts to append to all_entities
-    """
-    known = {e["entity_name"] for e in all_entities}
-    stubs: list[dict[str, Any]] = []
-    seen_stubs: set[str] = set()
-
-    for rel in all_relations:
-        for field in ("src_id", "tgt_id"):
-            name = rel.get(field, "")
-            if name and name not in known and name not in seen_stubs:
-                stubs.append({
-                    "entity_name": name,
-                    "entity_type": "external",
-                    "description": f"External dependency: {name}",
-                    "source_id": "external",
-                })
-                seen_stubs.add(name)
-
-    return stubs
+# removed collect_kg_data / build_chunks / create_external_stubs (#66 — dead
+# after `index`/`update` migrated to graph-export ingestion)
 
 
 async def inject_parse_result(

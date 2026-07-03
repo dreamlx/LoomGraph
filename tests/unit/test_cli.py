@@ -16,6 +16,9 @@ from loomgraph.cli.main import (
     check_storage,
     main,
 )
+from loomgraph.core.graph_export_ingest import GraphExportError
+from loomgraph.core.models import EntityData, RelationData
+from loomgraph.io.export_reader import ImportSummary
 
 
 @pytest.fixture
@@ -411,19 +414,19 @@ class TestIndexCommand:
         assert data["success"] is False
         assert data["error"]["code"] == ErrorCode.CODEINDEX_NOT_FOUND
 
-    @patch("subprocess.run")
+    @patch("loomgraph.cli._indexing.run_graph_export")
     @patch("loomgraph.cli._indexing.check_codeindex")
     def test_index_codeindex_failed(
         self,
         mock_check: MagicMock,
-        mock_run: MagicMock,
+        mock_export: MagicMock,
         runner: CliRunner,
         tmp_path: Path,
     ) -> None:
-        """Test index when codeindex fails."""
-        mock_check.return_value = {"installed": True, "version": "1.0.0"}
-        mock_run.return_value = MagicMock(
-            returncode=1, stdout="", stderr="Parse error"
+        """codeindex graph-export failure → CODEINDEX_FAILED."""
+        mock_check.return_value = {"installed": True, "version": "0.28.0"}
+        mock_export.side_effect = GraphExportError(
+            "codeindex graph-export exited 1: Parse error"
         )
 
         result = runner.invoke(main, ["index", str(tmp_path)])
@@ -432,33 +435,34 @@ class TestIndexCommand:
         data = json.loads(result.stdout)
         assert data["success"] is False
         assert data["error"]["code"] == ErrorCode.CODEINDEX_FAILED
+        assert "Parse error" in data["error"]["message"]
 
-    @patch("loomgraph.cli._indexing.asyncio.run")
-    @patch("subprocess.run")
+    @patch("loomgraph.cli._indexing._async_index", new_callable=AsyncMock)
+    @patch("loomgraph.cli._indexing.run_graph_export")
     @patch("loomgraph.cli._indexing.check_codeindex")
     def test_index_success(
         self,
         mock_check: MagicMock,
-        mock_subprocess: MagicMock,
-        mock_asyncio: MagicMock,
+        mock_export: MagicMock,
+        mock_async_index: AsyncMock,
         runner: CliRunner,
         tmp_path: Path,
-        sample_parse_results: dict[str, Any],
     ) -> None:
-        """Test successful index."""
-        mock_check.return_value = {"installed": True, "version": "1.0.0"}
-        mock_subprocess.return_value = MagicMock(
-            returncode=0,
-            stdout=json.dumps(sample_parse_results),
-            stderr="",
+        """Successful index: graph-export → embed → inject."""
+        mock_check.return_value = {"installed": True, "version": "0.28.0"}
+        mock_export.return_value = (
+            [],
+            [],
+            ImportSummary(entity_count=2, relation_count=1),
         )
-        mock_asyncio.return_value = {
-            "files_scanned": 1,
-            "files_indexed": 1,
-            "files_skipped": 0,
+        mock_async_index.return_value = {
+            "cleared": True,
             "entities_created": 2,
-            "relations_created": 2,
-            "skipped_files": [],
+            "relations_created": 1,
+            "embedded": 0,
+            "store_stats": {},
+            "workspace": "demo:main",
+            "mode": "cold_rebuild",
         }
 
         result = runner.invoke(main, ["index", str(tmp_path)])
@@ -466,9 +470,156 @@ class TestIndexCommand:
 
         data = json.loads(result.stdout)
         assert data["success"] is True
-        assert data["data"]["files_scanned"] == 1
         assert data["data"]["entities_created"] == 2
-        assert data["data"]["relations_created"] == 2
+        assert data["data"]["relations_created"] == 1
+        assert data["data"]["mode"] == "cold_rebuild"
+        # run_graph_export must be invoked with the resolved repo path
+        mock_export.assert_called_once()
+
+    @patch("loomgraph.storage.factory.create_graph_store")
+    @patch("loomgraph.cli._indexing.run_graph_export")
+    @patch("loomgraph.cli._indexing.check_codeindex")
+    def test_index_collision_regression(
+        self,
+        mock_check: MagicMock,
+        mock_export: MagicMock,
+        mock_store_factory: MagicMock,
+        runner: CliRunner,
+        tmp_path: Path,
+    ) -> None:
+        """#66: two same-simple-name entities (qualified ids from graph-export)
+        land as DISTINCT entities — no phantom merge into one node.
+
+        Unit-form of the collision fix: graph-export emits module-qualified
+        ids, the reader preserves them, ingest stores them verbatim. The
+        full end-to-end pin lives in test_graph_export_ingest_e2e.
+        """
+        mock_check.return_value = {"installed": True, "version": "0.28.0"}
+        e1 = EntityData(entity_name="pkg.a.handle", entity_data={"description": "a"})
+        e2 = EntityData(entity_name="pkg.b.handle", entity_data={"description": "b"})
+        rel = RelationData(
+            src_id="pkg.a.handle",
+            tgt_id="pkg.b.handle",
+            edge_data={"keywords": "CALLS"},
+        )
+        mock_export.return_value = (
+            [e1, e2],
+            [rel],
+            ImportSummary(entity_count=2, relation_count=1),
+        )
+        fake_store = AsyncMock()
+        fake_store.delete_all = AsyncMock()
+        fake_store.insert_custom_kg = AsyncMock()
+        fake_store.get_graph_stats = AsyncMock(return_value={})
+        mock_store_factory.return_value = fake_store
+
+        result = runner.invoke(main, ["index", str(tmp_path)])
+        assert result.exit_code == 0, result.output
+
+        fake_store.insert_custom_kg.assert_awaited_once()
+        entity_dicts = fake_store.insert_custom_kg.call_args.args[0]
+        names = {e["entity_name"] for e in entity_dicts}
+        assert names == {"pkg.a.handle", "pkg.b.handle"}, (
+            "same-simple-name entities must stay distinct (no phantom merge)"
+        )
+        # chunks (3rd positional) must be empty — graph-export carries none
+        assert fake_store.insert_custom_kg.call_args.args[2] == []
+
+
+class TestUpdateCommand:
+    """Tests for the update command (now whole-tree graph-export re-export, #66)."""
+
+    @patch("loomgraph.cli._indexing._async_index", new_callable=AsyncMock)
+    @patch("loomgraph.cli._indexing.run_graph_export")
+    @patch("loomgraph.cli._indexing.check_codeindex")
+    def test_update_is_whole_tree_reexport(
+        self,
+        mock_check: MagicMock,
+        mock_export: MagicMock,
+        mock_async_index: AsyncMock,
+        runner: CliRunner,
+        tmp_path: Path,
+    ) -> None:
+        """`--files` is accepted but the export is still whole-tree (the
+        per-file warm path is gone). Pins the documented regression."""
+        mock_check.return_value = {"installed": True, "version": "0.28.0"}
+        mock_export.return_value = (
+            [],
+            [],
+            ImportSummary(entity_count=1, relation_count=0),
+        )
+        mock_async_index.return_value = {
+            "cleared": False,
+            "entities_created": 1,
+            "relations_created": 0,
+            "embedded": 0,
+            "store_stats": {},
+            "workspace": "demo:main",
+            "mode": "append",
+        }
+
+        # Pass an explicit --files (a real path under cwd); update must STILL
+        # call run_graph_export with the repo root, not a per-file parse.
+        a_real_file = str(Path(__file__))
+        result = runner.invoke(
+            main, ["update", "--files", a_real_file]
+        )
+        assert result.exit_code == 0, result.output
+
+        mock_export.assert_called_once()
+        repo_arg = mock_export.call_args.args[0]
+        assert Path(repo_arg).is_absolute(), "update must export the whole repo"
+
+    @patch("loomgraph.cli._indexing._async_index", new_callable=AsyncMock)
+    @patch("loomgraph.cli._indexing.run_graph_export")
+    @patch("loomgraph.cli._indexing.check_codeindex")
+    def test_update_never_clears_workspace(
+        self,
+        mock_check: MagicMock,
+        mock_export: MagicMock,
+        mock_async_index: AsyncMock,
+        runner: CliRunner,
+    ) -> None:
+        """update converges with index but always passes clear=False (upsert)."""
+        mock_check.return_value = {"installed": True, "version": "0.28.0"}
+        mock_export.return_value = ([], [], ImportSummary())
+        mock_async_index.return_value = {"mode": "append", "entities_created": 0,
+                                          "relations_created": 0, "embedded": 0,
+                                          "cleared": False, "store_stats": {},
+                                          "workspace": "demo:main"}
+
+        result = runner.invoke(main, ["update"])
+        assert result.exit_code == 0, result.output
+
+        # _async_index signature: (entities, relations, workspace, clear)
+        assert mock_async_index.call_args.args[3] is False, (
+            "update must never clear (it upserts over the existing workspace)"
+        )
+
+    @patch("loomgraph.cli._indexing._async_index", new_callable=AsyncMock)
+    @patch("loomgraph.cli._indexing.run_graph_export")
+    @patch("loomgraph.cli._indexing.check_codeindex")
+    def test_update_inert_flags_warn_but_succeed(
+        self,
+        mock_check: MagicMock,
+        mock_export: MagicMock,
+        mock_async_index: AsyncMock,
+        runner: CliRunner,
+    ) -> None:
+        """--since/--use-affected are accepted (inert) with a deprecation note;
+        the command still succeeds."""
+        mock_check.return_value = {"installed": True, "version": "0.28.0"}
+        mock_export.return_value = ([], [], ImportSummary())
+        mock_async_index.return_value = {"mode": "append", "entities_created": 0,
+                                          "relations_created": 0, "embedded": 0,
+                                          "cleared": False, "store_stats": {},
+                                          "workspace": "demo:main"}
+
+        result = runner.invoke(
+            main, ["update", "--since", "HEAD~5", "--use-affected"]
+        )
+        assert result.exit_code == 0, result.output
+        assert "inert" in result.output.lower() or "ignoring" in result.output.lower()
 
 
 class TestEmbedCommand:

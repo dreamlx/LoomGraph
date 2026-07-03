@@ -42,6 +42,12 @@ loomgraph update
 
 ## 1. 🐢 温更新 (Warm Update) - 增量追加
 
+> ⚠️ **#66 状态变化（临时）**：`loomgraph update` 已从 per-file 增量改为 **whole-tree `codeindex graph-export` re-export + upsert**（与 `index` 共用管线，仅 `clear=False`）。原因：legacy `codeindex scan` 路径用简单名 key 导致跨模块同名函数冲突；迁到 graph-export 契约（qualified id）后，graph-export 只支持 whole-tree，per-file 增量暂失。
+>
+> **影响**：大仓库每次 `update`（含 post-commit hook）会全量 re-export，变慢。建议 hook 设 `LOOMGRAPH_HOOK_MODE=async`（后台）或 `disabled`。`--since`/`--files`/`--use-affected` 保留兼容但被忽略（打印提示）。
+>
+> **恢复路径（跟进项）**：codeindex 给 graph-export 记录加 `content_hash`，loomgraph 侧 diff 出变动 source 再 `delete_by_source` + 重注入——恢复 true warm-incremental。upsert 语义保证过渡期不丢数据。
+
 ### 触发时机
 - **git commit** (推荐，通过 post-commit hook)
 - 手动执行 `loomgraph update`

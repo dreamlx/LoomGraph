@@ -4,17 +4,28 @@
 
 ---
 
-## [Unreleased] — 语义搜索补齐（search + embed-backfill）
+## [Unreleased]
 
-### 新增
+### ⚠️ Breaking — graph-export 迁移（#66）
+
+`loomgraph index` / `update` 改为消费 `codeindex graph-export` NDJSON 契约：实体用 module-qualified id，边带 `resolution_qualifier` + 跨文件 callee 解析。**修复跨模块同名函数冲突**（旧版本 9 个 `handle` 会合并成 1 个幻影 god_function，out_degree 34）。
+
+- **必须重建 workspace**：旧版本用简单名 key 索引的 workspace，升级后需 `loomgraph index --clear .` 一次，否则同名符号仍冲突。
+- **`update` 改为 whole-tree re-export**（不再是 per-file warm 增量）：大仓库每次 `update` 会变慢。post-commit hook 建议 `LOOMGRAPH_HOOK_MODE=async` 或 `disabled`。warm-incremental 将由 content_hash diff 恢复（跟进项）。
+- **移除**：`codeindex scan`/`parse` legacy 路径、死表 `vec_code_snippets`（从未写入；`search` 只读 `vec_node_descriptions`）、内部 helper `collect_kg_data`/`build_chunks`/`create_external_stubs`。
+- `deps` 模块依赖图暂失 IMPORTS 边（codeindex graph-export 待加 IMPORTS edge —— #66 Phase A 跟进）；CALLS 推导的模块依赖边仍可用。
+- 依赖：`ai-codeindex >= 0.28.0`（`signature` 字段）。
+
+### 新增 — 语义搜索补齐
 
 - **`loomgraph search "<意图>"`** —— 语义向量搜索，按含义/意图查实体（区别于按名称的 `find`）。需 `embedding.enabled: true` + 配置 provider。
 - **`loomgraph embed-backfill [-w <ws>]`** —— 为已索引但无向量的 workspace 补向量，**不触发全量重建**。关键场景：`import-export` 导入的 workspace 本身不带向量，跑一次 backfill 即可被 `search` 命中。幂等（已有向量则跳过）。
 
 ### 升级指引
 
-- 已开启 embedding：`pip install --upgrade loomgraph` 后 `search` / `embed-backfill` 直接可用。
-- import-export workspace：导入后执行 `loomgraph embed-backfill -w <workspace>` 即可启用语义搜索。
+1. `pip install --upgrade loomgraph`（同时确保 `ai-codeindex >= 0.28.0`）。
+2. **重建 workspace**：`loomgraph index --clear .`（旧简单名 key 数据必须清掉重建，否则 #66 修复不生效）。
+3. 已开启 embedding：`search` / `embed-backfill` 直接可用；import-export workspace 跑 `loomgraph embed-backfill -w <workspace>` 启用语义搜索。
 
 ---
 

@@ -45,6 +45,34 @@ async def store() -> Any:
         await s.close()
 
 
+async def test_no_vec_code_snippets_table(tmp_path) -> None:
+    """#66: vec_code_snippets is dead — never populated, never queried by
+    search_similar (which reads only vec_node_descriptions). The table must
+    not be created at all."""
+    import sqlite3
+
+    db = tmp_path / "snippets.db"
+    store = SqliteGraphStore(db_path=str(db))
+    await store.initialize()
+    await store.close()
+
+    conn = sqlite3.connect(str(db))
+    try:
+        names = {
+            row[0]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+    finally:
+        conn.close()
+
+    assert "vec_code_snippets" not in names, (
+        "dead table must not be created (search reads only vec_node_descriptions)"
+    )
+    assert "vec_node_descriptions" in names
+
+
 # ---------- Embedding write path ----------
 
 
