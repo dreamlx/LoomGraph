@@ -49,8 +49,8 @@ dependencies = [
     "click>=8.0",
     "rich>=13.0",
 
-    # Code parsing
-    "ai-codeindex>=0.28.0",
+    # Code parsing (>=0.29.0: graph-export emits IMPORTS edges for `deps`)
+    "ai-codeindex>=0.29.0",
     "tree-sitter-python>=0.23",
     "tree-sitter-php>=0.23",
 
