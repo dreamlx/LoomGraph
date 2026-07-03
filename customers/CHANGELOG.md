@@ -4,6 +4,20 @@
 
 ---
 
+## [Unreleased] — 语义搜索补齐（search + embed-backfill）
+
+### 新增
+
+- **`loomgraph search "<意图>"`** —— 语义向量搜索，按含义/意图查实体（区别于按名称的 `find`）。需 `embedding.enabled: true` + 配置 provider。
+- **`loomgraph embed-backfill [-w <ws>]`** —— 为已索引但无向量的 workspace 补向量，**不触发全量重建**。关键场景：`import-export` 导入的 workspace 本身不带向量，跑一次 backfill 即可被 `search` 命中。幂等（已有向量则跳过）。
+
+### 升级指引
+
+- 已开启 embedding：`pip install --upgrade loomgraph` 后 `search` / `embed-backfill` 直接可用。
+- import-export workspace：导入后执行 `loomgraph embed-backfill -w <workspace>` 即可启用语义搜索。
+
+---
+
 ## [0.11.0] - 2026-06-25 — Embedding 默认本地 (Breaking)
 
 ### ⚠️ 主要变化

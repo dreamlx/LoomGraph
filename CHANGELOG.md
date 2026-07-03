@@ -28,6 +28,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   docstring-coverage hole (Phase 0: ~15% of symbols had no docstring →
   no vector → invisible to search; signature is present for ~all).
 
+### Added — EPIC-015 Phase 3: embed-backfill (#70, closes #68)
+- `loomgraph embed-backfill [-w <ws>]` — populate `vec_node_descriptions`
+  for an already-indexed workspace without triggering a full reindex.
+  Embeds existing entity descriptions only (no re-parse, no re-inject).
+  Critical for import-export workspaces, which carry no vector data on
+  import; backfill is the only path that makes them semantically
+  searchable. Idempotent: if vectors already exist, exits cleanly.
+- `GraphStore.write_embeddings()` — bulk vector write to vec0 with
+  validation and dedup-by-name semantics.
+
 ### Known limitations (documented, fix scheduled)
 - `topology` / `debt` / `graph` can misreport on codebases with
   cross-module same-named functions (`handle`, `run`, `main`, …).
