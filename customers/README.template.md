@@ -354,7 +354,10 @@ loomgraph status
 |------|------|
 | `/loomgraph-setup` | 配置 codeindex 和语言解析器 |
 | `/loomgraph-init` | 初始化项目 CLAUDE.md |
-| `/loomgraph-debt-radar` | 技术债务审计报告 |
+
+> **v0.13.0 移除**：`/loomgraph-debt-radar`、`/loomgraph-sync-advisor`、
+> `/loomgraph-evolution` 工作流 Skill 已删除。改用 MCP composite tool：
+> `loomgraph_debt_audit` / `loomgraph_sync_advice` / `loomgraph_evolution_track`。
 
 ---
 

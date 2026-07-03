@@ -45,7 +45,7 @@ subprocess overhead alone is ~7.5s. MCP makes that vanish.
 
 ## Tool reference
 
-All 9 read tools follow the same response envelope:
+All 11 read tools follow the same response envelope:
 
 ```jsonc
 // success
@@ -96,7 +96,8 @@ embedding enabled** (`LOOMGRAPH_EMBEDDING__ENABLED=true`); returns
 |---|---|---|---|
 | `hub_threshold` | integer | 10 | min incoming edges to flag |
 | `god_threshold` | integer | 10 | min outgoing edges to flag |
-| `module` | string | — | source_id prefix filter |
+| `scope` | string | — | absolute source_id prefix (e.g. `src/`); recommended over module |
+| `module` | string | — | [deprecated, use scope] relative module name |
 | `workspace` | string | server default | — |
 
 ### `loomgraph_impact`
@@ -124,6 +125,24 @@ embedding enabled** (`LOOMGRAPH_EMBEDDING__ENABLED=true`); returns
 | `depth` | integer | 1 | module hierarchy depth |
 | `no_summary` | boolean | false | skip LLM (return counts only) |
 | `workspace` | string | server default | — |
+
+### `loomgraph_check`
+
+| arg | type | default | desc |
+|---|---|---|---|
+| `repo_path` | string | `.` | base path to resolve source_id files against |
+| `workspace` | string | server default | — |
+
+Index freshness: `freshness_ratio` + stale source_ids (files moved/deleted since indexing). v0.13.0 (#62).
+
+### `loomgraph_git_metrics`
+
+| arg | type | default | desc |
+|---|---|---|---|
+| `path` | string | `.` | repository path |
+| `since` | string | `3 months` | git history window |
+
+Git-history hotspots / bus factor / defect magnets. No workspace needed. v0.13.0 (#62).
 
 ### `loomgraph_workspace_list`
 

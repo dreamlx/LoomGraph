@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [0.13.0] - 2026-07-03
+
+### Removed — EPIC-014 item 1: deprecated workflow skills (#64) [BREAKING]
+- `loomgraph-debt-radar`, `loomgraph-evolution`, `loomgraph-sync-advisor`
+  (deprecated in v0.12.1). `install-skills` now ships only `loomgraph-init`
+  + `loomgraph-setup`. **Migration:** switch to the composite MCP tools —
+  `loomgraph_debt_audit` / `loomgraph_evolution_track` / `loomgraph_sync_advice`.
+
+### Added — EPIC-014: MCP/debt surface hardening (#64)
+- `debt --scope <prefix>` / `topology --scope <prefix>` — absolute path-prefix
+  filter restricting BOTH the codeindex static dimension and topology, so
+  docs/scripts/tests stop inflating audits (#61). `--module` kept as a
+  deprecated alias (it filtered topology only and was a *relative* name).
+  `loomgraph_topology` + `loomgraph_debt_audit` MCP tools gain `scope`.
+- `loomgraph_check` + `loomgraph_git_metrics` MCP primitives (#62) — the two
+  side-effect-free reads were reachable only via `loomgraph_debt_audit`;
+  now standalone so agents can compose ad-hoc.
+
+### Fixed — EPIC-014
+- `overall_health.summary.total_entities` was hardcoded to 0 — now wired to
+  the topology run's entity count (#60).
+
 ### Added — EPIC-015 Phase 1: end-to-end semantic search (#70)
 - `loomgraph search` — semantic retrieval over entity-description
   vectors. Reclaims the `search` name (the hidden deprecated alias to

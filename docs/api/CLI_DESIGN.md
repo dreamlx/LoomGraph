@@ -483,7 +483,8 @@ loomgraph topology [options]
 |------|------|--------|
 | `--hub-threshold` | Hub 实体的最小 in-degree | `5` |
 | `--god-threshold` | God Function 的最小 out-degree | `5` |
-| `--module` | 模块前缀过滤（source_id 前缀匹配） | 全部 |
+| `--scope` | 绝对路径前缀过滤（如 `src/`），同时过滤 orphans/hubs/gods + coupling（v0.13.0，推荐） | 全部 |
+| `--module` | [弃用，用 --scope] 相对模块名，拼到公共前缀后 | 全部 |
 | `--workspace/-w` | Workspace 名称 | 当前目录名 |
 
 **成功输出**:

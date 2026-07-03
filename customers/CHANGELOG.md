@@ -4,6 +4,40 @@
 
 ---
 
+## [0.13.0] - 2026-07-03 — MCP/debt 整理 + 语义搜索 (Breaking)
+
+### ⚠️ 主要变化
+
+v0.13.0 移除了 v0.12.1 弃用的工作流 Skill（改由 MCP composite tool 替代），
+新增 `--scope` 审计过滤、独立的 check / git-metrics MCP 工具，以及语义搜索。
+
+#### 移除的 Skill (Breaking)
+
+- `/loomgraph-debt-radar`、`/loomgraph-sync-advisor`、`/loomgraph-evolution` 已移除
+- `loomgraph install-skills` 现在只安装 `loomgraph-init` + `loomgraph-setup`
+- **迁移**：改用 MCP composite tool ——
+  - 债务审计 → `loomgraph_debt_audit`
+  - 跨分支同步 → `loomgraph_sync_advice`
+  - 演化追踪 → `loomgraph_evolution_track`
+
+#### 新增
+
+- `loomgraph debt --scope src/` / `topology --scope src/` —— 按路径前缀过滤审计，
+  排除 docs/scripts/tests 等非生产代码 (#61)
+- `loomgraph_check` + `loomgraph_git_metrics` MCP 工具 —— 独立的索引新鲜度 / git 指标查询 (#62)
+- `loomgraph search` —— 语义搜索（按含义查实体，需启用 embedding）(#70)
+
+#### 修复
+
+- `debt` 报告的 `total_entities` 不再硬编码为 0 (#60)
+
+#### 升级
+
+```bash
+pipx upgrade loomgraph
+# 重启 Claude Code 让 MCP server 注册新工具
+```
+
 ## [0.11.0] - 2026-06-25 — Embedding 默认本地 (Breaking)
 
 ### ⚠️ 主要变化
