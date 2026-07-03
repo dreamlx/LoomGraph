@@ -57,3 +57,15 @@ class EmbeddingClient(ABC):
     def max_length(self) -> int:
         """Return the maximum input length in tokens."""
         ...
+
+    # Async context-manager protocol. Concrete clients (DirectEmbeddingClient)
+    # override these; the base defaults exist so `async with
+    # create_embedding_client() as client:` (embedding_pipeline.maybe_embed_entities)
+    # is mypy-correct against the declared `EmbeddingClient` return type — the
+    # concrete client is already an async CM at runtime. Stateless default;
+    # resource-owning subclasses override `__aexit__` to release.
+    async def __aenter__(self) -> "EmbeddingClient":
+        return self
+
+    async def __aexit__(self, *_: object) -> None:
+        return None
