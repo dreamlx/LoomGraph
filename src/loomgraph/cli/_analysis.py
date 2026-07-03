@@ -357,6 +357,46 @@ async def _async_check(
     }
 
 
+async def _async_git_metrics(
+    path: str, since: str = "3 months"
+) -> dict[str, Any]:
+    """Run git-history metrics in a thread (wraps sync GitMetricsAnalyzer).
+
+    Used by the `loomgraph_git_metrics` MCP primitive and the debt_audit
+    composite's git dimension. Returns the structured dict; callers compose.
+    """
+    from loomgraph.core.git_metrics import GitMetricsAnalyzer
+
+    def _run() -> dict[str, Any]:
+        result = GitMetricsAnalyzer(Path(path), since=since).analyze()
+        return {
+            "repo_path": str(result.repo_path),
+            "since": result.since,
+            "analyzed_at": result.analyzed_at.isoformat(),
+            "summary": result.summary,
+            "hotspots": [
+                {
+                    "file": h.file,
+                    "change_freq": h.change_freq,
+                    "hotspot_score": h.hotspot_score,
+                    "rank": h.rank,
+                }
+                for h in result.hotspots
+            ],
+            "bus_factor": [
+                {
+                    "file": bf.file,
+                    "owner": bf.owner,
+                    "contributors": bf.contributors,
+                    "risk_level": bf.risk_level,
+                }
+                for bf in result.bus_factor
+            ],
+        }
+
+    return await asyncio.to_thread(_run)
+
+
 @main.command("git-metrics")
 @click.argument("path", type=click.Path(exists=True), default=".")
 @click.option("--since", default="3 months", help="Time window (e.g., '3 months', '6 months', '1 year')")

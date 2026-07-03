@@ -18,7 +18,9 @@ import pytest
 
 from loomgraph.mcp.server import _TOOL_HANDLERS, _TOOL_SPECS, build_server
 from loomgraph.mcp.tools import _common
+from loomgraph.mcp.tools import check as t_check
 from loomgraph.mcp.tools import find as t_find
+from loomgraph.mcp.tools import git_metrics as t_git_metrics
 from loomgraph.mcp.tools import graph as t_graph
 from loomgraph.mcp.tools import search as t_search
 
@@ -34,6 +36,8 @@ EXPECTED_TOOLS = {
     "loomgraph_overview",
     "loomgraph_workspace_list",
     "loomgraph_workspace_info",
+    "loomgraph_check",
+    "loomgraph_git_metrics",
 }
 
 
@@ -354,3 +358,35 @@ async def test_workspace_info_handler_forwards_name():
         contents = await t_workspace.info_handle({"name": "proj:main"})
     payload = json.loads(contents[0].text)
     assert payload["data"]["name_seen"] == "proj:main"
+
+
+# ---- check / git-metrics primitives (EPIC-014 #62) ----------------------
+
+@pytest.mark.asyncio
+async def test_check_handler_forwards_arguments_and_envelopes_success():
+    async def fake(**kw):
+        assert kw["repo_path"] == "."
+        assert kw["workspace"] is None
+        return {"freshness": {"freshness_ratio": 1.0}}
+
+    with patch.object(t_check, "_async_check", side_effect=fake):
+        contents = await t_check.handle({})
+
+    payload = json.loads(contents[0].text)
+    assert payload["success"] is True
+    assert payload["data"]["freshness"]["freshness_ratio"] == 1.0
+
+
+@pytest.mark.asyncio
+async def test_git_metrics_handler_forwards_arguments_and_envelopes_success():
+    async def fake(**kw):
+        assert kw["path"] == "src"
+        assert kw["since"] == "3 months"
+        return {"hotspots": [], "summary": {}}
+
+    with patch.object(t_git_metrics, "_async_git_metrics", side_effect=fake):
+        contents = await t_git_metrics.handle({"path": "src"})
+
+    payload = json.loads(contents[0].text)
+    assert payload["success"] is True
+    assert payload["data"]["hotspots"] == []
