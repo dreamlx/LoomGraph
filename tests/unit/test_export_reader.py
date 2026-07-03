@@ -306,6 +306,33 @@ def test_reader_unresolved_edges_with_dst_raw_target_distinct_names(tmp_path: Pa
     assert summary.edge_qualifiers["unresolved"] == 5
 
 
+def test_reader_imports_edge_not_flagged_unknown_kind(tmp_path: Path):
+    """graph-export will emit kind=IMPORTS edges once codeindex adds them
+    (loomgraph#66 — preserving `deps` import-derived module edges). The
+    reader must accept IMPORTS as a known kind, with no 'unknown kind'
+    schema warning, and map it through like CALLS/INHERITS."""
+    imports_edge = {
+        "type": "edge",
+        "kind": "IMPORTS",
+        "src": ENTITY_RECORDS[0]["id"],
+        "dst": "os.path",
+        "dst_raw": "os.path",
+        "resolution_qualifier": "resolved",
+        "source_id": "app/svc.py:1",
+    }
+    path = _write_ndjson(tmp_path, [MIN_META, *ENTITY_RECORDS, imports_edge])
+    _, relations, summary = GraphExportReader(path).read()
+
+    assert summary.edge_kinds == {"IMPORTS": 1}
+    assert summary.relation_count == 1
+    assert summary.schema_warnings == [], (
+        f"IMPORTS must be a known kind; got warnings {summary.schema_warnings}"
+    )
+    assert len(relations) == 1
+    assert relations[0].edge_data["keywords"] == "IMPORTS"
+    assert relations[0].tgt_id == "os.path"
+
+
 def test_reader_flags_missing_provenance_completeness(tmp_path: Path):
     meta = dict(MIN_META)
     meta.pop("provenance_completeness")

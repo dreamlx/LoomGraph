@@ -1,0 +1,57 @@
+"""Embedding attachment for entity dicts (settings-gated).
+
+Lives in `core/` (not `cli/`) so the graph-export ingestion pipeline
+(`core/graph_export_ingest.py`) can call it without a core→cli import cycle.
+`cli/_common.py` re-exports `maybe_embed_entities` for backwards-compatible
+callers (`loomgraph index` / `update` / `import-export`).
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+
+async def maybe_embed_entities(entities: list[dict[str, Any]]) -> int:
+    """Attach OpenAI-compatible embeddings to entity dicts in place.
+
+    Gated on `settings.embedding.enabled` (default False) — pipx install
+    yields a fully usable LoomGraph with no embedding service running.
+    When enabled, embedding failure logs a warning and returns 0 —
+    entity rows still write, the vec0 column just stays empty.
+    Returns count of embeddings attached.
+    """
+    import logging
+
+    from loomgraph.core.config import get_settings
+
+    # Lazy import so tests that patch `loomgraph.storage.factory
+    # .create_embedding_client` (the source attribute) are observed —
+    # a module-level binding would capture the original at import time.
+    from loomgraph.storage.factory import create_embedding_client
+
+    settings = get_settings()
+    if not settings.embedding.enabled:
+        return 0
+
+    targets: list[tuple[int, dict[str, Any]]] = [
+        (i, e)
+        for i, e in enumerate(entities)
+        if e.get("description") and "embedding" not in e
+    ]
+    if not targets:
+        return 0
+
+    texts = [e["description"] for _, e in targets]
+
+    try:
+        async with create_embedding_client() as client:
+            result = await client.embed(texts)
+    except Exception as ex:
+        logging.getLogger(__name__).warning(
+            "Embedding skipped (%s entities): %s", len(targets), ex
+        )
+        return 0
+
+    for (i, _entity), emb in zip(targets, result.embeddings, strict=False):
+        entities[i]["embedding"] = emb
+    return len(targets)
