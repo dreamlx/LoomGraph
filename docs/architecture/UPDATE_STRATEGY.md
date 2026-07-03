@@ -166,13 +166,6 @@ loomgraph index --no-clear <repo_path>
 | `loomgraph search <query>` | 语义搜索代码 | - |
 | `loomgraph graph <entity>` | 查询调用关系 | - |
 
-### 调试命令
-
-| 命令 | 说明 |
-|------|------|
-| `loomgraph embed <json>` | 生成 embeddings（分步调试） |
-| `loomgraph inject <parse> <embed>` | 注入到 LightRAG（分步调试） |
-
 ---
 
 ## 实现参考

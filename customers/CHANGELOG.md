@@ -16,6 +16,15 @@
 - `deps` 模块依赖图暂失 IMPORTS 边（codeindex graph-export 待加 IMPORTS edge —— #66 Phase A 跟进）；CALLS 推导的模块依赖边仍可用。
 - 依赖：`ai-codeindex >= 0.28.0`（`signature` 字段）。
 
+### ⚠️ Breaking — 移除 legacy programmatic API + embed/inject CLI（#77 收尾）
+
+旧 `codeindex scan` 路径的残留全部清除（graph-export 契约已是唯一入口）：
+
+- **移除 CLI**：`loomgraph embed` / `loomgraph inject`（旧分步管线；且 `embed` 自 EPIC-012 Jina→Direct 迁移后 import 即崩，已 broken 多版本）。`loomgraph index` 一键完成解析+向量化+注入；只为已索引 workspace 补向量用 `loomgraph embed-backfill`。
+- **移除 Python API**：`loomgraph.index_file` / `index_repository` / `scan_code_files` / `inject_parse_result` 及 `loomgraph.core.mapper` / `indexer` / `injector` / `adapter` 模块。这些只服务于已删的 scan 路径，零内部调用。`loomgraph.__init__` public surface 收敛到 `Settings` / `get_settings` / `__version__`。
+- **移除 models**：`Symbol` / `Call` / `Inheritance` / `Import` / `ParseResult` / `InjectResult` / `IndexResult`（legacy codeindex input types）。保留 `EntityData` / `RelationData` + analysis metrics。
+- **客户影响**：CLI 用户只用 `index` / `update` / `search` / `find`，不受影响；programmatic API 此前未出现在客户文档。
+
 ### 新增 — 语义搜索补齐
 
 - **`loomgraph search "<意图>"`** —— 语义向量搜索，按含义/意图查实体（区别于按名称的 `find`）。需 `embedding.enabled: true` + 配置 provider。
