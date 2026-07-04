@@ -20,6 +20,7 @@ default thread pool via `asyncio.to_thread`.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import sqlite3
 from collections.abc import Callable
@@ -162,6 +163,13 @@ class SqliteGraphStore(GraphStore):
             sqlite_vec.load(conn)
             conn.enable_load_extension(False)
             conn.execute("PRAGMA foreign_keys = ON")
+            # WAL + busy_timeout: cross-process write safety. The MCP server
+            # (long-lived) and a git-hook `loomgraph update` subprocess share
+            # this .db; WAL lets readers proceed during a write, and the 5s
+            # busy_timeout makes a second writer wait instead of raising
+            # `database is locked`. See ADR-014.
+            conn.execute("PRAGMA journal_mode = WAL")
+            conn.execute("PRAGMA busy_timeout = 5000")
 
             # Detect existing vec0 dim before creating — vec0 silently keeps
             # the original column type, so CREATE-IF-NOT-EXISTS would mask
@@ -189,7 +197,15 @@ class SqliteGraphStore(GraphStore):
         if self._conn is not None:
             conn = self._conn
             self._conn = None
-            await asyncio.to_thread(conn.close)
+
+            def _shutdown(c: sqlite3.Connection) -> None:
+                # Checkpoint so a bundled .db is self-contained (no
+                # uncommitted writes stranded in the -wal sidecar).
+                with contextlib.suppress(sqlite3.DatabaseError):
+                    c.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+                c.close()
+
+            await asyncio.to_thread(_shutdown, conn)
 
     async def _run(self, fn: Callable[[sqlite3.Connection], _T]) -> _T:
         if self._conn is None:
