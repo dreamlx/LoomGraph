@@ -285,7 +285,9 @@
 | **ADR-010** | **搜索体系重构** | **find/query/graph 三分，语义问答差异化** |
 | **ADR-011** | **AI 迭代策略** | **外部 AI 优先（codeindex），内部 AI 保守** |
 | **ADR-012** | **技术债务分析格式** | **Console/Markdown/JSON 三格式输出** |
-| **ADR-013** | **Git × 知识图谱时空融合** | **独立分析 + 后期 Join，三维度评分** |
+| **ADR-013** | **SQLite + sqlite-vec 替换 LightRAG** | **单文件后端，跨层 JOIN，部署门槛崩塌（supersedes 001/002/010 部分/011）** |
+| **ADR-014** | **MCP 写 tool（reactive re-index）** | **`loomgraph_refresh`：pull 模式补 commit-hook update；WAL 跨进程安全** |
+| **ADR-015** | **Git × 知识图谱时空融合** | **独立分析 + 后期 Join，三维度评分（原误编 ADR-013，2026-07-05 改号）** |
 
 ---
 
