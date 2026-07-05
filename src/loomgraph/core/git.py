@@ -161,6 +161,76 @@ def get_staged_files(
         raise GitError("git command not found") from None
 
 
+def get_working_tree_files(
+    repo_path: Path | str = ".",
+    *,
+    include_untracked: bool = True,
+    extensions: set[str] | None = None,
+) -> list[Path]:
+    """Get files with uncommitted working-tree changes (staged + unstaged +
+    untracked), relative to repo root.
+
+    Complementary to :func:`get_changed_files` (committed ``HEAD~1..HEAD``):
+    pull-mode source for the MCP ``refresh`` tool — an agent editing a file
+    without committing still gets a non-empty result. Uses
+    ``git status --porcelain=v1 -z`` (``--no-renames`` so renames decompose
+    into delete-old + new-untracked, sidestepping porcelain's double-segment
+    rename format). ``git diff HEAD`` would miss untracked new files.
+
+    Deleted files (``D``) are excluded — nothing to re-export.
+
+    Args:
+        repo_path: Repository path (default: current directory)
+        include_untracked: Include untracked (``??``) files (default True)
+        extensions: Filter by file extensions (e.g., {".py", ".java"})
+
+    Returns:
+        List of existing changed file paths (relative to repo root)
+
+    Raises:
+        GitError: If git command fails or not a git repository
+    """
+    repo = Path(repo_path)
+
+    if not is_git_repository(repo):
+        raise GitError(f"Not a git repository: {repo}")
+
+    try:
+        result = subprocess.run(
+            ["git", "status", "--porcelain=v1", "-z", "--no-renames"],
+            cwd=str(repo),
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except subprocess.TimeoutExpired:
+        raise GitError("git status timed out") from None
+    except FileNotFoundError:
+        raise GitError("git command not found") from None
+
+    if result.returncode != 0:
+        raise GitError(f"git status failed: {result.stderr}")
+
+    paths: list[Path] = []
+    for entry in result.stdout.split("\0"):
+        # porcelain v1: "XY <path>" — at least 4 chars (2 status + space + name)
+        if len(entry) < 4:
+            continue
+        xy, path_str = entry[:2], entry[3:]
+        if "D" in xy:  # deleted → skip (nothing to re-export)
+            continue
+        if xy == "??" and not include_untracked:
+            continue
+        paths.append(Path(path_str))
+
+    if extensions:
+        paths = [p for p in paths if p.suffix.lower() in extensions]
+
+    existing = [p for p in paths if (repo / p).exists()]
+    logger.info(f"Found {len(existing)} working-tree files")
+    return existing
+
+
 def get_current_commit(repo_path: Path | str = ".") -> str:
     """Get the current commit SHA.
 

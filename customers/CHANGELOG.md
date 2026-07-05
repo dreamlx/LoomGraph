@@ -6,6 +6,12 @@
 
 ## [Unreleased]
 
+### Added — MCP `refresh` 主动刷新 + 存储跨进程写安全
+
+- **首个 MCP 写 tool** `loomgraph_refresh`：agent 编辑文件后（含未提交、含 untracked 新文件）可主动触发重新索引，不必等 commit。与 commit-hook `update`（已提交变更）互补 —— push（开发者 commit）/ pull（agent 按需）双模式。参数：`path`（限定文件/目录）、`force_full`（全量冷重建）。详见 ADR-014。
+- **存储并发硬化**：SQLite 转 WAL 模式 + 5s `busy_timeout`，MCP server（长驻进程）与 git-hook `update`（子进程）可并发写同一 `.db` 不再 `database is locked`。`close` 时 `wal_checkpoint` 保证打包的 `.db` 自洽。所有写路径（`update`/`index`/`import-export`）受益。
+- **打包注意**：WAL 模式会在 `.db` 旁产生 `-wal`/`-shm` 边车文件；进程正常退出（graceful close）会 checkpoint（边车清空/删除），正常分发不受影响。若手动复制 `.db`，请确认进程已退出。
+
 ### ⚠️ Breaking — graph-export 迁移（#66）
 
 `loomgraph index` / `update` 改为消费 `codeindex graph-export` NDJSON 契约：实体用 module-qualified id，边带 `resolution_qualifier` + 跨文件 callee 解析。**修复跨模块同名函数冲突**（旧版本 9 个 `handle` 会合并成 1 个幻影 god_function，out_degree 34）。

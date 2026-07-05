@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — MCP reactive refresh + storage write-safety (#86)
+- `loomgraph_refresh` MCP tool — first write-capable tool exposed via MCP.
+  Reactive working-tree re-index (pull-mode): an agent that just edited a
+  file (uncommitted, incl. untracked) can re-index it on demand instead of
+  waiting for a commit. Complementary to the commit-driven git-hook
+  `update`. `path` scopes to a file/dir; `force_full` cold-rebuilds. See
+  ADR-014.
+- Storage opens SQLite in WAL mode with a 5s busy_timeout, so the MCP
+  server (long-lived) and a git-hook `update` subprocess can write the
+  same `.db` without `database is locked`. `close()` runs
+  `wal_checkpoint(TRUNCATE)` so a bundled `.db` stays self-contained.
+  Hardens all write paths, not just refresh.
+- `core/git.py`: `get_working_tree_files` — working-tree change detector
+  (staged + unstaged + untracked) via `git status --porcelain`, the
+  pull-mode source for `refresh`.
+
 ### Added — EPIC-015 Phase 1: end-to-end semantic search (#70)
 - `loomgraph search` — semantic retrieval over entity-description
   vectors. Reclaims the `search` name (the hidden deprecated alias to
