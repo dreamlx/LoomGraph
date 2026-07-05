@@ -481,7 +481,7 @@ infrastructure was added.
   - 13 unit tests (all passing, <1 second performance requirement verified)
 
 #### Documentation
-- **ADR-013: Git-Knowledge Graph Integration**: Technical design for three-dimensional debt analysis with git metrics integration strategy
+- **ADR-015: Git-Knowledge Graph Integration**: Technical design for three-dimensional debt analysis with git metrics integration strategy (originally mis-numbered ADR-013; renumbered 2026-07-05 to resolve collision with the sqlite-vec ADR-013)
 - **EPIC-010-git-metrics-integration.md**: Complete epic specification with 3 features and acceptance criteria
 - **EPIC-010-technical-design.md**: Detailed technical design covering data models, algorithms, CLI design, and integration points
 - **DEBT_REPORT_FORMAT.md**: Technical debt report format specification with JSON schema and output examples

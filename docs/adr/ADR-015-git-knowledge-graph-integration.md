@@ -1,9 +1,20 @@
-# ADR-013: Git × 知识图谱时空融合架构
+# ADR-015: Git × 知识图谱时空融合架构
 
 **状态**: Accepted
 **日期**: 2026-03-06
 **决策者**: AI Agent + User
 **影响组件**: DebtAnalyzer, GitMetricsAnalyzer (new), CLI
+
+> **编号说明（2026-07-05）**: 本决策最初被误编为 ADR-013（提交 8e03d39，2026-03-07），与
+> EPIC-011 的「SQLite + sqlite-vec 替换 LightRAG」决策（提交 3658ac4，2026-06-25，同样占了
+> ADR-013）发生编号碰撞。后者 supersede 了 ADR-001/002/010/011，被 `storage/*.py`、客户
+> migration guide 与 ADR-014 广泛引用（~20 处），改号 blast radius 大；本决策仅在 4 个文档中
+> 被引用，故改本决策为 **ADR-015** 以消歧。**决策日期不变（2026-03-06）**——因此 015 在时间上
+> 早于 013/014，编号缺口反映的是碰撞修复，而非决策顺序。
+>
+> 另：本文档正文中「LightRAG 管图谱」的前提已被后来的 [ADR-013](ADR-013-sqlite-vec-replace-lightrag.md)
+> 取代——图谱存储现为单文件 SQLite + sqlite-vec，GitMetrics × graph 的 Join 逻辑不变，只是落在
+> SQLite store 上而非 LightRAG。
 
 ---
 

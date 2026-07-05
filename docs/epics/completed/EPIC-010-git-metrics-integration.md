@@ -4,7 +4,7 @@
 **优先级**: High
 **版本**: v0.10.0 - v0.11.0
 **Epic Owner**: AI Agent
-**ADR**: [ADR-013](../adr/ADR-013-git-knowledge-graph-integration.md)
+**ADR**: [ADR-015](../adr/ADR-015-git-knowledge-graph-integration.md)
 
 ---
 

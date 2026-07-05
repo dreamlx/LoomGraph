@@ -1,6 +1,6 @@
 # EPIC-010 技术实施设计
 
-**关联**: [EPIC-010](EPIC-010-git-metrics-integration.md), [ADR-013](../adr/ADR-013-git-knowledge-graph-integration.md)
+**关联**: [EPIC-010](EPIC-010-git-metrics-integration.md), [ADR-015](../adr/ADR-015-git-knowledge-graph-integration.md)
 **状态**: Draft
 **日期**: 2026-03-06
 
