@@ -548,6 +548,9 @@ embedding:
 | ADR-010 | 搜索体系重构 (find/query/graph) | [ADR-010](docs/adr/ADR-010-search-architecture-redesign.md) |
 | ADR-011 | AI 迭代策略（外部 vs 内部） | [ADR-011](docs/adr/ADR-011-ai-iteration-strategy.md) |
 | ADR-012 | 技术债务分析标准化格式 | [ADR-012](docs/adr/ADR-012-technical-debt-analysis-format.md) |
+| ADR-013 | SQLite + sqlite-vec 替换 LightRAG（supersedes 001/002/010 部分/011） | [ADR-013](docs/adr/ADR-013-sqlite-vec-replace-lightrag.md) |
+| ADR-014 | MCP 写 tool：`loomgraph_refresh`（reactive working-tree re-index） | [ADR-014](docs/adr/ADR-014-mcp-write-tool-reactive-indexing.md) |
+| ADR-015 | Git × 知识图谱时空融合（独立分析 + 后期 Join） | [ADR-015](docs/adr/ADR-015-git-knowledge-graph-integration.md) |
 
 ## CLI 命令 (AI Agent 友好)
 
