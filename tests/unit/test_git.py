@@ -12,6 +12,7 @@ from loomgraph.core.git import (
     get_current_branch,
     get_current_commit,
     get_staged_files,
+    get_working_tree_files,
     is_git_repository,
 )
 
@@ -213,3 +214,67 @@ class TestGetStagedFiles:
 
         assert len(staged) == 1
         assert staged[0] == Path("staged.py")
+
+
+def _init_repo_with_commit(path: Path) -> None:
+    """Init a git repo in `path`, commit one tracked `a.py`, leave clean tree."""
+    subprocess.run(["git", "init"], cwd=path, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "t@t.com"], cwd=path, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "T"], cwd=path, capture_output=True)
+    (path / "a.py").write_text("a = 1\n")
+    subprocess.run(["git", "add", "."], cwd=path, capture_output=True)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=path, capture_output=True)
+
+
+class TestGetWorkingTreeFiles:
+    """Tests for get_working_tree_files — MCP `refresh` working-tree source.
+
+    Complementary to get_changed_files (committed HEAD~1..HEAD): this reads
+    uncommitted edits + untracked files via `git status --porcelain`.
+    """
+
+    def test_raises_error_for_non_git_repo(self, tmp_path: Path) -> None:
+        with pytest.raises(GitError, match="Not a git repository"):
+            get_working_tree_files(repo_path=tmp_path)
+
+    def test_returns_modified_tracked_file(self, tmp_path: Path) -> None:
+        """Modified-but-uncommitted tracked file is included."""
+        _init_repo_with_commit(tmp_path)
+        (tmp_path / "a.py").write_text("a = 2\n")  # uncommitted modification
+        result = get_working_tree_files(repo_path=tmp_path)
+        assert Path("a.py") in result
+
+    def test_includes_untracked_new_file(self, tmp_path: Path) -> None:
+        """Untracked new file is included — the case `git diff HEAD` misses."""
+        _init_repo_with_commit(tmp_path)
+        (tmp_path / "new.py").write_text("x = 1\n")  # untracked
+        result = get_working_tree_files(repo_path=tmp_path)
+        assert Path("new.py") in result
+
+    def test_excludes_deleted_file(self, tmp_path: Path) -> None:
+        """Deleted tracked file excluded (nothing to re-export)."""
+        _init_repo_with_commit(tmp_path)
+        (tmp_path / "a.py").unlink()
+        result = get_working_tree_files(repo_path=tmp_path)
+        assert Path("a.py") not in result
+
+    def test_clean_worktree_returns_empty(self, tmp_path: Path) -> None:
+        _init_repo_with_commit(tmp_path)
+        assert get_working_tree_files(repo_path=tmp_path) == []
+
+    def test_extension_filter(self, tmp_path: Path) -> None:
+        _init_repo_with_commit(tmp_path)
+        (tmp_path / "new.py").write_text("x\n")
+        (tmp_path / "new.txt").write_text("x\n")
+        result = get_working_tree_files(repo_path=tmp_path, extensions={".py"})
+        assert Path("new.py") in result
+        assert Path("new.txt") not in result
+
+    def test_include_untracked_false(self, tmp_path: Path) -> None:
+        """include_untracked=False drops `??` entries but keeps modifications."""
+        _init_repo_with_commit(tmp_path)
+        (tmp_path / "new.py").write_text("x\n")  # untracked
+        (tmp_path / "a.py").write_text("a = 2\n")  # modified tracked
+        result = get_working_tree_files(repo_path=tmp_path, include_untracked=False)
+        assert Path("a.py") in result
+        assert Path("new.py") not in result

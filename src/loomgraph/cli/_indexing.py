@@ -11,7 +11,11 @@ import click
 from loomgraph.cli._common import ErrorCode, get_auto_workspace, output_error, output_success
 from loomgraph.cli._deps_check import check_codeindex
 from loomgraph.cli.main import main
-from loomgraph.core.git import get_changed_files, is_git_repository
+from loomgraph.core.git import (
+    get_changed_files,
+    get_working_tree_files,
+    is_git_repository,
+)
 from loomgraph.core.graph_export_ingest import (
     GraphExportError,
     ingest,
@@ -265,6 +269,92 @@ async def _async_update(
         result = await ingest(
             entities, relations, store, clear=False, on_progress=_progress
         )
+        result["mode"] = "whole_tree_upsert"
+
+    result["workspace"] = ws
+    return result
+
+
+def _expand_path(path: str, repo: Path) -> set[str]:
+    """Expand a path arg (file or dir prefix) to repo-relative posix paths.
+
+    - file → ``{that file}``
+    - dir  → all existing files under it (rglob)
+    - missing → ``ValueError`` (the MCP handle's ``safe_call`` surfaces this
+      as a ``REFRESH_FAILED`` envelope)
+    """
+    target = (repo / path).resolve()
+    base = repo.resolve()
+    if target.is_file():
+        return {target.relative_to(base).as_posix()}
+    if target.is_dir():
+        return {
+            f.relative_to(base).as_posix()
+            for f in target.rglob("*")
+            if f.is_file()
+        }
+    raise ValueError(f"path not found: {path}")
+
+
+async def _async_refresh(
+    workspace: str | None,
+    repo: Path,
+    path: str | None,
+    force_full: bool,
+) -> dict[str, Any]:
+    """MCP-driven reactive re-index of the working tree (pull-mode).
+
+    Complementary to :func:`_async_update` (committed ``HEAD~1..HEAD`` via the
+    git hook): refresh targets the **working tree** — uncommitted edits
+    including untracked new files — so an agent that just edited a file can
+    see it in the graph without committing first.
+
+    Branching:
+
+    - ``force_full=True`` → ``ingest(clear=True)`` cold rebuild (like
+      ``index --clear``).
+    - ``path`` given → ``ingest_incremental`` over the expanded path set.
+    - git repo, no path → ``ingest_incremental`` over ``get_working_tree_files``.
+    - non-git, no path → ``ingest(clear=False)`` whole-tree upsert.
+    - incremental resolves to zero changed files → ``{"mode": "noop"}``,
+      skipping the codeindex export entirely.
+    """
+    from loomgraph.storage.factory import create_graph_store
+
+    ws = get_auto_workspace(workspace)
+    store = await create_graph_store(workspace=ws)
+
+    if force_full:
+        entities, relations, _ = run_graph_export(repo)
+        result = await ingest(entities, relations, store, clear=True)
+        result["mode"] = "cold_rebuild"
+        result["workspace"] = ws
+        return result
+
+    # Determine the changed-files set + strategy.
+    if path is not None:
+        changed_files = _expand_path(path, repo)
+        strategy = "incremental"
+    elif is_git_repository(repo):
+        changed_files = {
+            p.as_posix() for p in get_working_tree_files(repo_path=repo)
+        }
+        strategy = "incremental"
+    else:
+        changed_files = set()
+        strategy = "whole_tree"
+
+    if strategy == "incremental" and not changed_files:
+        return {"mode": "noop", "changed_files": [], "workspace": ws}
+
+    entities, relations, _ = run_graph_export(repo)
+    if strategy == "incremental":
+        result = await ingest_incremental(
+            entities, relations, store, changed_files=changed_files
+        )
+        result["mode"] = "warm_incremental"
+    else:
+        result = await ingest(entities, relations, store, clear=False)
         result["mode"] = "whole_tree_upsert"
 
     result["workspace"] = ws

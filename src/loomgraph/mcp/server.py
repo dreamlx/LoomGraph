@@ -5,12 +5,12 @@ Exposes loomgraph's read-side query surface as MCP tools so AI agents
 `impact` / `deps` / `overview` / `workspace_*` as native tools without
 the ~250ms Python-startup penalty per CLI subprocess invocation.
 
-Write tools (`index`, `update`, `import-export`) are intentionally
-NOT exposed via MCP — they're slow, mutating, and require codeindex.
-Keeping them CLI-only lets the MCP server runtime dependency tree
-stay small (no codeindex required for query-only users).
-
-See docs/api/MCP_DESIGN.md for the contract.
+Read tools stay dependency-light (no codeindex needed). `refresh`
+(`loomgraph_refresh`) is the sole write tool: it shells codeindex to
+re-ingest the working tree on agent demand (pull-mode complement to the
+commit-driven git-hook `update`), so the MCP server now requires codeindex
+*only when refresh is invoked* — query-only deployments still work without
+it. See ADR-014 and docs/api/MCP_DESIGN.md for the contract.
 """
 
 from __future__ import annotations
@@ -30,6 +30,7 @@ from loomgraph.mcp.tools import find as t_find
 from loomgraph.mcp.tools import graph as t_graph
 from loomgraph.mcp.tools import impact as t_impact
 from loomgraph.mcp.tools import overview as t_overview
+from loomgraph.mcp.tools import refresh as t_refresh
 from loomgraph.mcp.tools import search as t_search
 from loomgraph.mcp.tools import sync_advice as t_sync_advice
 from loomgraph.mcp.tools import topology as t_topology
@@ -59,6 +60,8 @@ _register(t_topology.TOOL_SPEC, t_topology.handle)
 _register(t_impact.TOOL_SPEC, t_impact.handle)
 _register(t_deps.TOOL_SPEC, t_deps.handle)
 _register(t_overview.TOOL_SPEC, t_overview.handle)
+# Write tool (first MCP-exposed write surface; see ADR-014)
+_register(t_refresh.TOOL_SPEC, t_refresh.handle)
 _register(t_workspace.LIST_SPEC, t_workspace.list_handle)
 _register(t_workspace.INFO_SPEC, t_workspace.info_handle)
 # Composite tools (v0.12.1) — multi-dimension reports
