@@ -45,7 +45,9 @@ subprocess overhead alone is ~7.5s. MCP makes that vanish.
 
 ## Tool reference
 
-All 9 read tools follow the same response envelope:
+All tools follow the same response envelope — 12 read tools plus the
+`loomgraph_refresh` write tool (ADR-014, the first MCP-exposed write
+surface):
 
 ```jsonc
 // success
@@ -54,6 +56,22 @@ All 9 read tools follow the same response envelope:
 // error
 {"success": false, "error": {"code": "FIND_FAILED", "message": "...", "suggestion": "..."}}
 ```
+
+### `loomgraph_refresh` (write — ADR-014)
+
+First write-capable MCP tool. Reactive working-tree re-index (pull-mode):
+an agent that just edited a file (uncommitted, incl. untracked) can
+re-index it on demand instead of waiting for a commit. Complementary to
+the commit-driven git-hook `update`. Shells `codeindex graph-export`, so
+ai-codeindex must be installed (query-only deployments still work without
+it — refresh is the only tool that needs codeindex). Returns
+`{"mode": "noop"}` on a clean tree with no `path`.
+
+| arg | type | default | desc |
+|---|---|---|---|
+| `path` | string | — | file/dir prefix to refresh (omit = all working-tree changes) |
+| `force_full` | boolean | false | cold whole-tree rebuild (clear + re-ingest) |
+| `workspace` | string | server default | per-call workspace override |
 
 ### `loomgraph_find`
 
