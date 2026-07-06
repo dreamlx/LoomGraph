@@ -85,6 +85,15 @@ class GraphStore(ABC):
     async def delete_by_source(self, source_ids: list[str]) -> None:
         """Delete entities/relations whose source_id is in the given list."""
 
+    @abstractmethod
+    async def delete_entities(self, entity_names: list[str]) -> None:
+        """Delete entities keyed by entity_name (symbol-level GC, #90).
+
+        Also removes relations touching the entity (as src or tgt) and any
+        associated vectors. Use when pruning individual symbols that no
+        longer exist, without disturbing sibling symbols in the same file.
+        """
+
     # ----- Source / workspace queries -----
 
     @abstractmethod
@@ -93,6 +102,16 @@ class GraphStore(ABC):
         source_prefix: str | None = None,
     ) -> list[str]:
         """Return deduplicated source_ids, optionally filtered by prefix."""
+
+    @abstractmethod
+    async def get_entities_by_source(
+        self, source_ids: list[str]
+    ) -> list[dict[str, Any]]:
+        """Return entities whose source_id ∈ source_ids (#90).
+
+        Full dicts incl. properties_json extras (e.g. content_hash), so
+        symbol-level incremental ingest can diff old vs new per symbol.
+        """
 
     @abstractmethod
     async def list_workspaces(self) -> list[str]:

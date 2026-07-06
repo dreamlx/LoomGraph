@@ -19,6 +19,7 @@ from loomgraph.core.config import reset_settings
 from loomgraph.core.graph_export_ingest import (
     GraphExportError,
     ingest,
+    ingest_incremental,
     run_graph_export,
 )
 from loomgraph.core.models import EntityData, RelationData
@@ -237,64 +238,199 @@ async def test_ingest_progress_callback_fires_no_clear() -> None:
 
 
 class _FakeStoreIncremental:
-    """Store stub for ingest_incremental: tracks get_source_ids + delete_by_source."""
+    """Store stub for ingest_incremental: dict-backed, tracks symbol-level
+    diff calls (get_source_ids / get_entities_by_source / delete_entities)."""
 
-    def __init__(self, source_ids_by_prefix: dict[str, list[str]] | None = None) -> None:
-        self._by_prefix = source_ids_by_prefix or {}
-        self.deleted_source_ids: list[str] = []
+    def __init__(
+        self, entities_by_source: dict[str, list[dict]] | None = None
+    ) -> None:
+        self._entities: dict[str, dict[str, Any]] = {}
+        for ents in (entities_by_source or {}).values():
+            for e in ents:
+                self._entities[e["entity_name"]] = dict(e)
+        self.deleted_entity_names: list[str] = []
+        self.deleted_source_ids: list[str] = []  # legacy delete_by_source tracker
         self.insert_custom_kg = AsyncMock()
-        self.get_graph_stats = AsyncMock(return_value={"entities": 1, "relations": 0})
+        self.get_graph_stats = AsyncMock(
+            return_value={"entities": 1, "relations": 0}
+        )
 
     async def get_source_ids(self, source_prefix: str | None = None) -> list[str]:
-        if source_prefix is None:
-            return [sid for sids in self._by_prefix.values() for sid in sids]
-        return list(self._by_prefix.get(source_prefix, []))
+        sids = {e.get("source_id") for e in self._entities.values()}
+        sids.discard(None)
+        if source_prefix:
+            sids = {s for s in sids if s.startswith(source_prefix)}
+        return sorted(sids)
+
+    async def get_entities_by_source(self, source_ids: list[str]) -> list[dict]:
+        sids = set(source_ids)
+        return [e for e in self._entities.values() if e.get("source_id") in sids]
+
+    async def delete_entities(self, entity_names: list[str]) -> None:
+        self.deleted_entity_names.extend(entity_names)
+        for n in entity_names:
+            self._entities.pop(n, None)
 
     async def delete_by_source(self, source_ids: list[str]) -> None:
+        sids = set(source_ids)
         self.deleted_source_ids.extend(source_ids)
+        self._entities = {
+            k: v
+            for k, v in self._entities.items()
+            if v.get("source_id") not in sids
+        }
 
 
-def _ent(name: str, source_id: str) -> EntityData:
-    return EntityData(entity_name=name, entity_data={"source_id": source_id})
+def _ent(
+    name: str, source_id: str, content_hash: str | None = None
+) -> EntityData:
+    return EntityData(
+        entity_name=name,
+        entity_data={"source_id": source_id, "content_hash": content_hash},
+    )
+
+
+def _store_ent(
+    name: str, source_id: str, content_hash: str | None = None
+) -> dict[str, Any]:
+    """An entity as get_entities_by_source returns it (store-side old state)."""
+    return {"entity_name": name, "source_id": source_id, "content_hash": content_hash}
 
 
 async def test_ingest_incremental_only_touches_changed_files() -> None:
-    """Only changed-file entities are re-embedded/re-inserted; others untouched."""
-    from loomgraph.core.graph_export_ingest import ingest_incremental
-
-    store = _FakeStoreIncremental(source_ids_by_prefix={"pkg/a.py": ["pkg/a.py:1"]})
+    """Only changed-file entities are processed; unchanged-file entities are
+    filtered out. Within a changed file, hash-matched symbols are skipped (#90)."""
+    store = _FakeStoreIncremental(
+        entities_by_source={
+            "pkg/a.py": [_store_ent("pkg.a.handle", "pkg/a.py:1", "h1-old")]
+        }
+    )
     entities = [
-        _ent("pkg.a.handle", "pkg/a.py:1"),
-        _ent("pkg.b.handle", "pkg/b.py:1"),  # unchanged file — must be filtered out
+        _ent("pkg.a.handle", "pkg/a.py:1", "h1-new"),  # changed file, mismatch → re-embed
+        _ent("pkg.b.handle", "pkg/b.py:1", "h2"),        # unchanged file — filtered out
     ]
 
     result = await ingest_incremental(entities, [], store, changed_files={"pkg/a.py"})
 
-    # GC: only pkg/a.py's old source_id deleted
-    assert store.deleted_source_ids == ["pkg/a.py:1"]
-    # Insert: only pkg.a.handle (pkg/b.py filtered out)
-    inserted = store.insert_custom_kg.call_args.args
-    assert len(inserted[0]) == 1
-    assert inserted[0][0]["entity_name"] == "pkg.a.handle"
-    assert result["entities_created"] == 1
+    inserted = store.insert_custom_kg.call_args.args[0]
+    assert [e["entity_name"] for e in inserted] == ["pkg.a.handle"]
     assert result["changed_files"] == ["pkg/a.py"]
 
 
-async def test_ingest_incremental_garbage_collects_deleted_symbol() -> None:
-    """Deleted symbols (in store but absent from export) are removed via prefix-delete."""
-    from loomgraph.core.graph_export_ingest import ingest_incremental
-
-    # Store has 2 symbols under pkg/a.py (:1, :50); export has only :1 — :50 deleted.
+async def test_ingest_incremental_skips_unchanged_symbol_by_hash() -> None:
+    """#90 core: same file, same content_hash → symbol skipped (no re-embed,
+    no re-insert). The ~50× embedding savings vs file-level on a fat file."""
     store = _FakeStoreIncremental(
-        source_ids_by_prefix={"pkg/a.py": ["pkg/a.py:1", "pkg/a.py:50"]}
+        entities_by_source={
+            "pkg/a.py": [
+                _store_ent("pkg.a.handle", "pkg/a.py:1", "h1"),
+                _store_ent("pkg.b.handle", "pkg/a.py:2", "h2"),
+            ]
+        }
     )
-    entities = [_ent("pkg.a.kept", "pkg/a.py:1")]
+    entities = [
+        _ent("pkg.a.handle", "pkg/a.py:1", "h1"),
+        _ent("pkg.b.handle", "pkg/a.py:2", "h2"),
+    ]
+
+    result = await ingest_incremental(entities, [], store, changed_files={"pkg/a.py"})
+
+    assert store.insert_custom_kg.call_args.args[0] == []
+    assert store.deleted_entity_names == []
+    assert result["symbols_skipped"] == 2
+
+
+async def test_ingest_incremental_reembeds_hash_mismatch() -> None:
+    """One symbol's content_hash changed → only that symbol re-embedded."""
+    store = _FakeStoreIncremental(
+        entities_by_source={
+            "pkg/a.py": [
+                _store_ent("pkg.a.handle", "pkg/a.py:1", "h1-old"),
+                _store_ent("pkg.b.handle", "pkg/a.py:2", "h2"),
+            ]
+        }
+    )
+    entities = [
+        _ent("pkg.a.handle", "pkg/a.py:1", "h1-new"),  # changed
+        _ent("pkg.b.handle", "pkg/a.py:2", "h2"),        # unchanged
+    ]
 
     await ingest_incremental(entities, [], store, changed_files={"pkg/a.py"})
 
-    # Both old source_ids deleted (GC incl. the deleted symbol at :50)
-    assert sorted(store.deleted_source_ids) == ["pkg/a.py:1", "pkg/a.py:50"]
-    # Only the kept symbol re-inserted
-    inserted = store.insert_custom_kg.call_args.args
-    assert len(inserted[0]) == 1
-    assert inserted[0][0]["entity_name"] == "pkg.a.kept"
+    inserted = store.insert_custom_kg.call_args.args[0]
+    assert [e["entity_name"] for e in inserted] == ["pkg.a.handle"]
+    assert store.deleted_entity_names == []
+
+
+async def test_ingest_incremental_inserts_new_symbol() -> None:
+    """Symbol in new export but absent from store → inserted."""
+    store = _FakeStoreIncremental(
+        entities_by_source={
+            "pkg/a.py": [_store_ent("pkg.a.handle", "pkg/a.py:1", "h1")]
+        }
+    )
+    entities = [
+        _ent("pkg.a.handle", "pkg/a.py:1", "h1"),
+        _ent("pkg.a.new", "pkg/a.py:30", "h3"),  # new symbol
+    ]
+
+    await ingest_incremental(entities, [], store, changed_files={"pkg/a.py"})
+
+    inserted = store.insert_custom_kg.call_args.args[0]
+    assert [e["entity_name"] for e in inserted] == ["pkg.a.new"]
+
+
+async def test_ingest_incremental_deletes_removed_symbol() -> None:
+    """Symbol in store but absent from new export → delete_entities([name])."""
+    store = _FakeStoreIncremental(
+        entities_by_source={
+            "pkg/a.py": [
+                _store_ent("pkg.a.kept", "pkg/a.py:1", "h1"),
+                _store_ent("pkg.a.gone", "pkg/a.py:50", "h2"),
+            ]
+        }
+    )
+    entities = [_ent("pkg.a.kept", "pkg/a.py:1", "h1")]
+
+    result = await ingest_incremental(entities, [], store, changed_files={"pkg/a.py"})
+
+    assert store.deleted_entity_names == ["pkg.a.gone"]
+    assert result["symbols_deleted"] == 1
+
+
+async def test_ingest_incremental_null_hash_falls_back_to_reembed() -> None:
+    """content_hash=None (no-span entity / sv0 artifact) → always re-embed
+    (file-level fallback). Skip only when BOTH old and new carry a hash."""
+    store = _FakeStoreIncremental(
+        entities_by_source={
+            "pkg/a.py": [_store_ent("pkg.a.handle", "pkg/a.py:1", None)]
+        }
+    )
+    entities = [_ent("pkg.a.handle", "pkg/a.py:1", None)]
+
+    await ingest_incremental(entities, [], store, changed_files={"pkg/a.py"})
+
+    inserted = store.insert_custom_kg.call_args.args[0]
+    assert [e["entity_name"] for e in inserted] == ["pkg.a.handle"]
+    assert store.deleted_entity_names == []
+
+
+async def test_ingest_incremental_garbage_collects_deleted_symbol() -> None:
+    """Deleted symbols (in store but absent from export) are pruned via
+    delete_entities — symbol-level GC (#90), NOT file-level delete_by_source."""
+    store = _FakeStoreIncremental(
+        entities_by_source={
+            "pkg/a.py": [
+                _store_ent("pkg.a.kept", "pkg/a.py:1", "h1"),
+                _store_ent("pkg.a.gone", "pkg/a.py:50", "h2"),
+            ]
+        }
+    )
+    entities = [_ent("pkg.a.kept", "pkg/a.py:1", "h1")]
+
+    await ingest_incremental(entities, [], store, changed_files={"pkg/a.py"})
+
+    assert store.deleted_entity_names == ["pkg.a.gone"]
+    assert store.deleted_source_ids == []  # no file-level delete anymore
+    inserted = store.insert_custom_kg.call_args.args[0]
+    assert inserted == []  # pkg.a.kept hash matches → skipped

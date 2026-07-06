@@ -142,52 +142,75 @@ async def ingest_incremental(
     changed_files: set[str],
     on_progress: ProgressFn | None = None,
 ) -> dict[str, Any]:
-    """Per-file incremental ingest for ``update`` (路 B, no codeindex content_hash).
+    """Per-symbol incremental ingest for ``update`` (路 B + #90 symbol-level).
 
-    vs :func:`ingest` with ``clear=False`` (whole-tree upsert): only
-    re-embeds/re-inserts entities whose source file is in ``changed_files``,
-    and garbage-collects symbols deleted since the last index by first
-    deleting every entity under each changed file's source-id prefix.
+    For each changed file, diffs the new export against the store's current
+    entities by per-symbol ``content_hash`` (codeindex>=0.31.0 sv1):
 
-    Flow:
-    1. GC — for each changed file: ``delete_by_source(get_source_ids(file))``
-       removes stale entities, **including symbols deleted since the last
-       index** (upsert alone never removes them).
-    2. Filter — keep only entities/relations whose ``source_id`` file ∈
-       ``changed_files``.
-    3. ``maybe_embed_entities`` + ``insert_custom_kg`` the filtered subset
-       only — so unchanged files cost zero embed calls.
+      - hash unchanged (both sides carry the same non-None hash) → SKIP
+        (no re-embed, no re-insert). The ~50× embedding savings on a fat file.
+      - hash changed, or new symbol, or hash is None → re-embed + upsert.
+      - symbol in store but absent from the new export → ``delete_entities``
+        (symbol-level GC; relations + vectors cascade in the store).
+      - ``content_hash`` is None (no-span entity / sv0 artifact) → always
+        re-embed (file-level fallback; skip only when BOTH sides carry a hash).
 
-    Granularity is file-level (a one-line edit re-embeds that file's
-    entities); symbol-span granularity via codeindex content_hash is the
-    follow-up (codeindex#110).
+    Unchanged files cost zero embed calls and zero store reads.
+
+    Relations of removed symbols are dropped via the ``delete_entities``
+    cascade; changed-file relations are upserted. Relations between two
+    *kept* symbols that disappeared from the export are not GC'd here —
+    #90 targets the embedding-cost win, not relation-level diff.
     """
-    # Step 1: GC changed files' old entities (source-id prefix delete).
-    stale: list[str] = []
-    for f in sorted(changed_files):
-        stale.extend(await store.get_source_ids(f))
-    if stale:
-        _emit(on_progress, "clear", len(stale), 0)
-        await store.delete_by_source(stale)
+    to_embed: list[EntityData] = []  # new + hash-mismatch symbols
+    to_skip = 0
+    to_delete: list[str] = []  # entity_names removed since last index
 
-    # Step 2: filter to changed files.
-    changed_entities = [
-        e
-        for e in entities
-        if _file_of(str(e.entity_data.get("source_id", ""))) in changed_files
-    ]
+    for f in sorted(changed_files):
+        sids = await store.get_source_ids(f)
+        old_entities = await store.get_entities_by_source(sids) if sids else []
+        old_hash: dict[str, str | None] = {
+            e["entity_name"]: e.get("content_hash") for e in old_entities
+        }
+
+        new_in_file = [
+            e
+            for e in entities
+            if _file_of(str(e.entity_data.get("source_id", ""))) == f
+        ]
+        new_names: set[str] = set()
+        for e in new_in_file:
+            name = e.entity_name
+            new_names.add(name)
+            h_new = e.entity_data.get("content_hash")
+            h_old = old_hash.get(name)
+            if h_new is not None and h_old is not None and h_new == h_old:
+                to_skip += 1  # symbol unchanged → skip embed/insert
+            else:
+                to_embed.append(e)  # new symbol or hash mismatch
+        # symbols gone from the export → GC (symbol-level, not file-level)
+        for name in old_hash:
+            if name not in new_names:
+                to_delete.append(name)
+
     changed_relations = [
         r
         for r in relations
         if _file_of(str(r.edge_data.get("source_id", ""))) in changed_files
     ]
 
-    # Step 3: embed + insert the subset (mirrors `ingest`).
+    # GC removed symbols first (relations + vectors cascade in store).
+    if to_delete:
+        _emit(on_progress, "clear", len(to_delete), 0)
+        await store.delete_entities(to_delete)
+
+    # Embed + upsert the new/changed subset (mirrors `ingest`).
     entity_dicts = [
-        {"entity_name": e.entity_name, **e.entity_data} for e in changed_entities
+        {"entity_name": e.entity_name, **e.entity_data} for e in to_embed
     ]
     relation_dicts = [
-        {"src_id": r.src_id, "tgt_id": r.tgt_id, **r.edge_data} for r in changed_relations
+        {"src_id": r.src_id, "tgt_id": r.tgt_id, **r.edge_data}
+        for r in changed_relations
     ]
 
     _emit(on_progress, "embed", len(entity_dicts), len(relation_dicts))
@@ -200,7 +223,9 @@ async def ingest_incremental(
     return {
         "incremental": True,
         "changed_files": sorted(changed_files),
-        "gc_source_ids": len(stale),
+        "symbols_skipped": to_skip,
+        "symbols_deleted": len(to_delete),
+        "gc_source_ids": len(to_delete),  # legacy alias (= symbols GC'd)
         "entities_created": len(entity_dicts),
         "relations_created": len(relation_dicts),
         "embedded": embedded,
