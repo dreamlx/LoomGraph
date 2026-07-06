@@ -113,15 +113,33 @@ def workspace_delete(name: str, yes: bool) -> None:
 
 
 async def _async_workspace_delete(name: str) -> dict[str, Any]:
-    """Run async workspace delete."""
-    from loomgraph.storage.factory import create_graph_store
+    """Run async workspace delete.
 
-    store = await create_graph_store(workspace=name)
-    await store.delete_all()
+    Unlinks the workspace's ``<name>.db`` file (plus sqlite WAL/SHM sidecars).
+    ``list_workspaces`` enumerates ``*.db`` on disk, so removing the file is
+    what actually retires the workspace — the previous behavior (opening the
+    store and ``delete_all()``-ing the tables) left an empty ``.db`` shell
+    that kept reappearing in ``workspace list`` (#95). Not opening a store
+    also avoids creating a shell for a non-existent workspace name.
+    """
+    from pathlib import Path
+
+    from loomgraph.core.config import get_settings
+    from loomgraph.storage.factory import _resolve_db_path
+
+    db_path = _resolve_db_path(get_settings().storage.db_path, name)
+    removed: list[str] = []
+    for candidate in (db_path, Path(f"{db_path}-wal"), Path(f"{db_path}-shm")):
+        if candidate.exists():
+            candidate.unlink()
+            removed.append(candidate.name)
 
     return {
         "deleted_workspace": name,
-        "message": "Workspace deleted",
+        "removed_files": removed,
+        "message": (
+            "Workspace deleted" if removed else "Workspace not found (nothing to delete)"
+        ),
     }
 
 
