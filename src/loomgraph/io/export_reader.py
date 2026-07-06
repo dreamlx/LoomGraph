@@ -50,8 +50,10 @@ VALID_QUALIFIERS = {"resolved", "ambiguous", "unresolved"}
 # 0.27.0 or that hit a record where `dst_raw` is missing.
 UNRESOLVED_SENTINEL = "<unresolved>"
 
-# Highest schema_version this reader supports
-SUPPORTED_SCHEMA_VERSION = 0
+# Highest schema_version this reader supports.
+# sv1 (codeindex>=0.31.0): per-symbol `content_hash` enables symbol-level
+# incremental ingest (loomgraph#90). Reader treats it as an opaque string.
+SUPPORTED_SCHEMA_VERSION = 1
 
 
 class ExportReadError(ValueError):
@@ -102,6 +104,9 @@ def map_entity(rec: dict) -> EntityData:
       description     → folded into entity_data.description together with
                         signature (see below)
       provenance      → entity_data.provenance
+      content_hash    → entity_data.content_hash (codeindex>=0.31.0 sv1;
+                        None for older artifacts. Symbol-level ingest
+                        treats None as "always re-embed". loomgraph#90.)
 
     `description` is rebuilt as `signature | docstring` (empty parts dropped)
     so the embedding pipeline — which embeds `description` — gets the
@@ -126,6 +131,7 @@ def map_entity(rec: dict) -> EntityData:
             "source_id": source_id,
             "file_path": source_id.split(":", 1)[0],
             "provenance": rec.get("provenance", "ast"),
+            "content_hash": rec.get("content_hash"),
         },
     )
 

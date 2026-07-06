@@ -94,6 +94,23 @@ class FakeGraphStore(GraphStore):
             r for r in self._relations if r.get("source_id") not in sources
         ]
 
+    async def delete_entities(self, entity_names: list[str]) -> None:
+        names = set(entity_names)
+        self._entities = {
+            k: v for k, v in self._entities.items() if k not in names
+        }
+        self._relations = [
+            r
+            for r in self._relations
+            if r.get("src_id") not in names and r.get("tgt_id") not in names
+        ]
+
+    async def get_entities_by_source(
+        self, source_ids: list[str]
+    ) -> list[dict[str, Any]]:
+        sids = set(source_ids)
+        return [v for v in self._entities.values() if v.get("source_id") in sids]
+
     async def get_source_ids(
         self, source_prefix: str | None = None
     ) -> list[str]:
@@ -324,6 +341,24 @@ class TestDelete:
         names = [e["entity_name"] for e in await store.get_all_entities()]
         assert names == ["B"]
 
+    async def test_delete_entities_by_name(self, store: GraphStore) -> None:
+        """Symbol-level GC (loomgraph#90): delete by entity_name, not source."""
+        await store.create_entity("A", {"source_id": "f1.py"})
+        await store.create_entity("B", {"source_id": "f1.py"})
+        await store.delete_entities(["A"])
+        names = [e["entity_name"] for e in await store.get_all_entities()]
+        assert names == ["B"]
+
+    async def test_delete_entities_cascades_to_relations(
+        self, store: GraphStore
+    ) -> None:
+        """Deleting an entity must also drop relations touching it (src or tgt)."""
+        await store.create_entity("A", {"source_id": "f1.py"})
+        await store.create_entity("B", {"source_id": "f1.py"})
+        await store.create_relation("A", "B", {"keywords": "CALLS"})
+        await store.delete_entities(["A"])
+        assert await store.get_all_relations() == []
+
 
 # ---------- Source IDs ----------
 
@@ -338,6 +373,24 @@ class TestSourceIds:
         await store.create_entity("A", {"source_id": "src/a.py"})
         await store.create_entity("B", {"source_id": "tests/b.py"})
         assert await store.get_source_ids(source_prefix="src/") == ["src/a.py"]
+
+    async def test_get_entities_by_source_returns_content_hash(
+        self, store: GraphStore
+    ) -> None:
+        """Symbol-level diff (loomgraph#90) needs to read back the stored
+        content_hash per source. Extras round-trip through properties_json
+        on SQLite; FakeGraphStore keeps them inline — both must surface
+        content_hash as a top-level key."""
+        await store.create_entity(
+            "A", {"source_id": "f1.py:10", "content_hash": "h1"}
+        )
+        await store.create_entity(
+            "B", {"source_id": "f2.py:20", "content_hash": "h2"}
+        )
+        result = await store.get_entities_by_source(["f1.py:10"])
+        names = [e["entity_name"] for e in result]
+        assert names == ["A"]
+        assert result[0]["content_hash"] == "h1"
 
 
 # ---------- Analytics ----------

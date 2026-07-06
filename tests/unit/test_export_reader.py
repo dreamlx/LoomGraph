@@ -384,3 +384,35 @@ def test_summary_to_dict_is_json_serialisable(tmp_path: Path):
         "ambiguous": 1,
         "unresolved": 1,
     }
+
+
+# ----- schema_version 1 / content_hash (codeindex>=0.31.0, loomgraph#90) --
+
+def test_map_entity_reads_content_hash():
+    """codeindex 0.31.0 emits per-symbol content_hash (sv1); map_entity
+    carries it through so symbol-level incremental can diff old vs new."""
+    rec = dict(ENTITY_RECORDS[0], content_hash="abc123def456")
+    ent = map_entity(rec)
+    assert ent.entity_data["content_hash"] == "abc123def456"
+
+
+def test_map_entity_content_hash_none_when_absent():
+    """Pre-0.31.0 artifacts (no content_hash field) yield None — symbol-level
+    ingest treats None as 'always re-embed' (file-level fallback). The key
+    is present even when the value is None so consumers can branch on it."""
+    ent = map_entity(ENTITY_RECORDS[0])  # no content_hash key (sv0)
+    assert "content_hash" in ent.entity_data
+    assert ent.entity_data["content_hash"] is None
+
+
+def test_reader_supports_sv1_without_warning(tmp_path: Path):
+    """SUPPORTED_SCHEMA_VERSION bumped to 1: codeindex 0.31.0 sv1 exports
+    load cleanly (no 'newer codeindex' warning) and content_hash round-trips
+    into the entity."""
+    meta = dict(MIN_META, schema_version=1)
+    rec = dict(ENTITY_RECORDS[0], content_hash="abc123def456")
+    path = _write_ndjson(tmp_path, [meta, rec])
+    entities, _, summary = GraphExportReader(path).read()
+    assert summary.schema_warnings == [], summary.schema_warnings
+    assert summary.meta["schema_version"] == 1
+    assert entities[0].entity_data["content_hash"] == "abc123def456"
