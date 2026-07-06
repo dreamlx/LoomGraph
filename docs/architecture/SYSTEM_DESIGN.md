@@ -1,22 +1,23 @@
 # LoomGraph 系统架构设计
 
-**版本**: 0.5.0
-**更新日期**: 2026-02-20
+**版本**: 0.7.0
+**更新日期**: 2026-07-06
 **状态**: ✅ 确认
+
+> **本文已更新到 ADR-013 架构（SQLite + sqlite-vec + 本地 Ollama），H200 / LightRAG / Postgres 时代描述已移除（2026-07）。** v0.5.0 之前的三仓库"codeindex 看 / LoomGraph 想 / LightRAG 记"模型已被替换：LoomGraph 现在自带存储层（`SqliteGraphStore`），LightRAG 作为独立存储组件已退役。
 
 ---
 
 ## 1. 定位
 
-> codeindex 负责"看"，LoomGraph 负责"想"和"说"，LightRAG 负责"记"。
+> codeindex 负责"看"（AST 解析），LoomGraph 负责"想"、"说"和"记"（映射调度 + Skill 编排 + 自带 SQLite 存储）。
 
 | 仓库 | 角色 | 职责 |
 |------|------|------|
 | **codeindex** | 看 | AST 解析，提取代码结构（Symbol / Call / Inheritance / Import） |
-| **LoomGraph** | 想 + 说 | 写入调度 + 读取分析 + Skill 编排，对外提供 CLI 和 Claude Code Skills |
-| **LightRAG** | 记 | 图谱存储 + 向量检索，通过 HTTP API 提供 CRUD |
+| **LoomGraph** | 想 + 说 + 记 | 写入调度 + 读取分析 + Skill 编排 + **自带存储（SQLite + sqlite-vec）**，对外提供 CLI 和 Claude Code Skills |
 
-**存储所有权**：LoomGraph 不直接操作数据库。全部存储由 LightRAG 管理，LoomGraph 通过 `LightRAGClient`（HTTP）读写。
+**存储所有权**：LoomGraph **直接拥有**存储层。`GraphStore` 抽象（`src/loomgraph/storage/`）当前唯一实现是 `SqliteGraphStore`，每个 workspace 对应一个单文件 SQLite 数据库（`~/.loomgraph/{workspace}.db`）。无 LightRAG、无 Postgres、无外部数据库进程。
 
 ---
 
@@ -48,23 +49,24 @@
 │                                                                     │
 │  输出: 全部 JSON，AI Agent 可直接解析                                 │
 ├─────────────────────────────────────────────────────────────────────┤
-│                     基础设施层 (External)                            │
+│                     基础设施层 (External + Local)                     │
 │                                                                     │
-│  ┌─────────────┐  ┌─────────────────┐  ┌──────────────────────┐    │
-│  │  codeindex  │  │   LightRAG API  │  │     H200 GPU         │    │
-│  │  AST 解析   │  │   :3001         │  │  Jina TEI  :3002     │    │
-│  │  tech-debt  │  │   /graph/*      │  │  GLM-4 vLLM :3000    │    │
-│  └─────────────┘  │   /api/*        │  └──────────────────────┘    │
-│                   │   /query        │                               │
-│                   └────────┬────────┘                               │
-│                            │                                        │
-│                   ┌────────┴────────┐                               │
-│                   │   PostgreSQL    │                               │
-│                   │   pgvector      │                               │
-│                   │   :5432         │                               │
-│                   └─────────────────┘                               │
+│  ┌─────────────┐  ┌─────────────────────┐  ┌──────────────────────┐ │
+│  │  codeindex  │  │   SqliteGraphStore  │  │   本地 Ollama         │ │
+│  │  AST 解析   │  │   (in-process)      │  │  LLM       :11434    │ │
+│  │  tech-debt  │  │   SQLite +          │  │  Embedding :11434/v1 │ │
+│  │             │  │   sqlite-vec        │  │  (可选，默认 off)     │ │
+│  └─────────────┘  │   ~/.loomgraph/    │  └──────────────────────┘ │
+│                   │   {workspace}.db   │                            │
+│                   └─────────────────────┘                            │
 └─────────────────────────────────────────────────────────────────────┘
 ```
+
+**关键变化（相对 v0.5.0）**：
+
+- 存储**进程内**：`SqliteGraphStore` 是 LoomGraph 自有模块，无 HTTP 跳跃，无外部 DB 进程
+- LLM / Embedding 走**本地 Ollama**（OpenAI-compatible），不再依赖远程 H200
+- 单文件 DB，每个 workspace 一个 `.db` 文件，迁移 / 备份 / 删除 = `cp` / `rm`
 
 ---
 
@@ -73,24 +75,24 @@
 ### 3.1 写入路径
 
 ```
-源代码 → codeindex parse → LoomGraph mapper → LightRAG HTTP API → PostgreSQL
+源代码 → codeindex parse → LoomGraph mapper → SqliteGraphStore → SQLite 文件
 ```
 
 详细流程：
 
 ```
 ┌──────────┐    ┌──────────┐    ┌───────────────┐    ┌──────────────────┐    ┌──────────┐
-│  源代码  │───▶│codeindex │───▶│   LoomGraph   │───▶│  LightRAG API    │───▶│PostgreSQL│
-│  Files   │    │ parse    │    │   mapper +     │    │                  │    │          │
-│          │    │          │    │   injector     │    │ /documents/      │    │ pgvector │
-└──────────┘    └──────────┘    └───────────────┘    │  insert_custom_kg│    │ graph    │
-                     │                │               │ (全层写入:        │    │          │
-                     ▼                ▼               │  graph+vdb+kv)   │    └──────────┘
-               ParseResult      entities +            └──────────────────┘
-               • Symbol         relations +
-               • Call           chunks
-               • Inheritance    (单次 HTTP 调用)
-               • Import
+│  源代码  │───▶│codeindex │───▶│   LoomGraph   │───▶│ SqliteGraphStore │───▶│ SQLite   │
+│  Files   │    │ parse    │    │   mapper +     │    │  (in-process)    │    │ +        │
+│          │    │          │    │   injector     │    │                  │    │ sqlite-vec│
+└──────────┘    └──────────┘    └───────────────┘    │ entities         │    │          │
+                     │                │               │ relations        │    │ ~/.loom- │
+                     ▼                ▼               │ vec_node_desc    │    │ graph/   │
+               ParseResult      entities +            └──────────────────┘    │ {ws}.db  │
+               • Symbol         relations +                                   └──────────┘
+               • Call           (optional)
+               • Inheritance    embedding
+               • Import         (单次事务写入)
 ```
 
 **两种写入模式**：
@@ -100,25 +102,27 @@
 | Cold Rebuild | `loomgraph index <path>` | 首次索引，清空后全量重建 |
 | Warm Update | `loomgraph update --since HEAD~5` | 增量索引 git 变更文件 |
 
-**Workspace 隔离**：每次写入通过 `LIGHTRAG-WORKSPACE` HTTP header 隔离，不同项目/分支写入不同 workspace。
+**Workspace 隔离**：每个 workspace 对应独立的 SQLite 文件（`~/.loomgraph/{workspace}.db`），文件级隔离，无并发跨 workspace 写入冲突。
 
 ### 3.2 读取路径 — 能力层
 
 ```
-用户/Agent → LoomGraph CLI → LightRAG HTTP API → JSON 结果
+用户/Agent → LoomGraph CLI → SqliteGraphStore (SQL + vec 查询) → JSON 结果
 ```
 
-| 命令 | LightRAG 端点 | 数据处理 |
-|------|---------------|----------|
-| `search` | `/query` | 语义检索 (local/global/hybrid) |
-| `graph` | `/query` | 实体关系查询 |
-| `deps` | `/graph/entities/all` + `/graph/relations/all` | 本地聚合：按模块分组依赖 |
-| `overview` | `/graph/entities/all` + `/graph/relations/all` + `/query` | 本地聚合 + 可选 LLM 摘要 |
-| `compare` | 两个 workspace 各调 `/graph/entities/all` + `/graph/relations/all` | 本地 set diff + relation diff |
-| `similar` | N 个 workspace 各调 `/graph/entities/all` + `/graph/relations/all` | 本地 exact + fuzzy 名称匹配 |
-| `impact` | `/query` + git diff | 变更影响分析 + 风险评估 |
+| 命令 | 存储访问 | 数据处理 |
+|------|---------|----------|
+| `find` | `entities` 表（名称/类型过滤） | 结构化实体发现 |
+| `query` | `vec_node_descriptions` + LLM | 语义知识问答（可选 embedding 时启用） |
+| `graph` | `entities` + `relations`（CALLS/INHERITS/IMPORTS 边遍历） | 实体关系查询 |
+| `deps` | `entities` + `relations` 全表 | 本地聚合：按模块分组依赖 |
+| `overview` | `entities` + `relations` + 可选 LLM | 本地聚合 + 可选 LLM 摘要 |
+| `compare` | 两个 workspace 各读全量 entities + relations | 本地 set diff + relation diff |
+| `similar` | N 个 workspace 各读全量 entities + relations | 本地 exact + fuzzy 名称匹配 |
+| `impact` | `relations` 反向边遍历 + git diff | 变更影响分析 + 风险评估 |
+| `topology` | `entities` + `relations` | orphans / hubs / god / coupling 拓扑分析 |
 
-**设计原则**：LightRAG 只做存储检索，LoomGraph 在本地完成所有分析逻辑（聚合、diff、匹配、排序）。
+**设计原则**：存储只做 SQL 检索 + 向量相似度（sqlite-vec），LoomGraph 在本地完成所有分析逻辑（聚合、diff、匹配、排序、拓扑）。
 
 ### 3.3 读取路径 — Skill 层
 
@@ -138,32 +142,41 @@
 
 ## 4. 核心模块
 
-### 4.1 LightRAGClient (`src/loomgraph/core/lightrag_client.py`)
+### 4.1 GraphStore / SqliteGraphStore (`src/loomgraph/storage/`)
 
-LoomGraph 与 LightRAG 通信的唯一通道。基于 httpx，通过 HTTP API 读写。
+LoomGraph 自带的存储抽象。`GraphStore` 是协议（protocol），当前唯一实现是 `SqliteGraphStore`，进程内直接读写 SQLite 文件，无 HTTP 跳跃。
 
-| 方法 | HTTP 端点 | 用途 |
-|------|-----------|------|
-| `insert_custom_kg()` | `POST /documents/insert_custom_kg` | **主写入路径**: 单次调用写入全层 (graph+vdb+kv) |
-| `delete_by_source()` | `DELETE /graph/by_source` | 按 source_id 删除（Warm Update 用） |
-| `delete_all()` | `DELETE /graph/clear` | 清空 workspace 全部 11 层存储 |
-| `query()` | `POST /query` | 语义查询 |
-| `get_all_entities()` | `GET /graph/entities/all` | 获取 workspace 全部实体 |
-| `get_all_relations()` | `GET /graph/relations/all` | 获取 workspace 全部关系 |
-| `list_workspaces()` | `GET /api/workspaces` | 列出所有 workspace |
-| `health_check()` | `GET /health` | 健康检查 |
-| `create_entity()` | `POST /graph/entity/create` | 创建单个实体（已弃用，保留兼容） |
-| `create_relation()` | `POST /graph/relation/create` | 创建单个关系（已弃用，保留兼容） |
-| `batch_create_graph()` | 批量调用上述两个 | 旧注入路径（已弃用，保留兼容） |
+**三张表**：
 
-Workspace 隔离通过 `LIGHTRAG-WORKSPACE` header 实现，每个 client 实例绑定一个 workspace。
+| 表 | 用途 |
+|----|------|
+| `entities` | 实体（Symbol → EntityData），含 name / type / source_id / description 等字段 |
+| `relations` | 关系（CALLS / INHERITS / IMPORTS），含 source_entity / target_entity / relation_type |
+| `vec_node_descriptions` | 实体描述的向量列（sqlite-vec），用于 `query` 命令的语义检索 |
+
+**主要方法**：
+
+| 方法 | 实现 | 用途 |
+|------|------|------|
+| `acreate_entity()` | `INSERT INTO entities` | 单实体写入 |
+| `acreate_relation()` | `INSERT INTO relations` | 单关系写入 |
+| `adelete_by_source()` | `DELETE FROM ... WHERE source_id=?` | 按 source_id 删除（Warm Update 用） |
+| `aclear_workspace()` | `DELETE FROM entities; DELETE FROM relations; ...` | 清空 workspace（Cold Rebuild 用） |
+| `aget_all_entities()` | `SELECT * FROM entities` | 全量实体读取（deps / overview / compare / similar 用） |
+| `aget_all_relations()` | `SELECT * FROM relations` | 全量关系读取 |
+| `aquery()` | sqlite-vec KNN + LLM 综合（可选） | 语义问答 |
+| `alist_workspaces()` | 扫描 `~/.loomgraph/*.db` | 列出所有 workspace |
+
+**并发安全**：SQLite 文件启用 WAL 模式 + `busy_timeout`（ADR-013 / commit dfd8646），支持多进程读写安全。
+
+**Workspace 隔离**：通过文件路径实现 —— 每个 workspace 一个独立 `.db` 文件，跨 workspace 操作（compare / similar）打开多个 `SqliteGraphStore` 实例。
 
 ### 4.2 写入模块
 
 | 模块 | 文件 | 职责 |
 |------|------|------|
 | **Mapper** | `core/mapper.py` | codeindex ParseResult → EntityData / RelationData |
-| **Injector** | `core/injector.py` | 数据收集 (`collect_kg_data` + `build_chunks` + `create_external_stubs`)，CLI 调用 `insert_custom_kg` 注入 |
+| **Injector** | `core/injector.py` | 数据收集 (`collect_kg_data` + `build_chunks` + `create_external_stubs`)，CLI 调用 `GraphStore.acreate_entity/acreate_relation` 写入 |
 | **Indexer** | `core/indexer.py` | 扫描文件 + 编排 parse → map → inject 流水线 |
 | **Adapter** | `core/adapter.py` | codeindex JSON → LoomGraph ParseResult 适配 |
 
@@ -175,14 +188,14 @@ Workspace 隔离通过 `LIGHTRAG-WORKSPACE` header 实现，每个 client 实例
 | **OverviewAnalyzer** | `core/overview.py` | 全部 entities + relations + 可选 LLM | 模块概览 + 摘要 |
 | **CompareAnalyzer** | `core/compare.py` | 两个 workspace 的 entities + relations | 实体/关系 diff |
 | **SimilarAnalyzer** | `core/similar.py` | N 个 workspace 的 entities + relations | 相似实体匹配 |
-| **ImpactAnalyzer** | `core/impact/` | git diff + LightRAG query | 变更影响 + 风险评估 |
+| **ImpactAnalyzer** | `core/impact/` | git diff + GraphStore 反向边遍历 | 变更影响 + 风险评估 |
 
 所有 Analyzer 遵循相同模式：
 
 ```python
 @dataclass
 class XxxAnalyzer:
-    client: Any  # LightRAGClient
+    store: Any  # GraphStore (SqliteGraphStore)
     async def analyze(self) -> XxxResult: ...
 
 @dataclass
@@ -190,13 +203,14 @@ class XxxResult:
     def to_dict(self) -> dict[str, Any]: ...
 ```
 
-### 4.4 Embedding 模块 (`src/loomgraph/embedding/jina.py`)
+### 4.4 Embedding 模块 (`src/loomgraph/embedding/`)
 
-Jina Code V2 客户端，支持 TEI (Text Embeddings Inference) 部署。
+OpenAI-compatible Embedding 客户端，默认走本地 Ollama。
 
-- 8K context window
-- 自动分批 (batch_size=32)
-- 带重试的向量化
+- **默认 provider**：`ollama`（`http://localhost:11434/v1`，`model=nomic-embed-text`，`dimension=768`）
+- **可选 provider**：`openai` / `voyage` / `glm` / `custom`（均为 OpenAI-compatible `/v1/embeddings`）
+- **默认状态**：off（`query` 命令降级为纯结构化查询；开启后向 `vec_node_descriptions` 写入向量并支持语义检索）
+- 自动分批、带重试的向量化
 
 ---
 
@@ -205,30 +219,32 @@ Jina Code V2 客户端，支持 TEI (Text Embeddings Inference) 部署。
 ### 5.1 存储所有权
 
 ```
-LoomGraph  ──(HTTP)──▶  LightRAG API  ──(SQL)──▶  PostgreSQL
-  不碰 DB                  拥有 DB                  1 个实例
+LoomGraph  ──(SQL + sqlite-vec, in-process)──▶  SQLite 文件
+  直接拥有 DB                                    ~/.loomgraph/{workspace}.db
 ```
 
-LoomGraph **无自有数据库表**。`storage/` 目录预留，当前为空。
+LoomGraph **直接拥有存储层**。`src/loomgraph/storage/` 实现 `GraphStore` 抽象，当前唯一实现 `SqliteGraphStore`。无外部数据库进程，无 HTTP API 中间层。
 
-### 5.2 LightRAG 管理的存储
+### 5.2 SqliteGraphStore 管理的存储
 
-| 组件 | 用途 |
-|------|------|
-| pgvector | Embedding 向量存储 + 相似度检索 |
-| Graph tables | 实体/关系图谱 |
-| KV store | 配置、缓存 |
+| 表 | 用途 |
+|----|------|
+| `entities` | 实体（图谱节点） |
+| `relations` | 关系（CALLS / INHERITS / IMPORTS 边） |
+| `vec_node_descriptions` | 实体描述向量列（sqlite-vec，仅 embedding 开启时填充） |
+
+**文件格式**：单个 SQLite 文件，启用 WAL（write-ahead logging）+ `busy_timeout`，支持多进程并发读写安全（ADR-013 / commit dfd8646）。
 
 ### 5.3 Workspace 隔离
 
-每个 workspace 在 LightRAG 内部是独立的数据空间。LoomGraph 通过 HTTP header 切换：
+每个 workspace 在文件系统层面隔离 —— 一个独立 `.db` 文件：
 
 ```
-LIGHTRAG-WORKSPACE: myproject        # 单 workspace 操作
-LIGHTRAG-WORKSPACE: myproject:main   # 分支级 workspace
+~/.loomgraph/myproject.db            # 单 workspace 操作
+~/.loomgraph/myproject:main.db       # 分支级 workspace
 ```
 
-跨 workspace 操作（compare / similar）通过创建多个 `LightRAGClient` 实例实现，每个绑定不同 workspace。
+跨 workspace 操作（compare / similar）通过打开多个 `SqliteGraphStore` 实例实现，每个绑定不同的 `.db` 文件。
 
 ---
 
@@ -264,7 +280,7 @@ LoomGraph 的主要用户是 AI Agent（Claude Code Skills / MCP 客户端）。
 | | `index --clear <path>` | 清空后重建 |
 | | `update [--since REF]` | 增量索引 git 变更 |
 | | `embed <json>` | 单独生成 Embedding |
-| | `inject <parse> <embed>` | 单独注入 LightRAG |
+| | `inject <parse> <embed>` | 单独写入 SqliteGraphStore |
 | **单 Workspace 读取** | `search "<query>"` | 语义搜索 |
 | | `graph "<entity>"` | 调用关系查询 |
 | | `deps [--depth N]` | 模块级依赖图 |
@@ -318,17 +334,23 @@ Skill 运行在 Claude Code Agent 上下文中，Agent 负责执行 bash 命令�
 
 ```yaml
 # .loomgraph.yaml
-lightrag:
-  api_url: "http://117.131.45.179:3001"
-  api_timeout: 30.0
+llm:
+  provider: ollama                              # ollama | glm | openrouter | vllm | custom
+  api_url: "http://localhost:11434"             # OpenAI-compatible base
+  model: "gemma3:12b-it-qat"
+  api_timeout: 60.0
 
 embedding:
-  base_url: "http://117.131.45.179:3002"
+  enabled: false                                # 默认 off；query 命令降级为纯结构化查询
+  provider: ollama                              # ollama | openai | voyage | glm | custom
+  api_url: "http://localhost:11434/v1"          # OpenAI-compatible /v1/embeddings
+  model: "nomic-embed-text"
+  dimension: 768
 ```
 
 ### 9.2 配置优先级
 
-1. 环境变量 (`LOOMGRAPH_LIGHTRAG__API_URL`)
+1. 环境变量（如 `LOOMGRAPH_LLM__API_URL`、`LOOMGRAPH_EMBEDDING__ENABLED`）
 2. `.loomgraph.yaml`（当前目录）
 3. `~/.config/loomgraph/config.yaml`
 4. 默认值
@@ -337,24 +359,25 @@ embedding:
 
 ## 10. 部署架构
 
-### 10.1 H200 服务器
+### 10.1 本地服务（Ollama）
 
 | 服务 | 端口 | 说明 |
 |------|------|------|
-| GLM-4.7-fp8 (vLLM) | 3000 | LLM 推理（LightRAG 内部使用） |
-| LightRAG API | 3001 | 图谱存储 + 检索 |
-| Jina Code V2 (TEI) | 3002 | 代码 Embedding |
-| PostgreSQL | 5432 | pgvector + 图存储（LightRAG 管理） |
+| Ollama LLM | 11434 | LLM 推理（OpenAI-compatible `/v1/chat/completions`），默认 `gemma3:12b-it-qat` |
+| Ollama Embedding | 11434/v1 | 代码 Embedding（OpenAI-compatible `/v1/embeddings`），默认 `nomic-embed-text`，可选关闭 |
+
+**前置**：`ollama serve` + `ollama pull gemma3:12b-it-qat`（embedding 开启时另 `ollama pull nomic-embed-text`）。
+
+> v0.5.0 之前依赖的远程 H200 服务器（`117.131.45.179`，GLM-4 vLLM :3000 / LightRAG API :3001 / TEI Jina :3002）已于 2026-07 全部退役，所有推理与 Embedding 切换到本地 Ollama。
 
 ### 10.2 本地开发
 
-```yaml
-# docker-compose.yml — 仅为 LightRAG 提供 PostgreSQL
-services:
-  postgres:
-    image: pgvector/pgvector:pg16
-    ports:
-      - "5432:5432"
+无需外部基础设施。LoomGraph 自带 SQLite 存储（in-process），无 PostgreSQL / docker-compose 依赖：
+
+```bash
+# 唯一前置：本地 Ollama（可选 embedding）
+ollama serve
+ollama pull gemma3:12b-it-qat
 ```
 
 ---
@@ -369,7 +392,7 @@ services:
 | Embedding | 11 |
 | Indexer | 11 |
 | CLI | 49 |
-| LightRAGClient | 18 |
+| SqliteGraphStore | 18 |
 | Impact | 19 |
 | Git | 8 |
 | DepsAnalyzer | 14 |
@@ -387,29 +410,32 @@ services:
 
 | 选项 | 选择 | 理由 |
 |------|------|------|
-| 向量存储 | pgvector (LightRAG 管理) | 简化运维，事务一致性 |
-| 图存储 | PostgreSQL graph tables (LightRAG 管理) | 单一数据库，LightRAG 内置 |
+| 存储 | SQLite + sqlite-vec（单文件） | 零运维、单文件可拷贝、WAL 多进程安全（ADR-013） |
+| 向量存储 | sqlite-vec（`vec_node_descriptions` 表） | 与图存储同库，事务一致性 |
+| 图存储 | SQLite `entities` + `relations` 表 | 单一数据库，进程内直读直写 |
 | AST 解析 | codeindex (tree-sitter) | 外部 CLI，职责分离 |
-| RAG 框架 | LightRAG (HTTP API) | 轻量，workspace 隔离 |
-| Embedding | Jina Code V2 (8K context) | 代码语义优化 |
-| HTTP 客户端 | httpx (async) | 并发连接复用 |
+| LLM | 本地 Ollama（OpenAI-compatible） | 默认 `gemma3:12b-it-qat`，可切 glm/openrouter/vllm/custom |
+| Embedding | 本地 Ollama `nomic-embed-text` (768d) | 默认 off，开启时 OpenAI-compatible `/v1/embeddings` |
+| HTTP 客户端 | httpx (async) | LLM / Embedding 远程调用（存储不再走 HTTP） |
 
 ### 12.2 关键 ADR
 
 | ADR | 决策 | 影响 |
 |-----|------|------|
-| ADR-001 | PostgreSQL 统一存储 | 单一数据库，LightRAG 管理 |
-| ADR-002 | 选择 LightRAG | 轻量框架，HTTP API |
 | ADR-005 | AST 优先提取 | MVP 不使用 LLM 提取 |
 | ADR-006 | MVP 简化 | 全量重建，无增量 GC |
 | ADR-008 | 双向调度器 | codeindex/LoomGraph 能力边界 |
 | ADR-009 | Workspace 即知识快照 | 从隔离机制到可对比的知识切片 |
+| **ADR-013** | **SQLite + sqlite-vec 替换 LightRAG** | **supersedes ADR-001 / 002 / 010(部分) / 011**，LoomGraph 自带存储，移除 Postgres / LightRAG API 依赖 |
+| ADR-014 | MCP 写 tool `loomgraph_refresh` | reactive working-tree re-index |
+| ADR-015 | Git × 知识图谱时空融合 | 独立分析 + 后期 join |
 
 ### 12.3 相关文档
 
-- [DATA_CONTRACT.md](../api/DATA_CONTRACT.md) — codeindex ↔ LightRAG 数据映射
+- [DATA_CONTRACT.md](../api/DATA_CONTRACT.md) — codeindex ↔ LoomGraph 数据映射
 - [CLI_DESIGN.md](../api/CLI_DESIGN.md) — CLI 命令详细设计
 - [ROADMAP.md](../ROADMAP.md) — 开发路线图
+- [ADR-013](../adr/ADR-013-sqlite-vec-replace-lightrag.md) — SQLite + sqlite-vec 替换 LightRAG
 - [EPIC-004](../epics/EPIC-004-bidirectional-orchestrator.md) — deps / overview
 - [EPIC-005](../epics/EPIC-005-workspace-management.md) — workspace 管理
 - [EPIC-006](../epics/EPIC-006-cross-workspace-comparison.md) — compare / similar

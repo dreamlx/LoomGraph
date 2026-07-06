@@ -20,7 +20,7 @@ data is lost — only the on-disk format changes.
 | Config key `lightrag.*` | Present | **Removed** |
 | Config key `storage.*` | n/a | New: `backend` (sqlite-only), `db_path` |
 | Config key `llm.*` | n/a | New: `provider`, `api_url`, `api_key`, `model` |
-| Deployment | H200 needs LightRAG service (port 3001) | H200 only needs embedding service (port 3002) |
+| Deployment | H200 needs LightRAG service (port 3001) | No H200 dependency (local SQLite + local LLM/embedding). H200 was retired 2026-07 |
 
 ## Upgrade steps
 
@@ -29,12 +29,13 @@ data is lost — only the on-disk format changes.
 pipx install --upgrade ai-codeindex
 pipx install --upgrade loomgraph
 
-# 2. (Optional) configure LLM provider — defaults to H200 GLM-4.7
+# 2. (Optional) configure LLM provider — defaults to local Ollama
+#    (H200 GLM-4.7 was the v0.10.0 default; H200 retired 2026-07)
 cat >> .loomgraph.yaml <<EOF
 llm:
-  provider: glm           # glm | openrouter | vllm
-  api_url: http://117.131.45.179:3000
-  model: glm-4-flash
+  provider: ollama        # ollama | glm | openrouter | vllm
+  api_url: http://localhost:11434
+  model: gemma3:12b-it-qat
 EOF
 
 # 3. Cold rebuild the knowledge graph (creates ~/.loomgraph/<workspace>.db)
@@ -58,8 +59,15 @@ v0.9.x will not receive backports.
 
 ## H200 server-side changes
 
+> **H200 was retired 2026-07.** v0.10.0 originally kept the embedding
+> service on H200 (port 3002, Jina Code V2); as of v0.11.0 the default
+> embedding provider is local Ollama (`http://localhost:11434/v1`,
+> `nomic-embed-text`), disabled by default. The instructions below apply
+> only to deployments still running H200 at upgrade time.
+
 The LightRAG API (port 3001) and PostgreSQL container can be shut down.
-Keep the embedding service (port 3002, Jina Code V2) running:
+If you still run the H200 embedding service (port 3002, Jina Code V2),
+you may keep it running or migrate to local Ollama (recommended):
 
 ```bash
 # On H200
@@ -81,9 +89,9 @@ storage:
   backend: sqlite
   db_path: ~/.loomgraph/{workspace}.db
 llm:
-  provider: glm
-  api_url: http://117.131.45.179:3000
-  model: glm-4-flash
+  provider: ollama
+  api_url: http://localhost:11434
+  model: gemma3:12b-it-qat
 ```
 
 ## What if I was relying on `loomgraph query`?

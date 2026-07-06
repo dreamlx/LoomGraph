@@ -6,14 +6,14 @@
 
 ## 客户信息
 
-| 客户 | 代号 | LightRAG 端口 | 代码语言 |
-|------|------|--------------|----------|
-| 拼便宜 | pinbianyi | 3010 | PHP |
-| 智采云链 | zcyl | 3020 | Java |
+| 客户 | 代号 | Workspace | 代码语言 |
+|------|------|-----------|----------|
+| 拼便宜 | pinbianyi | pinbianyi | PHP |
+| 智采云链 | zcyl | zcyl | Java |
 
-共享服务：
-- Embedding (TEI): `http://117.131.45.179:3002`
-- LLM: `http://117.131.45.179:3000`
+共享服务（本地 Ollama，每客户独立 workspace）：
+- LLM (Ollama): `http://localhost:11434`，model `gemma3:12b-it-qat`
+- Embedding (Ollama，可选): `http://localhost:11434/v1`，model `nomic-embed-text`
 
 ---
 
@@ -50,7 +50,7 @@ loomgraph-{customer}-v{version}/
 ├── README.md                    # 客户专属安装指南
 ├── src/loomgraph/               # 源码
 ├── pyproject.toml               # 安装配置
-├── config.yaml                  # 客户专属 LightRAG URL
+├── config.yaml                  # 客户专属配置（LLM/Embedding endpoint）
 └── skills/
     └── loomgraph-init/
         └── SKILL.md             # 全局 skill
@@ -157,7 +157,7 @@ echo 'alias loomgraph="~/.loomgraph-venv/bin/loomgraph"' >> ~/.zshrc
 
 - [x] LoomGraph v0.2.0 已安装
 - [x] Skills 已配置: /loomgraph-setup, /loomgraph-init
-- [x] 服务连接正常: http://117.131.45.179:3020
+- [x] 服务连接正常: http://localhost:11434
 ```
 
 #### 经验 6: 配置优先级
@@ -197,7 +197,7 @@ cd /tmp
 
 # 1. 状态检查
 loomgraph status
-# 确认 lightrag_url 是正确的客户端口
+# 确认 workspace 已创建、LLM endpoint 可达
 
 # 2. 索引测试
 loomgraph index /path/to/test/project
@@ -246,10 +246,10 @@ ls ~/.claude/skills/loomgraph-init/
 ```
 customers/
 ├── pinbianyi/
-│   ├── config.yaml      # api_url: :3010
+│   ├── config.yaml      # workspace: pinbianyi
 │   └── README.md
 └── zcyl/
-    ├── config.yaml      # api_url: :3020
+    ├── config.yaml      # workspace: zcyl
     └── README.md
 
 skills/
@@ -290,7 +290,6 @@ scripts/
 ## 添加新客户
 
 1. 创建目录 `customers/{new_customer}/`
-2. 创建 `config.yaml`（修改 api_url 端口）
-3. 创建 `README.md`（修改客户名和端口）
-4. 在 H200 上部署新的 LightRAG 实例
-5. 运行 `python3 scripts/package.py --customer {new_customer}`
+2. 创建 `config.yaml`（配置 workspace 名 + LLM/Embedding endpoint）
+3. 创建 `README.md`（修改客户名）
+4. 运行 `python3 scripts/package.py --customer {new_customer}`

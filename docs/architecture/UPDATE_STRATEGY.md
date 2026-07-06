@@ -23,8 +23,8 @@
 
 1. **实际场景**：开发者 Ctrl+S 后很快就会 commit，间隔通常几分钟到几小时
 2. **收益有限**：Hot 的"毫秒级"优势在 commit 粒度下不明显
-3. **复杂度降低**：不需要 IDE 插件，不需要绕过 LightRAG 直接写向量库
-4. **架构简化**：LightRAG 自动生成 embedding，无需单独管理向量层
+3. **复杂度降低**：不需要 IDE 插件，不需要绕过存储层直接写向量库
+4. **架构简化**：embedding 由 Ollama 在写入时一次性生成并连同实体落盘到 SQLite，无需单独管理向量层
 
 ### 统一触发时机：Git Commit
 
@@ -63,13 +63,13 @@ loomgraph update
 
 1. 获取变动文件列表：`git diff --name-only HEAD~1`
 2. 调用 codeindex 解析变动文件
-3. 追加到 LightRAG（不删除旧数据）
+3. 按 source-id prefix 删除旧实体（GC 已删符号）后，re-embed/re-inject 新数据到 SQLite（不保留旧版本）
 
-### LightRAG 行为特征
-LightRAG 是**追加式**的。如果 `utils.py` 变了，它会生成新的节点和边。
+### SQLite + sqlite-vec 行为特征
+Warm Update（路 B）是**按文件 upsert**的：对变更文件的 source-id prefix 做 `delete_by_source` 后重新写入。改写过的 `utils.py` 不会留下旧版本实体。
 
 ### 副作用
-图数据库里会同时存在 `utils.py (旧)` 和 `utils.py (新)` 的节点。
+在 #66 + PR-B 的 per-file warm-diff 实现下，副作用已被 GC 控制；旧版"追加不删"的孤儿节点问题不再出现。
 
 **这没关系**，因为：
 - 检索时通常会根据相关性得分过滤掉旧的
@@ -98,7 +98,7 @@ loomgraph update --since HEAD~3
 - 手动触发
 
 ### 处理对象
-- 整个 LightRAG 知识图谱
+- 整个 workspace 的 SQLite 知识库（`~/.loomgraph/{workspace}.db`）
 
 ### 操作
 ```bash
@@ -107,17 +107,14 @@ loomgraph index --clear <repo_path>
 ```
 
 内部流程：
-1. 调用 `DELETE /documents` 清空全部数据
+1. 删除当前 workspace 的 SQLite 文件（或清空表数据）
 2. 调用 `codeindex scan` 解析全部文件
-3. 逐个调用 `POST /graph/entity/create` 和 `POST /graph/relation/create`
+3. 经 Ollama embed 后批量写入 entities / relations / embeddings 三张表
 
 ### 为什么必须重构？
 
-1. **清理垃圾**: 清除温更新产生的"孤儿节点"和"幽灵边"
-2. **更新摘要**: LightRAG 最核心的功能是 Community Summary（全局摘要）
-   - 如果只做增量插入，底层的摘要永远是旧的
-   - 只有全量重跑，算法（如 Leiden）才能根据新的代码结构重新划分社区
-   - 生成准确的"代码库架构说明书"
+1. **清理垃圾**: 清除长期 warm update 累积的残留（理论上路 B 已 GC，但跨大版本数据格式变更时仍需重建）
+2. **重建一致性**: workspace 是某次索引的快照（ADR-009），全量重跑确保 entity/relation/embedding 三表自洽
 
 ### CLI 命令
 ```bash
@@ -132,12 +129,14 @@ loomgraph index --no-clear <repo_path>
 
 ## 决策矩阵
 
-| 场景 | 代码变动量 | 操作 | 命令 | H200 耗时预估 |
-|------|-----------|------|------|--------------|
+| 场景 | 代码变动量 | 操作 | 命令 | 本地耗时预估 |
+|------|-----------|------|------|------------|
 | 日常 Commit | < 10 文件 | Warm Update | `loomgraph update` | < 30秒 |
 | 提交 Feature | 10 - 50 文件 | Warm Update | `loomgraph update` | ~1-2 分钟 |
 | 重构/Merge | > 50 文件 | Cold Rebuild | `loomgraph index --clear` | ~10-20 分钟 |
 | 凌晨定时 | 全量 | Cold Rebuild | Cron job | - |
+
+> 耗时维度现为本地 SQLite + Ollama（`gemma3:12b-it-qat` / `nomic-embed-text`），不再依赖远端 H200。
 
 ---
 
@@ -149,7 +148,7 @@ loomgraph index --no-clear <repo_path>
 | Warm Update | ❌ | ✅ | ✅ |
 | ~~Hot Update~~ | ❌ | ❌ 已取消 | ❌ |
 | Git Hook 集成 | ❌ | ✅ | ✅ |
-| 批量注入优化 | ❌ | ❌ | ✅ (待 LightRAG 支持) |
+| 批量注入优化 | ❌ | ❌ | ✅ (SQLite 批量 upsert) |
 
 ---
 
@@ -175,11 +174,11 @@ loomgraph index --no-clear <repo_path>
 ```python
 # loomgraph/core/indexer.py
 
-async def cold_rebuild(repo_path: str, client: LightRAGClient) -> IndexResult:
+async def cold_rebuild(repo_path: str, store: SQLiteStore) -> IndexResult:
     """Cold Rebuild: 清空后全量重建."""
 
     # 1. 清空全部数据
-    await client.delete_all()  # DELETE /documents
+    await store.clear_workspace()  # 删除当前 workspace 的 SQLite 表数据
 
     # 2. 扫描所有文件
     files = scan_code_files(repo_path)
@@ -197,16 +196,17 @@ async def cold_rebuild(repo_path: str, client: LightRAGClient) -> IndexResult:
 ```python
 # loomgraph/core/updater.py
 
-async def warm_update(repo_path: str, client: LightRAGClient) -> UpdateResult:
-    """Warm Update: 追加变动文件（不删除旧数据）."""
+async def warm_update(repo_path: str, store: SQLiteStore) -> UpdateResult:
+    """Warm Update: per-file warm-diff（路 B）."""
 
     # 1. 获取 git 变动文件
     changed_files = get_git_changed_files()  # git diff --name-only HEAD~1
 
-    # 2. 解析并追加（不删旧数据）
+    # 2. 解析并按 source-id upsert（先 delete_by_source GC，再重新注入）
     for file_path in changed_files:
         result = parse_file(file_path)
-        await inject_parse_result(client, result)
+        await store.delete_by_source(prefix=file_path)
+        await inject_parse_result(store, result)
 
     return UpdateResult(
         mode="warm",
@@ -240,22 +240,23 @@ def get_git_changed_files(since: str = "HEAD~1") -> list[str]:
 
 ---
 
-## LightRAG API 依赖
+## 存储层依赖（SQLite + sqlite-vec）
 
-| API | 用途 | 状态 |
+> ADR-013 后 LoomGraph 不再依赖 LightRAG HTTP API；存储直接落在本地 `~/.loomgraph/{workspace}.db`。
+
+| 操作 | 用途 | 状态 |
 |-----|------|------|
-| `POST /documents/insert_custom_kg` | 批量全层注入（主写入路径） | ✅ 已迁移 |
-| `DELETE /graph/by_source` | 按 source_id 跨层删除（Warm Update） | ✅ 已使用 |
-| `DELETE /graph/clear` | Cold Rebuild 清空全部 11 层 | ✅ 已使用 |
-| `POST /graph/entity/create` | 创建单个实体（已弃用） | ✅ 保留兼容 |
-| `POST /graph/relation/create` | 创建单个关系（已弃用） | ✅ 保留兼容 |
+| entities 表 upsert | 写入/更新实体（含 embedding 列） | ✅ 主写入路径 |
+| relations 表 upsert | 写入 CALLS / INHERITS / IMPORTS 关系 | ✅ 主写入路径 |
+| `delete_by_source(prefix)` | Warm Update 按 source-id 删除变更文件的旧实体 | ✅ 已使用（路 B） |
+| workspace 整库删除 | Cold Rebuild 清空重建 | ✅ 已使用 |
 
 ---
 
 ## 相关文档
 
 - [EPIC-003: 更新策略实现](../epics/EPIC-003-update-strategy.md) - 实现计划
-- [LIGHTRAG_API_REQUEST.md](../integration/LIGHTRAG_API_REQUEST.md) - LightRAG API 需求
+- [ADR-013: SQLite + sqlite-vec 替换 LightRAG](../adr/ADR-013-sqlite-vec-replace-lightrag.md) - 存储后端决策
 - [ADR-006: MVP 简化策略](../adr/ADR-006-mvp-simplification.md) - 全量重建决策
 - [CLI_DESIGN.md](../api/CLI_DESIGN.md) - CLI 命令设计
 

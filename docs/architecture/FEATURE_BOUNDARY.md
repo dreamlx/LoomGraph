@@ -1,5 +1,13 @@
 # LightRAG Fork vs LoomGraph 功能边界
 
+> **⚠️ 历史文档（已过时，保留作追溯）**
+>
+> 本文档记录的是 v0.5.0 时代（2025-02）的三仓库架构规划：codeindex（解析）→ LoomGraph（调度）→ LightRAG Fork（图谱存储）。
+>
+> **ADR-013（2026）已终结 LightRAG Fork 路线**：LoomGraph 改用 **SQLite + sqlite-vec** 作为存储后端（`~/.loomgraph/{workspace}.db`），不再依赖 LightRAG / PostgreSQL。Embedding 从 Jina Code V2（H200 TEI）改为默认本地 **Ollama**（`nomic-embed-text`），LLM 同走 Ollama（`gemma3:12b-it-qat`）。H200 服务器（`117.131.45.179`）已于 2026-07 退役。
+>
+> 因此下方"LightRAG Fork 暴露 API"、"PostgreSQL 存储后端"、"Feature 3: Jina Code V2 Embedding"、"Story 3.3 (H200)"等均为**历史 feature 规划**，不再代表当前架构。当前架构与 CLI 见根 `CLAUDE.md` 与 `docs/architecture/SYSTEM_DESIGN.md`。
+
 **日期**: 2025-02-03
 
 ---
