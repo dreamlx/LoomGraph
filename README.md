@@ -37,7 +37,7 @@ including indirect callers two hops deep." LoomGraph fills exactly that gap.
 pipx install loomgraph
 ```
 
-That's it. No additional services required for the structural commands.
+That's it. [codeindex](https://github.com/dreamlx/codeindex) is pulled in automatically as the parser engine — no separate install, no direct operation. No additional services required for the structural commands.
 
 ## Quick start
 
