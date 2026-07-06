@@ -96,6 +96,34 @@ class TestFilter:
         factory.assert_not_called()
 
 
+class TestDegenerateVector:
+    async def test_zero_vector_skipped_not_attached(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Provider returning 200-OK-but-zero (e.g. overload) would poison
+        KNN — every query lands at distance ~1.0 (observed in a tmp e2e
+        after a busy index). Skip degenerate vectors instead of attaching."""
+        monkeypatch.setenv("LOOMGRAPH_EMBEDDING__ENABLED", "true")
+        entities: list[dict[str, Any]] = [
+            {"entity_name": "A", "description": "x"},  # gets zero vector
+            {"entity_name": "B", "description": "y"},  # gets normal vector
+        ]
+        mock_client = AsyncMock()
+        mock_client.embed.return_value = type(
+            "R", (), {"embeddings": [[0.0] * 768, [0.5] * 768]}
+        )()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        with patch(
+            "loomgraph.storage.factory.create_embedding_client",
+            return_value=mock_client,
+        ):
+            n = await maybe_embed_entities(entities)
+        assert n == 1  # only the non-degenerate one attached
+        assert "embedding" not in entities[0]  # zero vector skipped
+        assert entities[1]["embedding"] == [0.5] * 768
+
+
 class TestFailureMode:
     async def test_embedding_failure_returns_zero_no_raise(
         self, monkeypatch: pytest.MonkeyPatch
