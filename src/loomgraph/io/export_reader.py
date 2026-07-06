@@ -33,7 +33,19 @@ META_REQUIRED = {"type", "schema_version", "generator"}
 ENTITY_REQUIRED = {"type", "id", "entity_type", "source_id", "provenance"}
 EDGE_REQUIRED = {"type", "kind", "src", "resolution_qualifier", "source_id"}
 
-VALID_ENTITY_TYPES = {"class", "function", "method"}
+# All symbol kinds codeindex parsers emit. graph_export.py sets
+# ``entity_type = sym.kind`` (see codeindex parsers/{python,java,
+# typescript,php,swift,objc}/symbols.py), so this is the union of every
+# ``kind=`` value across those parsers. The reader stores every entity
+# regardless of type; this set only governs whether a record logs a
+# "unknown entity_type" schema warning. Keep it in sync with codeindex
+# so legitimate kinds (field/constructor/property/...) don't spray false
+# positives on every Java/TS index (#76).
+VALID_ENTITY_TYPES = {
+    "class", "constructor", "enum", "field", "function",
+    "interface", "method", "namespace", "property", "record",
+    "type_alias", "variable",
+}
 VALID_EDGE_KINDS = {"CALLS", "INHERITS", "IMPORTS"}
 VALID_QUALIFIERS = {"resolved", "ambiguous", "unresolved"}
 

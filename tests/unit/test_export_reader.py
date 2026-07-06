@@ -333,6 +333,45 @@ def test_reader_imports_edge_not_flagged_unknown_kind(tmp_path: Path):
     assert relations[0].tgt_id == "os.path"
 
 
+def test_reader_accepts_codeindex_full_entity_type_set(tmp_path: Path):
+    """#76: codeindex graph-export emits one entity per parsed symbol with
+    ``entity_type = sym.kind`` (graph_export.py). The Java/TS/PHP parsers
+    produce 12 distinct kinds, so the reader must accept all of them — a
+    stale VALID_ENTITY_TYPES subset sprayed a false 'unknown entity_type'
+    warning per field/constructor/property on every Java index.
+
+    Verified empirically (2026-07-06): a minimal Java DI bean exports
+    ``{class, constructor, field, method}`` and the reader already STORES
+    them; the only defect was the false-positive warning. This test pins
+    the full kind set so the contract stays in sync with codeindex.
+    """
+    kinds = [
+        "class", "constructor", "enum", "field", "function",
+        "interface", "method", "namespace", "property", "record",
+        "type_alias", "variable",
+    ]
+    records = [
+        {
+            "type": "entity",
+            "id": f"app.sym_{k}",
+            "entity_type": k,
+            "source_id": f"app/sym_{k}.py:{i}",
+            "description": "",
+            "provenance": "ast",
+        }
+        for i, k in enumerate(kinds, start=1)
+    ]
+    path = _write_ndjson(tmp_path, [MIN_META, *records])
+    entities, _, summary = GraphExportReader(path).read()
+
+    assert summary.entity_count == len(kinds)
+    assert len(entities) == len(kinds), "all kinds must be stored, not skipped"
+    unknown = [w for w in summary.schema_warnings if "unknown entity_type" in w]
+    assert unknown == [], (
+        f"these codeindex entity_types falsely flagged 'unknown': {unknown}"
+    )
+
+
 def test_reader_flags_missing_provenance_completeness(tmp_path: Path):
     meta = dict(MIN_META)
     meta.pop("provenance_completeness")
