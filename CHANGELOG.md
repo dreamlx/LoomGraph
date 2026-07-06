@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-07-06
+
+### Added — symbol-level incremental + local-Ollama default (#90)
+- `ingest_incremental` upgraded file-level → symbol-level via codeindex
+  >=0.31.0 per-symbol `content_hash` (sv1). A one-function edit in a
+  50-entity file re-embeds 1 symbol, not 50. `map_entity` carries
+  `content_hash`; reader `SUPPORTED_SCHEMA_VERSION` 0→1. New
+  `GraphStore.delete_entities` (cascade relations + vec0) and
+  `get_entities_by_source`. Spike corrected two issue mis-estimates: no
+  storage migration needed (content_hash round-trips via properties_json);
+  the issue's change-list omitted the two new store methods.
+- LLM default switched H200 GLM → **local Ollama** (`gemma3:12b-it-qat`,
+  non-reasoning; `glm-4.7-flash:q8_0` rejected — reasoning model, content
+  goes empty under moderate max_tokens). Embedding default was already
+  Ollama. H200 (`117.131.45.179`) retired 2026-07. Third-party
+  OpenAI-compatible endpoints remain configurable.
+- `maybe_embed_entities` skips degenerate zero vectors — a provider
+  200-OK-but-empty under load would poison KNN (every query at distance
+  ~1.0, score 0).
+- Docs: 7 live docs retired H200/LightRAG/Jina references; SYSTEM_DESIGN
+  rewritten v0.5.0 → v0.7.0.
+
+### Changed — graph-export contract migration (#66, breaking)
+- `index` / `update` now consume `codeindex graph-export` NDJSON:
+  module-qualified entity ids, edges carry `resolution_qualifier` +
+  cross-file callee resolution. Fixes cross-module same-name collisions
+  (9 `handle` funcs merged into 1 phantom god_function, out_degree 34).
+  **Requires `index --clear` rebuild** of existing workspaces. Depends
+  `ai-codeindex >= 0.28.0` (signature field).
+
+### Removed — legacy programmatic API + embed/inject CLI (#77, breaking)
+- CLI `loomgraph embed` / `loomgraph inject` removed (old split pipeline;
+  `embed` broken since EPIC-012 Jina→Direct migration). Use `index`
+  (one-step) or `embed-backfill` (vector top-up for an indexed workspace).
+- Python API `loomgraph.index_file` / `index_repository` / `scan_code_files`
+  / `inject_parse_result` and `core.mapper` / `indexer` / `injector` /
+  `adapter` modules removed (zero internal callers, all served the deleted
+  scan path). `loomgraph.__init__` public surface converged to `Settings`
+  / `get_settings` / `__version__`.
+- Models `Symbol` / `Call` / `Inheritance` / `Import` / `ParseResult`
+  removed (legacy codeindex input types); `EntityData` / `RelationData`
+  + analysis metrics retained.
+
+### Added — `update` per-file warm-diff restored (路 B, #66 follow-up)
+- `loomgraph update` back to per-file incremental (was temporarily
+  whole-tree during #66): git-diff filters changed files → re-embed /
+  re-inject only those + GC deleted symbols (`delete_by_source`).
+  Non-git / `--files` falls back to whole-tree upsert (`clear=False`).
+
 ### Added — MCP reactive refresh + storage write-safety (#86)
 - `loomgraph_refresh` MCP tool — first write-capable tool exposed via MCP.
   Reactive working-tree re-index (pull-mode): an agent that just edited a
@@ -53,16 +102,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   searchable. Idempotent: if vectors already exist, exits cleanly.
 - `GraphStore.write_embeddings()` — bulk vector write to vec0 with
   validation and dedup-by-name semantics.
-
-### Known limitations (documented, fix scheduled)
-- `topology` / `debt` / `graph` can misreport on codebases with
-  cross-module same-named functions (`handle`, `run`, `main`, …).
-  `loomgraph index`'s legacy scan-JSON path keys entities by simple
-  name, so collisions merge at index time — producing phantom
-  god_functions and cross-attributed caller counts. No analysis-layer
-  fix (data lost at ingestion); the real fix is migrating `index` to
-  the graph-export contract (qualified ids). Tracked as the top item
-  of EPIC-014 (#64) / #66. Documented in CLI_DESIGN.md §5.5.
 
 ### Fixed
 - `DirectEmbeddingClient` double-appended `/v1`: it composed

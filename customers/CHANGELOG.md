@@ -6,6 +6,16 @@
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-07-06
+
+### Added — symbol-level 增量 + 本地 Ollama 默认（#90）
+
+- **`update` 大幅省 embedding 成本**：改 1 个函数，旧版重 embed 整个文件所有 entity（50 函数文件 → 50 次调用）；新版按 codeindex `content_hash` 只重 embed 真正改动的 1 个 symbol（~50× 缩减）。依赖 `ai-codeindex >= 0.31.0`（`content_hash` 字段）。
+- **LLM 默认改为本地 Ollama**：旧默认 GLM/H200 远程，H200 已于 2026-07 退役；现默认本地 `gemma3:12b-it-qat`（`http://localhost:11434`）。embedding 默认仍是 Ollama（`nomic-embed-text`）。
+  - **⚠️ 升级注意**：如果你在 `.loomgraph.yaml` 显式配了 `llm.provider: glm` + H200 endpoint，需改为本地 Ollama 或其它可用 endpoint（H200 不可达）。**默认值变了，但你显式写的配置不受影响**——只有用默认 LLM 的部署才会从 H200 切到 Ollama。
+  - 第三方 OpenAI-compatible endpoint（OpenAI / Voyage / GLM / vLLM / OpenRouter）仍可配，不受影响。
+- **embedding 健壮性**：provider 过载返回 200-OK-but-empty 向量时自动跳过，不再污染 search 结果。
+
 ### Added — MCP `refresh` 主动刷新 + 存储跨进程写安全
 
 - **首个 MCP 写 tool** `loomgraph_refresh`：agent 编辑文件后（含未提交、含 untracked 新文件）可主动触发重新索引，不必等 commit。与 commit-hook `update`（已提交变更）互补 —— push（开发者 commit）/ pull（agent 按需）双模式。参数：`path`（限定文件/目录）、`force_full`（全量冷重建）。详见 ADR-014。
