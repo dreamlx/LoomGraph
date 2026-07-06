@@ -153,14 +153,25 @@ No arguments. Returns every workspace under `~/.loomgraph/`.
 |---|---|---|---|
 | `name` | string | server default | workspace to inspect |
 
+### `loomgraph_debt` · `loomgraph_check` · `loomgraph_git_metrics` (v0.15.0, #62)
+
+The three debt-audit dimensions, exposed as standalone read primitives
+(previously reachable only via the `loomgraph_debt_audit` composite).
+Side-effect-free; an agent in a session where the composite isn't loaded
+can still reach each dimension individually. `loomgraph_debt` runs the
+topology + git layers (the codeindex *static* layer needs a JSON file the
+MCP caller rarely has — use `loomgraph debt --codeindex-data` CLI for that).
+`loomgraph_debt` and `loomgraph_topology` accept `scope` (#61).
+
 ## Composite tools (v0.12.1)
 
-In addition to the 8 primitive read tools above, three **composite
+In addition to the 11 primitive read tools above, three **composite
 tools** were added in v0.12.1 to subsume the legacy workflow skills
 (`/loomgraph-debt-radar`, `/loomgraph-evolution`,
-`/loomgraph-sync-advisor`). Each composite fans out across multiple
-primitives in parallel and returns one structured response — the
-agent composes the prose narrative.
+`/loomgraph-sync-advisor` — these skills were **removed in v0.15.0**,
+see #64). Each composite fans out across multiple primitives in parallel
+and returns one structured response — the agent composes the prose
+narrative.
 
 ### `loomgraph_debt_audit`
 
