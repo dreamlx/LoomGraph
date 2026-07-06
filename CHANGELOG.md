@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-07-06
+
+### Fixed — `loomgraph index` now actually uses the pinned codeindex (#76)
+- `run_graph_export` shelled out to bare `codeindex` (PATH lookup), so a
+  stale codeindex elsewhere on PATH (e.g. a pipx-managed 0.29.0) silently
+  shadowed the venv-pinned `ai-codeindex>=0.32.0`. The 0.14.0 dep bump was
+  correct but ineffective: `loomgraph index` kept running the old parser,
+  so Java call graphs stayed broken (0% of edge `src_id`s resolved) even
+  though the fixed codeindex was installed in the venv.
+- Now invokes `[sys.executable, "-m", "codeindex.cli", ...]`, running
+  codeindex under loomgraph's own interpreter — same venv as the pinned dep,
+  no PATH dependence. `codeindex.cli:main` is the console-scripts entry
+  point; `python -m codeindex.cli` is verified working.
+- Verified end-to-end on spring-petclinic: store `src_id ∈ entity_id`
+  0%→65%, topology orphan 81%→50%, coupling density 0.0→0.62.
+- **Upgrade + `loomgraph index --clear .`** to rebuild existing Java
+  workspaces — their edges were indexed under the stale PATH codeindex.
+
 ## [0.14.0] - 2026-07-06
 
 ### Changed — `ai-codeindex>=0.32.0` (Java call-graph connectivity, #76)

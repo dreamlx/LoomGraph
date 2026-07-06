@@ -6,6 +6,18 @@
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-07-06
+
+### 修复 — `loomgraph index` 现在真正用 pin 的 codeindex（#76）
+
+`run_graph_export` 之前用裸 `codeindex` 走 PATH 查找，PATH 上的老 codeindex（如 pipx 装的 0.29.0）会**静默覆盖** venv 里 pin 的 `ai-codeindex>=0.32.0`。**0.14.0 的依赖升级方向对但没生效**——`loomgraph index` 实际还在跑老 parser，Java 调用图一直是断的（边源端 0% 解析），尽管 fix 版 codeindex 早已装在 venv 里。
+
+现在改用 `[sys.executable, "-m", "codeindex.cli", ...]` 调 codeindex——在 loomgraph 自己的 venv python 下跑，与 pin 的依赖同环境，不再依赖 PATH。spring-petclinic 实测：边源端解析 0%→65%、orphan 81%→50%、coupling 0.0→0.62。
+
+- **升级**：`pip install --upgrade loomgraph`（拉到 0.14.1）。
+- **Java 客户**：升级后 `loomgraph index --clear .` 重建一次 workspace（旧索引仍是断的）。
+- 若 `which codeindex` 指向非 loomgraph venv 的位置（如 pipx），本版本起不再依赖它，可不动。
+
 ## [0.14.0] - 2026-07-06
 
 ### 重要 — Java 调用图现在连通了（#76）
