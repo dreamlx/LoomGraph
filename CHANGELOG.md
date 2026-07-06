@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.2] - 2026-07-06
+
+### Fixed — `workspace delete` now removes the .db file (#95)
+- `_async_workspace_delete` called `store.delete_all()` (drops in-db tables)
+  but left the `<name>.db` file on disk, so the deleted workspace kept
+  reappearing in `workspace list` (which globs `*.db`). It also created an
+  empty shell when deleting a non-existent name. Now unlinks `<name>.db`
+  plus its sqlite `-wal`/`-shm` sidecars without opening a store; idempotent
+  on missing workspaces (no shell created).
+
+### Added — `[typescript]` extra + `.ts`/`.tsx` zero-entities hint (#96)
+- TS out-of-box parity with `[java]` (#93): `pipx install loomgraph[typescript]`
+  now pulls `tree-sitter-typescript>=0.23`. A pure-TS repo previously indexed
+  to 0 entities with only a generic "check languages config" warning.
+- `loomgraph index` now detects `.ts`/`.tsx` on a 0-entity export and hints
+  `pipx install loomgraph[typescript]` + add `typescript` to `.codeindex.yaml`
+  languages.
+- Note: a `.codeindex.yaml` with `languages: [typescript]` is still required
+  — codeindex `graph-export` has no auto-detect / `--languages` flag; the
+  extra + hint make the path discoverable rather than zero-config (same
+  contract as Java).
+
 ## [0.14.1] - 2026-07-06
 
 ### Fixed — `loomgraph index` now actually uses the pinned codeindex (#76)
