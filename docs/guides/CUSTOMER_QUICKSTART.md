@@ -123,7 +123,7 @@ loomgraph-demo-zcyl-v0.6.0/
 ├── README.md                              # 快速上手指南
 ├── CHANGELOG.md                           # 客户可见变更日志
 ├── quickstart.sh                          # 🔑 一键启动脚本
-├── config.yaml                            # 🔑 客户专用配置（预配置 LightRAG URL）
+├── config.yaml                            # 🔑 客户专用配置（预配置本地 SQLite store + Ollama LLM/Embedding）
 ├── codeindex-*.whl                        # codeindex wheel
 ├── loomgraph-*.whl                        # LoomGraph wheel
 ├── requirements.txt                       # 依赖列表（仅供参考）
