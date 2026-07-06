@@ -63,12 +63,12 @@ class TestStorageConfig:
 class TestLLMConfig:
     """Tests for LLM provider configuration."""
 
-    def test_default_provider_glm(self) -> None:
+    def test_default_provider_ollama(self) -> None:
         config = LLMConfig()
 
-        assert config.provider == "glm"
-        assert config.api_url == "http://117.131.45.179:3000"
-        assert config.model == "glm-4-flash"
+        assert config.provider == "ollama"
+        assert config.api_url == "http://localhost:11434"
+        assert config.model == "gemma3:12b-it-qat"
 
 
 class TestSettings:
@@ -88,7 +88,7 @@ class TestSettings:
         assert settings.indexing.ast_extraction.chunking == "ast"
         assert settings.embedding.dimension == 768
         assert settings.storage.backend == "sqlite"
-        assert settings.llm.provider == "glm"
+        assert settings.llm.provider == "ollama"
         assert settings.retrieval.default_mode == "hybrid"
 
 

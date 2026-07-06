@@ -16,9 +16,24 @@ This project uses codeindex for AI-friendly code documentation.
 
 # LoomGraph 项目开发规范
 
+> **📌 产品定位（2026-07）**：LoomGraph 是用户唯一需要安装的包（`pipx install loomgraph`）。
+> [codeindex](https://github.com/dreamlx/codeindex)（独立仓，PyPI `ai-codeindex`）是其 **parser engine**，
+> 作为依赖自动安装，用户无需直接操作。`loomgraph index` 一条命令跑完整流水线
+>（graph-export → embed → inject）。**两仓在用户视角是一个产品。** 方法论上 codeindex 仍是
+> agent-native middleware 的 "see" 层 instance，产品形态上以 loomgraph 内嵌 parser 交付
+>（方法论 ≠ 产品形态）。
+>
+> **⚠️ 文档腐化警告**：本文件下方"三仓库架构 / LightRAG 记 / PostgreSQL / Jina Code V2 /
+> NVIDIA H200 / 远程 endpoint (117.131.x) / `/mo:*` skills"等描述是 **LightRAG 时代（已退役）
+> 的遗物**，与当前架构**不符**。当前运行时架构 = **SQLite + sqlite-vec，无 RAG framework、无 Postgres**
+>（权威见 [README.md](README.md)）。本 CLAUDE.md 待重写——在此之前**一律以 README.md 为准**。
+
 ## 项目概述
 
-LoomGraph 是一款基于 NVIDIA H200 的企业级代码智能理解引擎，结合 LightRAG 图谱技术与 Jina Code V2 向量化，实现千万行代码的语义检索与依赖分析。
+LoomGraph 是一款企业级代码智能理解引擎：**SQLite + sqlite-vec** 本地图存储，
+[codeindex](https://github.com/dreamlx/codeindex)（tree-sitter）作为 parser engine，
+无 RAG framework、无 Postgres、默认全本地（无远程服务）。主要用户是 AI Agent
+（Claude Code 等），CLI 全 JSON 输出，MCP server + skills 可用。
 
 **设计目标**: 作为 Claude Code Skill，主要用户是 AI Agent。
 
@@ -504,33 +519,39 @@ ruff check src/ tests/
 mypy src/
 ```
 
-### H200 服务器
+### 本地服务(Ollama,默认)
 
-| 服务 | 端口 | URL |
-|------|------|-----|
-| GLM-4.7-fp8 (LLM) | 3000 | http://117.131.45.179:3000 |
-| LightRAG API | 3001 | http://117.131.45.179:3001 |
-| TEI Jina Code V2 | 3002 | http://117.131.45.179:3002 |
+H200 已退役(2026-07)。LLM 与 embedding 默认走本地 Ollama(`http://localhost:11434`);第三方 OpenAI-compatible endpoint 可配(`provider: custom`)。
+
+| 服务 | 默认 URL | 默认模型 |
+|------|----------|----------|
+| LLM(chat completions) | http://localhost:11434 | gemma3:12b-it-qat |
+| Embedding(/v1/embeddings) | http://localhost:11434/v1 | nomic-embed-text |
 
 ### 配置文件
 
-创建 `.loomgraph.yaml` 配置 H200 连接：
+默认零配置即可用(LLM = Ollama 本地;embedding off,需语义搜索时再开)。自定义 provider 时创建 `.loomgraph.yaml`:
 
 ```yaml
 # .loomgraph.yaml
-lightrag:
-  api_url: "http://117.131.45.179:3001"
-  api_timeout: 30.0
+llm:
+  provider: ollama              # ollama | glm | openrouter | vllm
+  api_url: "http://localhost:11434"
+  model: "gemma3:12b-it-qat"
 
 embedding:
-  base_url: "http://117.131.45.179:3002"
+  enabled: true                 # off by default; turn on for semantic search
+  provider: ollama              # ollama | openai | voyage | glm | custom
+  api_url: "http://localhost:11434/v1"
+  model: "nomic-embed-text"
+  dimension: 768
 ```
 
 配置优先级：
-1. 环境变量 (`LOOMGRAPH_LIGHTRAG__API_URL`)
+1. 环境变量 (`LOOMGRAPH_LLM__API_URL` 等)
 2. `.loomgraph.yaml` 当前目录
 3. `~/.config/loomgraph/config.yaml`
-4. 默认值
+4. 默认值(Ollama 本地)
 
 ## 架构决策记录 (ADR)
 
