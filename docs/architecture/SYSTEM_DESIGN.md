@@ -27,12 +27,11 @@
 ┌─────────────────────────────────────────────────────────────────────┐
 │                     Skill 层 (Claude Code Skills)                   │
 │                                                                     │
-│  /loomgraph-debt-radar       技术债务审计报告                        │
-│  /loomgraph-sync-advisor     跨分支同步建议 + 冲突预测               │
-│  /loomgraph-evolution        代码演化趋势分析                        │
+│  /loomgraph-init             项目初始化                              │
+│  /loomgraph-setup            环境配置                                │
 │                                                                     │
-│  原则: Skill 是编排者，不做数据计算                                   │
-│        编排 CLI 命令 + codeindex + LLM → 生成 Markdown 报告          │
+│  v0.15.0: 编排型 Skill (debt-radar / evolution / sync-advisor)      │
+│  移除, 由 MCP composite 替代 (loomgraph_debt_audit 等, 见 MCP 层)    │
 ├─────────────────────────────────────────────────────────────────────┤
 │                     能力层 (LoomGraph CLI)                           │
 │                                                                     │
