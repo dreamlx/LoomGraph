@@ -52,6 +52,12 @@ async def maybe_embed_entities(entities: list[dict[str, Any]]) -> int:
         )
         return 0
 
+    attached = 0
     for (i, _entity), emb in zip(targets, result.embeddings, strict=False):
-        entities[i]["embedding"] = emb
-    return len(targets)
+        # Skip degenerate (zero/near-zero) vectors — a provider can return
+        # 200-OK-but-empty under load, which would poison KNN (every query
+        # lands at distance ~1.0). Attach only real vectors to keep vec0 clean.
+        if emb and sum(x * x for x in emb) > 0:
+            entities[i]["embedding"] = emb
+            attached += 1
+    return attached

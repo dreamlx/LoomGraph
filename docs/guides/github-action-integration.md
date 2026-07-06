@@ -1,6 +1,6 @@
 # GitHub Action 集成指南
 
-**自动增量更新知识图谱** — push 代码后自动同步到 LightRAG
+**自动增量更新知识图谱** — push 代码后自动同步到知识图谱（SQLite + sqlite-vec）
 
 ---
 
@@ -29,8 +29,12 @@ jobs:
 
 | Secret Name | 值 | 示例 |
 |-------------|-----|------|
-| `LIGHTRAG_URL` | LightRAG API 地址 | `http://internal.example.invalid:3020` |
-| `EMBEDDING_URL` | Embedding API 地址 | `http://internal.example.invalid:3002` |
+| `LIGHTRAG_URL` | 知识图谱存储/服务地址（见下方说明） | `http://your-store-endpoint:8000` |
+| `EMBEDDING_URL` | Embedding API 地址（OpenAI-compatible） | `http://your-embedding-endpoint:8000/v1` |
+
+> **注意**：GitHub Actions runner **无法连接你本地的 Ollama**。必须为 `EMBEDDING_URL` 配置一个 runner 可达的远程 OpenAI-compatible embedding endpoint（自托管 Ollama / TEI / 商用 API 均可）。本地开发默认的 Ollama `nomic-embed-text`（`http://localhost:11434/v1`）在 CI 环境中不可用，需自行替换为远程 endpoint。
+>
+> 当前架构（ADR-013 后）使用 SQLite + sqlite-vec 存储，无 LightRAG / Postgres。`lightrag_endpoint` 输入名保留以兼容 reusable workflow 契约，按你的部署填入知识图谱服务的可达地址（若 runner 与存储同机，可用占位地址）。
 
 ### 3. 测试
 
@@ -52,8 +56,8 @@ git push
 
 | 参数 | 必需 | 默认值 | 说明 |
 |------|------|--------|------|
-| `lightrag_endpoint` | ✅ | - | LightRAG API URL |
-| `embedding_endpoint` | ✅ | - | Embedding API URL |
+| `lightrag_endpoint` | ✅ | - | 知识图谱存储/服务地址（输入名保留以兼容 reusable workflow 契约；ADR-013 后实际为 SQLite 存储） |
+| `embedding_endpoint` | ✅ | - | Embedding API URL（OpenAI-compatible，CI 需远程 endpoint） |
 | `working_directory` | ❌ | `.` | 仓库工作目录 |
 | `since` | ❌ | `HEAD~1` | git diff 起始点 |
 
@@ -118,7 +122,7 @@ Error: codeindex command not found
 
 ---
 
-### 问题 2: LightRAG 连接失败
+### 问题 2: 知识图谱 / Embedding 服务连接失败
 
 **现象**：
 ```
@@ -127,12 +131,12 @@ Error: Connection refused to http://...
 
 **原因**：
 - Secret 配置错误
-- LightRAG 服务不可达
+- 知识图谱或 embedding 服务不可达（runner 无法访问本地 Ollama）
 - 网络限制
 
 **解决**：
-1. 确认 Secrets 中的 URL 正确
-2. 测试 LightRAG API: `curl http://your-lightrag-url/health`
+1. 确认 Secrets 中的 URL 正确（CI 必须用 runner 可达的远程 endpoint，不能用 `localhost:11434`）
+2. 测试 embedding endpoint 连通性: `curl http://your-embedding-endpoint:8000/v1/models`
 3. 检查 GitHub Actions runner 网络访问权限
 
 ---

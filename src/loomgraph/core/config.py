@@ -107,16 +107,23 @@ class LLMConfig(BaseSettings):
     Phase 5: `lightrag` option dropped together with the storage backend.
     `DirectLLMClient` (OpenAI-compatible chat completions) is the only
     transport; `provider` chooses default model + endpoint conventions.
+
+    Provider conventions (defaults for api_url + model; H200 retired 2026-07,
+    local Ollama is now the default):
+    - `ollama`     — local Ollama on `http://localhost:11434`, `gemma3:12b-it-qat`
+    - `glm`        — self-hosted GLM (caller sets api_url / model)
+    - `openrouter` — `https://openrouter.ai` (caller sets model + api_key)
+    - `vllm`       — vLLM OpenAI-compatible server (caller sets api_url / model)
     """
 
     model_config = _IGNORE_EXTRA
 
-    provider: Literal["glm", "openrouter", "vllm"] = "glm"
-    # OpenAI-compatible endpoint base URL (without /v1/chat/completions).
-    # Default points at H200 GLM-4.7.
-    api_url: str = "http://internal.example.invalid:3000"
+    provider: Literal["ollama", "glm", "openrouter", "vllm"] = "ollama"
+    # OpenAI-compatible endpoint base URL (DirectLLMClient appends
+    # `/v1/chat/completions`). Default points at local Ollama.
+    api_url: str = "http://localhost:11434"
     api_key: str = ""  # Required for OpenRouter; optional for self-hosted
-    model: str = "glm-4-flash"
+    model: str = "gemma3:12b-it-qat"
     timeout: float = 60.0
     max_tokens: int = 1024
     temperature: float = 0.7
