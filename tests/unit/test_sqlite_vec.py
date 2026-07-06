@@ -251,6 +251,24 @@ class TestCascadeDelete:
         result = await store.search_similar(_vec_normalized(0), k=10)
         assert result == []
 
+    async def test_delete_entities_cascades_to_vec0(
+        self, store: SqliteGraphStore
+    ) -> None:
+        """Symbol-level GC (loomgraph#90): delete_entities must also purge
+        the entity's vector row, not just the entities table row — else
+        stale vectors would answer KNN queries for deleted symbols."""
+        await store.create_entity(
+            "A", {"source_id": "f1.py", "embedding": _vec_normalized(0)}
+        )
+        await store.create_entity(
+            "B", {"source_id": "f2.py", "embedding": _vec_normalized(1)}
+        )
+        await store.delete_entities(["A"])
+        result = await store.search_similar(_vec_normalized(0), k=10)
+        names = [r["entity_name"] for r in result]
+        assert "A" not in names
+        assert "B" in names
+
 
 # ---------- Backend without vector support ----------
 
@@ -322,6 +340,12 @@ class TestUnsupportedBackends:
 
             async def delete_by_source(self, source_ids):
                 return None
+
+            async def delete_entities(self, entity_names):
+                return None
+
+            async def get_entities_by_source(self, source_ids):
+                return []
 
             async def get_source_ids(self, source_prefix=None):
                 return []

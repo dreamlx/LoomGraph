@@ -349,6 +349,28 @@ class SqliteGraphStore(GraphStore):
 
         return await self._run(_query)
 
+    async def get_entities_by_source(
+        self, source_ids: list[str]
+    ) -> list[dict[str, Any]]:
+        """Return entities whose source_id ∈ source_ids (#90).
+
+        Reuses ``_row_to_entity`` so properties_json extras (content_hash)
+        merge back to the top level — symbol-level incremental diffs on the
+        same key shape ``map_entity`` produces.
+        """
+        if not source_ids:
+            return []
+        placeholders = ",".join("?" * len(source_ids))
+
+        def _query(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+            rows = conn.execute(
+                f"SELECT * FROM entities WHERE source_id IN ({placeholders})",
+                source_ids,
+            ).fetchall()
+            return [self._row_to_entity(r) for r in rows]
+
+        return await self._run(_query)
+
     # ----- Relation CRUD -----
 
     async def create_relation(
@@ -506,6 +528,33 @@ class SqliteGraphStore(GraphStore):
                 conn.execute(
                     f"DELETE FROM vec_node_descriptions WHERE source_id IN ({placeholders})",
                     source_ids,
+                )
+
+        await self._run(_exec)
+
+    async def delete_entities(self, entity_names: list[str]) -> None:
+        """Symbol-level GC (#90): delete by entity_name, cascading to
+        relations (src or tgt) and the vec0 row. Unlike ``delete_by_source``,
+        sibling symbols in the same file are left intact."""
+        if not entity_names:
+            return
+        names = list(entity_names)
+        placeholders = ",".join("?" * len(names))
+
+        def _exec(conn: sqlite3.Connection) -> None:
+            with conn:
+                conn.execute(
+                    f"DELETE FROM entities WHERE entity_name IN ({placeholders})",
+                    names,
+                )
+                conn.execute(
+                    f"DELETE FROM relations WHERE src_id IN ({placeholders}) "
+                    f"OR tgt_id IN ({placeholders})",
+                    [*names, *names],
+                )
+                conn.execute(
+                    f"DELETE FROM vec_node_descriptions WHERE entity_name IN ({placeholders})",
+                    names,
                 )
 
         await self._run(_exec)
