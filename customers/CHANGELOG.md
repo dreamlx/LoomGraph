@@ -6,6 +6,18 @@
 
 ## [Unreleased]
 
+## [0.14.2] - 2026-07-06
+
+### 修复 — `workspace delete` 现在真正删除 .db 文件（#95）
+
+之前 `workspace delete` 只清表内数据、不删 `.db` 文件，被删的 workspace 会作为空壳一直留在 `workspace list` 里（list 按 `*.db` 枚举）；删一个不存在的工作区反而会创建空壳。现在直接 unlink `<name>.db` + sqlite `-wal`/`-shm`，不再 open store；对不存在的工作区是幂等 no-op。
+
+### 新增 — `[typescript]` extra + `.ts`/`.tsx` 零实体提示（#96）
+
+与 `[java]` 看齐：`pipx install loomgraph[typescript]` 自动拉 `tree-sitter-typescript`。纯 TS 仓之前 `loomgraph index` 出 0 实体 + 通用警告（不告诉怎么修）；现在检测到 `.ts`/`.tsx` 会提示 `pipx install loomgraph[typescript]` + 在 `.codeindex.yaml` 的 languages 加 `typescript`。
+
+注意：仍需写 `.codeindex.yaml languages: [typescript]`（codeindex graph-export 无自动检测 / `--languages` flag），extra + 提示只是让这条路可被发现（与 Java 同契约）。
+
 ## [0.14.1] - 2026-07-06
 
 ### 修复 — `loomgraph index` 现在真正用 pin 的 codeindex（#76）
