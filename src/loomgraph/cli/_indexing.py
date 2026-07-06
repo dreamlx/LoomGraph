@@ -70,6 +70,15 @@ def index(repo_path: str, clear: bool, workspace: str | None) -> None:
         err=True,
     )
 
+    # 0 entities is almost always a languages/grammar mismatch (#93) — warn
+    # loudly instead of letting it sail through as a silent success. Kept as a
+    # warning (exit 0): an empty repo legitimately indexes to 0.
+    zero_warning = (
+        _zero_entities_warning(repo) if summary.entity_count == 0 else None
+    )
+    if zero_warning is not None:
+        click.echo(f"⚠️  WARNING: {zero_warning}", err=True)
+
     # Step 3: Embed + inject asynchronously
     click.echo("[3/3] Injecting into knowledge graph...", err=True)
     try:
@@ -85,6 +94,9 @@ def index(repo_path: str, clear: bool, workspace: str | None) -> None:
     result["duration_seconds"] = round(duration, 2)
     result["repo_path"] = str(repo)
     click.echo(f"       Done in {result['duration_seconds']}s.", err=True)
+
+    if zero_warning is not None:
+        result["warning"] = zero_warning
 
     output_success(result)
 
@@ -118,6 +130,27 @@ async def _async_index(
     result["workspace"] = ws
     result["mode"] = "cold_rebuild" if clear else "append"
     return result
+
+
+def _zero_entities_warning(repo: Path) -> str:
+    """Diagnose a 0-entity graph-export for the user/agent (#93).
+
+    ``codeindex graph-export`` returned nothing — almost always a
+    ``.codeindex.yaml`` languages mismatch (codeindex defaults to python)
+    or a missing tree-sitter grammar. Return an actionable hint rather than
+    a bare count. Java gets a specific pointer to the ``loomgraph[java]``
+    extra; the general case points at the languages config.
+    """
+    if next(repo.rglob("*.java"), None) is not None:
+        return (
+            "graph-export returned 0 entities; found .java files — install "
+            "Java support with `pipx install loomgraph[java]` and ensure "
+            "'java' is listed under languages in .codeindex.yaml"
+        )
+    return (
+        "graph-export returned 0 entities; check that .codeindex.yaml "
+        "languages matches this repository's code"
+    )
 
 
 @main.command()
