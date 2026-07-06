@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Java out-of-box + index safety (#93)
+- `loomgraph[java]` optional extra declares `tree-sitter-java>=0.23.0`.
+  Pure-Python installs stay light; Java repos install with
+  `pipx install loomgraph[java]`. Mirrors the existing python/php
+  direct-grammar-pin pattern (java is opt-in, not a core dep) so the
+  grammar ships only where needed.
+- `loomgraph index` no longer silent-successes on 0 entities: when
+  `codeindex graph-export` returns nothing, it emits a stderr warning and
+  a `data.warning` field (agent-visible). `.java` files present → hints
+  `pipx install loomgraph[java]` + add `java` to `.codeindex.yaml`
+  languages; else → generic languages-config hint. Kept as exit-0 warning
+  (an empty repo legitimately indexes to 0).
+
+### Fixed — reader false-positive warnings on codeindex entity types (#76)
+- `VALID_ENTITY_TYPES` synced to codeindex's full 12-kind output
+  (class, constructor, enum, field, function, interface, method,
+  namespace, property, record, type_alias, variable). The reader always
+  stored these entities; it now stops logging a per-record "unknown
+  entity_type 'field'/'constructor'/..." warning that flooded every
+  Java/TS index summary. Verified on a Java DI bean export (6 entities,
+  0 warnings post-fix vs 2 pre-fix).
+
 ## [0.13.0] - 2026-07-06
 
 ### Added — symbol-level incremental + local-Ollama default (#90)
