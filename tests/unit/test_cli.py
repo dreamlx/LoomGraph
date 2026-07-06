@@ -603,6 +603,44 @@ class TestIndexCommand:
         assert data["success"] is True
         assert "loomgraph[java]" in data["data"]["warning"]
 
+    @patch("loomgraph.cli._indexing._async_index", new_callable=AsyncMock)
+    @patch("loomgraph.cli._indexing.run_graph_export")
+    @patch("loomgraph.cli._indexing.check_codeindex")
+    def test_index_zero_entities_warns_typescript_hint(
+        self,
+        mock_check: MagicMock,
+        mock_export: MagicMock,
+        mock_async_index: AsyncMock,
+        runner: CliRunner,
+        tmp_path: Path,
+    ) -> None:
+        """#96: 0 entities + .ts/.tsx present → hint ``pipx install loomgraph[typescript]``."""
+        (tmp_path / "App.tsx").write_text("export const App = () => null\n")
+        mock_check.return_value = {"installed": True, "version": "0.31.0"}
+        mock_export.return_value = (
+            [],
+            [],
+            ImportSummary(entity_count=0, relation_count=0),
+        )
+        mock_async_index.return_value = {
+            "cleared": True,
+            "entities_created": 0,
+            "relations_created": 0,
+            "embedded": 0,
+            "store_stats": {},
+            "workspace": "demo:main",
+            "mode": "cold_rebuild",
+        }
+
+        result = runner.invoke(main, ["index", str(tmp_path)])
+
+        assert result.exit_code == 0
+        assert "loomgraph[typescript]" in result.stderr
+        assert ".codeindex.yaml" in result.stderr
+        data = json.loads(result.stdout)
+        assert data["success"] is True
+        assert "loomgraph[typescript]" in data["data"]["warning"]
+
 
 class TestUpdateCommand:
     """update command: per-file warm-diff (git) with whole-tree fallback (路 B)."""
