@@ -5,13 +5,15 @@ Pins the fix: cross-module same-name functions land as DISTINCT entities
 (qualified ids), so topology no longer reports a phantom god_function. If
 anyone re-introduces simple-name keying, this fails loudly.
 
-Skipped when `codeindex` is not on PATH (CI without the parser installed).
+Skipped when `codeindex` is not importable in the venv (CI without the parser
+installed). Note: `run_graph_export` invokes `sys.executable -m codeindex.cli`
+(not a bare PATH `codeindex`), so availability is the venv import, not PATH.
 """
 
 from __future__ import annotations
 
 import asyncio
-import shutil
+import importlib.util
 from pathlib import Path
 
 import pytest
@@ -56,8 +58,8 @@ def _seed_collision_repo(root: Path) -> None:
 
 
 def test_index_then_no_phantom_handle(tmp_path: Path, monkeypatch) -> None:
-    if not shutil.which("codeindex"):
-        pytest.skip("codeindex not on PATH — e2e needs the real parser")
+    if importlib.util.find_spec("codeindex") is None:
+        pytest.skip("codeindex not importable in venv — e2e needs the real parser")
 
     repo = tmp_path / "repo"
     repo.mkdir()

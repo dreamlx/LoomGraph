@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 import tempfile
 from collections.abc import Callable
 from subprocess import Popen, TimeoutExpired  # noqa: F401 — Popen is a patch target
@@ -47,8 +48,11 @@ def run_graph_export(
     Returns the mapped ``(entities, relations, summary)``. Raises
     :class:`GraphExportError` on non-zero exit or timeout.
     """
+    # Invoke via the venv python (`sys.executable -m codeindex.cli`), never a
+    # bare `codeindex` PATH lookup — otherwise a stale codeindex elsewhere on
+    # PATH (e.g. pipx) shadows the pinned `ai-codeindex` dep (#76 PATH bypass).
     proc = Popen(
-        ["codeindex", "graph-export", "--root", str(repo), "-o", "-"],
+        [sys.executable, "-m", "codeindex.cli", "graph-export", "--root", str(repo), "-o", "-"],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,

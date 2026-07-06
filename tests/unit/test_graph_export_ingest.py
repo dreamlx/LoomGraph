@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock
@@ -116,7 +117,12 @@ def test_run_graph_export_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
 def test_run_graph_export_invokes_codeindex_graph_export(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """The subprocess must call `codeindex graph-export --root <repo> -o -`."""
+    """The subprocess must call `codeindex graph-export --root <repo> -o -`.
+
+    Invoke via the venv python (``sys.executable -m codeindex.cli``), NOT a bare
+    ``codeindex`` PATH lookup — otherwise a stale codeindex elsewhere on PATH
+    (e.g. pipx) shadows the pinned ``ai-codeindex`` dep (#76 PATH bypass).
+    """
     captured: dict[str, Any] = {}
     proc = _FakeProc(stdout=_ndjson([META, E1]))
 
@@ -128,9 +134,35 @@ def test_run_graph_export_invokes_codeindex_graph_export(
     monkeypatch.setattr("loomgraph.core.graph_export_ingest.Popen", _fake_popen)
     run_graph_export(tmp_path)
     cmd = captured["args"][0]
-    assert cmd[:2] == ["codeindex", "graph-export"]
+    # Runs under loomgraph's own interpreter (same venv as the pinned ai-codeindex)
+    # and goes through the `codeindex.cli` module entry point — never bare `codeindex`.
+    assert cmd[0] == sys.executable
+    assert cmd[1:4] == ["-m", "codeindex.cli", "graph-export"]
     assert "--root" in cmd and str(tmp_path) in cmd
     assert "-o" in cmd and "-" in cmd  # emit to stdout
+
+
+def test_run_graph_export_does_not_bypass_venv_via_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Regression guard for the #76 PATH bypass: the command must NOT start with
+    a bare ``codeindex`` (which resolves via PATH and can pick up a stale
+    pipx/global install, ignoring the ``ai-codeindex`` pin). Must use sys.executable.
+    """
+    captured: dict[str, Any] = {}
+    proc = _FakeProc(stdout=_ndjson([META, E1]))
+
+    def _fake_popen(*args, **kwargs):
+        captured["args"] = args
+        return proc
+
+    monkeypatch.setattr("loomgraph.core.graph_export_ingest.Popen", _fake_popen)
+    run_graph_export(tmp_path)
+    cmd = captured["args"][0]
+    assert cmd[0] != "codeindex", (
+        "must invoke codeindex via sys.executable (venv python), not a bare PATH lookup"
+    )
+    assert cmd[0] == sys.executable
 
 
 def test_run_graph_export_nonzero_exit_raises(
