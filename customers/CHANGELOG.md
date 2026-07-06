@@ -6,6 +6,15 @@
 
 ## [Unreleased]
 
+### 新增 — Java 开箱体验（#93）
+
+- **新增 `loomgraph[java]` 可选 extras**：Java 仓库装 Java grammar 用 `pipx install loomgraph[java]`；纯 Python 项目不装，保持轻量。之前纯 Java 仓库 `loomgraph index` 会静默返回 0 实体（codeindex 默认只解析 Python）。
+- **`loomgraph index` 对 0 实体不再静默成功**：`codeindex graph-export` 返回 0 实体时，打 stderr 警告 + JSON 返回 `data.warning` 字段（agent 可见）。检测到仓库含 `.java` 文件会提示 `pipx install loomgraph[java]` 并在 `.codeindex.yaml` 的 `languages` 加 `java`；否则提示检查 languages 配置。**仍是 exit 0**（空仓合法地索引为 0，不阻断 CI）。
+
+### 修复 — 误报 "unknown entity_type" 警告（#76）
+
+- loomgraph reader 之前对 codeindex 导出的 `field` / `constructor` / `property` 等实体类型（不在旧的 `{class, function, method}` 白名单里）逐条打 "unknown entity_type" 警告——**实体其实一直正常存图，只是日志噪音**。已把白名单对齐 codeindex 实际导出的 12 种类型，Java/TS 项目索引日志不再被这类误报刷屏。
+
 ## [0.13.0] - 2026-07-06
 
 ### Added — symbol-level 增量 + 本地 Ollama 默认（#90）
