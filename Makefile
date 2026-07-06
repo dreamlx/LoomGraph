@@ -125,7 +125,7 @@ release: ## Full release workflow (VERSION=x.y.z required)
 	git tag v$(VERSION)
 	@echo ""
 	@echo "$(BOLD)Step 6/6:$(RESET) Pushing to GitHub..."
-	git push origin develop --tags
+	git push origin main --tags
 	@echo ""
 	@echo "$(GREEN)✓ Release v$(VERSION) pushed to GitHub$(RESET)"
 	@echo "$(YELLOW)⏳ GitHub Actions is building the release...$(RESET)"
@@ -275,8 +275,8 @@ git-check: ## Check for uncommitted changes
 	fi
 	@echo "$(GREEN)✓ Working directory clean$(RESET)"
 
-git-sync: ## Pull latest changes from develop
+git-sync: ## Pull latest changes from main
 	@echo "$(BOLD)Syncing with remote...$(RESET)"
-	git checkout develop
-	git pull origin develop
-	@echo "$(GREEN)✓ Synced with origin/develop$(RESET)"
+	git checkout main
+	git pull origin main
+	@echo "$(GREEN)✓ Synced with origin/main$(RESET)"
