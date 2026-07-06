@@ -6,6 +6,16 @@
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-07-06
+
+### 重要 — Java 调用图现在连通了（#76）
+
+升级依赖 `ai-codeindex` → 0.32.0，修复 Java parser caller 命名错配（之前每条 Java 边源端悬空，`graph` / `topology` / `coupling` 在 Java 项目全报空，Python 正常）。spring-petclinic 实测：`graph` 0→9 callees、orphan 81%→49%、coupling 0.0→0.62。
+
+- **升级**：`pip install --upgrade loomgraph`（自动拉 ai-codeindex 0.32.0）。
+- **Java 客户**：升级后 `loomgraph index --clear .` 重建一次 workspace（旧边是断的）。
+- 剩余 49% orphan = 非 callable 实体（field）+ Spring 框架调度入口 / 真静态不可解析（反射 / 多态），属 #76 P2 topology 可解释性的下一步，不影响连通性。
+
 ### 新增 — Java 开箱体验（#93）
 
 - **新增 `loomgraph[java]` 可选 extras**：Java 仓库装 Java grammar 用 `pipx install loomgraph[java]`；纯 Python 项目不装，保持轻量。之前纯 Java 仓库 `loomgraph index` 会静默返回 0 实体（codeindex 默认只解析 Python）。

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-07-06
+
+### Changed — `ai-codeindex>=0.32.0` (Java call-graph connectivity, #76)
+- Dep floor bumped 0.29.0 → 0.32.0. codeindex 0.32.0 fixes the Java parser
+  `call.caller`/`sym.name` qualification mismatch that left every Java edge
+  dangling at the source — `graph` / `topology` / `coupling` all reported
+  empty on Java repos while Python worked. Verified on spring-petclinic
+  via `loomgraph index`: processFindForm 0→9 callees, orphan rate
+  81%→49%, coupling density 0.0→0.62. Python repos unaffected. **Existing
+  Java workspaces need a `loomgraph index --clear .` rebuild** — their
+  edges were dangling under the old codeindex.
+
 ### Added — Java out-of-box + index safety (#93)
 - `loomgraph[java]` optional extra declares `tree-sitter-java>=0.23.0`.
   Pure-Python installs stay light; Java repos install with
