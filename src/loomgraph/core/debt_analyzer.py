@@ -118,6 +118,8 @@ class DebtAnalyzer:
         """
         self.client = client
         self.issues: list[DebtIssue] = []
+        # Entity count from the topology run; feeds summary.total_entities (#60)
+        self._topology_total_entities: int = 0
 
     @staticmethod
     def _is_whitelisted_god_function(entity_name: str) -> bool:
@@ -571,6 +573,7 @@ class DebtAnalyzer:
                 )
             )
 
+        self._topology_total_entities = result.total_entities
         return result.topology_score
 
     def _lookup_maintainability(self, data: CodeindexData, path: str) -> float:
@@ -681,7 +684,7 @@ class DebtAnalyzer:
             "grade": grade,
             "breakdown": breakdown,
             "summary": {
-                "total_entities": 0,  # TODO: get from topology result
+                "total_entities": self._topology_total_entities,
                 "p0_issues": p0_issues,
                 "p1_issues": p1_issues,
                 "p2_issues": p2_issues,

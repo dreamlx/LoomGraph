@@ -380,6 +380,8 @@ class TestTopologyIntegration:
         # Summary still lists ALL issues (topology ones aren't hidden, just
         # not double-counted into quality):
         assert health["summary"]["p0_issues"] >= 1
+        # total_entities comes from the topology run, not a hardcoded 0 (#60)
+        assert health["summary"]["total_entities"] == 100
 
     @pytest.mark.asyncio
     async def test_module_filter_passed_to_topology(
