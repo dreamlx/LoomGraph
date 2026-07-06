@@ -36,3 +36,25 @@ def test_java_extra_declared() -> None:
     assert "tree-sitter-java" in joined, (
         "`java` extra must pull tree-sitter-java (the grammar codeindex needs)"
     )
+
+
+def test_typescript_extra_declared() -> None:
+    """#96: ``pipx install loomgraph[typescript]`` must surface the TS grammar.
+
+    Parity with the ``[java]`` extra (#93): a pure-TS repo otherwise indexes
+    to 0 entities because the default install ships no ``tree-sitter-typescript``.
+    The ``[typescript]`` extra is the customer-facing escape hatch.
+    """
+    data = _pyproject()
+    project = data.get("project", {})
+    assert isinstance(project, dict)
+    extras = project.get("optional-dependencies", {})
+    assert isinstance(extras, dict)
+    assert "typescript" in extras, (
+        "[project.optional-dependencies] must declare a `typescript` extra "
+        "(#96: pipx install loomgraph[typescript])"
+    )
+    joined = " ".join(extras["typescript"])
+    assert "tree-sitter-typescript" in joined, (
+        "`typescript` extra must pull tree-sitter-typescript (the grammar codeindex needs)"
+    )

@@ -133,19 +133,25 @@ async def _async_index(
 
 
 def _zero_entities_warning(repo: Path) -> str:
-    """Diagnose a 0-entity graph-export for the user/agent (#93).
+    """Diagnose a 0-entity graph-export for the user/agent (#93, #96).
 
     ``codeindex graph-export`` returned nothing — almost always a
     ``.codeindex.yaml`` languages mismatch (codeindex defaults to python)
     or a missing tree-sitter grammar. Return an actionable hint rather than
-    a bare count. Java gets a specific pointer to the ``loomgraph[java]``
-    extra; the general case points at the languages config.
+    a bare count. Java/TypeScript get a specific pointer to their extra;
+    the general case points at the languages config.
     """
     if next(repo.rglob("*.java"), None) is not None:
         return (
             "graph-export returned 0 entities; found .java files — install "
             "Java support with `pipx install loomgraph[java]` and ensure "
             "'java' is listed under languages in .codeindex.yaml"
+        )
+    if next(repo.rglob("*.tsx"), None) is not None or next(repo.rglob("*.ts"), None) is not None:
+        return (
+            "graph-export returned 0 entities; found .ts/.tsx files — install "
+            "TypeScript support with `pipx install loomgraph[typescript]` and "
+            "ensure 'typescript' is listed under languages in .codeindex.yaml"
         )
     return (
         "graph-export returned 0 entities; check that .codeindex.yaml "
