@@ -41,7 +41,12 @@ from loomgraph.core.debt_analyzer import DebtAnalyzer
 @click.option(
     "--module",
     default=None,
-    help="Module filter for topology analysis (e.g., 'cli' for src/cli/)",
+    help="Module filter for topology analysis (e.g., 'cli' for src/cli/) — deprecated, prefer --scope",
+)
+@click.option(
+    "--scope",
+    default=None,
+    help="Absolute path-prefix filter (e.g. 'src/'); limits static + topology layers, excludes docs/scripts/tests (#61)",
 )
 @click.option(
     "--skip-topology",
@@ -63,6 +68,7 @@ def debt(
     output_format: str,
     workspace: str | None,
     module: str | None,
+    scope: str | None,
     skip_topology: bool,
     with_git: bool,
     git_since: str,
@@ -96,7 +102,7 @@ def debt(
     try:
         result = asyncio.run(
             _async_debt(
-                codeindex_data, output_format, workspace, module, skip_topology, with_git, git_since
+                codeindex_data, output_format, workspace, module, scope, skip_topology, with_git, git_since
             )
         )
         output_success(result)
@@ -114,6 +120,7 @@ async def _async_debt(
     output_format: str,
     workspace: str | None,
     module: str | None,
+    scope: str | None,
     skip_topology: bool,
     with_git: bool,
     git_since: str,
@@ -124,7 +131,8 @@ async def _async_debt(
         codeindex_data_path: Optional path to codeindex JSON output
         output_format: Output format (json, markdown, console)
         workspace: Workspace name for topology analysis
-        module: Module filter for topology analysis
+        module: Module filter for topology analysis (deprecated, prefer scope)
+        scope: Absolute path-prefix filter for static + topology layers (#61)
         skip_topology: Skip topology analysis if True
         with_git: Enable git metrics analysis (EPIC-010 Feature 2)
         git_since: Time window for git analysis
@@ -157,6 +165,7 @@ async def _async_debt(
         module=module,
         with_git=with_git,
         git_since=git_since,
+        scope=scope,
     )
 
     # Format output
