@@ -23,10 +23,13 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
+from loomgraph.mcp.tools import check as t_check
+from loomgraph.mcp.tools import debt as t_debt
 from loomgraph.mcp.tools import debt_audit as t_debt_audit
 from loomgraph.mcp.tools import deps as t_deps
 from loomgraph.mcp.tools import evolution_track as t_evolution_track
 from loomgraph.mcp.tools import find as t_find
+from loomgraph.mcp.tools import git_metrics as t_git_metrics
 from loomgraph.mcp.tools import graph as t_graph
 from loomgraph.mcp.tools import impact as t_impact
 from loomgraph.mcp.tools import overview as t_overview
@@ -39,7 +42,7 @@ from loomgraph.mcp.tools import workspace as t_workspace
 logger = logging.getLogger(__name__)
 
 SERVER_NAME = "loomgraph"
-SERVER_VERSION = "0.13.0"
+SERVER_VERSION = "0.15.0"
 
 # Registry of available tools. Each entry: (Tool spec, async handler).
 # When adding a new tool, add its module to loomgraph.mcp.tools and
@@ -60,6 +63,12 @@ _register(t_topology.TOOL_SPEC, t_topology.handle)
 _register(t_impact.TOOL_SPEC, t_impact.handle)
 _register(t_deps.TOOL_SPEC, t_deps.handle)
 _register(t_overview.TOOL_SPEC, t_overview.handle)
+# Debt-surface read primitives (#62) — each dimension also reachable via
+# the loomgraph_debt_audit composite; exposed standalone so sessions
+# without the composite loaded can still reach them.
+_register(t_debt.TOOL_SPEC, t_debt.handle)
+_register(t_check.TOOL_SPEC, t_check.handle)
+_register(t_git_metrics.TOOL_SPEC, t_git_metrics.handle)
 # Write tool (first MCP-exposed write surface; see ADR-014)
 _register(t_refresh.TOOL_SPEC, t_refresh.handle)
 _register(t_workspace.LIST_SPEC, t_workspace.list_handle)

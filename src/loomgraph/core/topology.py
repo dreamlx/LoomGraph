@@ -322,6 +322,7 @@ class TopologyAnalyzer:
     god_threshold: int = 10
     module: str | None = None
     source_prefix: str | None = None
+    scope: str | None = None  # absolute path-prefix filter ("src/"); wins over module (#61)
 
     async def analyze(self) -> TopologyResult:
         """Run topology analysis with server-side fallback.
@@ -348,11 +349,15 @@ class TopologyAnalyzer:
             effective_prefix = _common_source_prefix(source_ids)
             logger.debug("Auto-detected source_prefix: %r", effective_prefix)
 
-        # For filtering endpoints (orphans/degree), combine prefix + module
-        filter_prefix = effective_prefix or ""
-        if self.module:
-            filter_prefix = filter_prefix + self.module + "/"
-        filter_prefix = filter_prefix or None
+        # For filtering endpoints (orphans/degree): scope wins (absolute path
+        # prefix, e.g. "src/"); else combine auto prefix + module (#61).
+        if self.scope:
+            filter_prefix = self.scope
+        else:
+            filter_prefix = effective_prefix or ""
+            if self.module:
+                filter_prefix = filter_prefix + self.module + "/"
+            filter_prefix = filter_prefix or None
 
         orphans, hubs, gods, stats = await asyncio.gather(
             self.client.get_orphan_entities(
@@ -369,6 +374,9 @@ class TopologyAnalyzer:
                 source_prefix=filter_prefix,
             ),
             self.client.get_graph_stats(
+                # ponytail: coupling still uses the global source prefix —
+                # scope-filtering coupling needs a store API change. orphans/
+                # hubs/gods (the #61 pain points) are already scoped above.
                 source_prefix=effective_prefix or None,
                 module_depth=2,
             ),
@@ -458,8 +466,13 @@ class TopologyAnalyzer:
 
         Pure function — no I/O, easy to unit test.
         """
-        # Apply module filter at entry
-        if self.module:
+        # Apply path filter at entry: scope (absolute prefix) wins over module (#61)
+        if self.scope:
+            entities = [
+                e for e in entities
+                if e.get("source_id", "").startswith(self.scope)
+            ]
+        elif self.module:
             prefix = self.module + "/"
             entities = [
                 e for e in entities

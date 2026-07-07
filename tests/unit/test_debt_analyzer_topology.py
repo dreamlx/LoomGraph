@@ -391,7 +391,7 @@ class TestTopologyIntegration:
         captured_module = None
 
         class MockTopologyAnalyzer:
-            def __init__(self, client, hub_threshold, god_threshold, module):
+            def __init__(self, client, hub_threshold, god_threshold, module, scope=None):
                 nonlocal captured_module
                 captured_module = module
 
@@ -406,3 +406,28 @@ class TestTopologyIntegration:
         await analyzer.analyze(module="cli")
 
         assert captured_module == "cli"
+
+    @pytest.mark.asyncio
+    async def test_scope_passed_to_topology(
+        self, mock_client, mock_topology_result, monkeypatch
+    ):
+        """--scope is threaded through to TopologyAnalyzer (#61)."""
+        captured: dict[str, str | None] = {}
+
+        class MockTopologyAnalyzer:
+            def __init__(self, client, hub_threshold, god_threshold, module, scope=None):
+                captured["module"] = module
+                captured["scope"] = scope
+
+            async def analyze(self):
+                return mock_topology_result
+
+        from loomgraph.core import topology
+
+        monkeypatch.setattr(topology, "TopologyAnalyzer", MockTopologyAnalyzer)
+
+        analyzer = DebtAnalyzer(client=mock_client)
+        await analyzer.analyze(scope="src/")
+
+        assert captured["scope"] == "src/"
+        assert captured["module"] is None

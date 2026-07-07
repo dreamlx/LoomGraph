@@ -328,6 +328,36 @@ class TestTopologyAnalyzerFromData:
         assert "CliFunc" in orphan_names
         assert "CoreFunc" not in orphan_names
 
+    def test_scope_filter(self) -> None:
+        """--scope filters by absolute path prefix, excluding docs/scripts/tests."""
+        entities = [
+            self._make_entity("Prod", "src/app/main.py"),
+            self._make_entity("Harness", "docs/spike/harness.py"),
+            self._make_entity("Tool", "scripts/build.py"),
+        ]
+        relations = []
+
+        analyzer = TopologyAnalyzer(client=None, scope="src/")
+        result = analyzer.analyze_from_data(entities, relations)
+
+        # Only src/ entities counted — docs/scripts inflation excluded (#61)
+        assert result.total_entities == 1
+        orphan_names = [o["entity"] for o in result.orphans]
+        assert "Prod" in orphan_names
+        assert "Harness" not in orphan_names
+        assert "Tool" not in orphan_names
+
+    def test_scope_wins_over_module(self) -> None:
+        """When both set, scope (absolute) wins over module (relative)."""
+        entities = [
+            self._make_entity("A", "src/cli/a.py"),
+            self._make_entity("B", "src/core/b.py"),
+        ]
+        analyzer = TopologyAnalyzer(client=None, module="cli", scope="src/")
+        result = analyzer.analyze_from_data(entities, [])
+        # scope=src/ keeps both; module=cli would have kept only A
+        assert result.total_entities == 2
+
     def test_to_dict(self) -> None:
         """TopologyResult.to_dict should serialize correctly."""
         result = TopologyResult(

@@ -39,9 +39,13 @@ TOOL_SPEC = Tool(
             },
             "module": {
                 "type": "string",
+                "description": "Deprecated — prefer scope.",
+            },
+            "scope": {
+                "type": "string",
                 "description": (
-                    "Optional source_id prefix filter "
-                    "(e.g. `src/loomgraph/cli`)."
+                    "Absolute path-prefix filter (e.g. 'src/'); excludes "
+                    "docs/scripts/tests. Wins over module (#61)."
                 ),
             },
             "workspace": {"type": "string"},
@@ -54,12 +58,14 @@ async def handle(arguments: dict[str, Any]) -> list[TextContent]:
     hub = arguments.get("hub_threshold", DEFAULT_HUB_THRESHOLD)
     god = arguments.get("god_threshold", DEFAULT_GOD_THRESHOLD)
     module = arguments.get("module")
+    scope = arguments.get("scope")
     workspace = resolve_workspace(arguments)
     return await safe_call(
         lambda: _async_topology(
             hub_threshold=hub,
             god_threshold=god,
             module=module,
+            scope=scope,
             workspace=workspace,
         ),
         failure_code="TOPOLOGY_FAILED",

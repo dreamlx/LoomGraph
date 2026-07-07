@@ -6,6 +6,32 @@
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-07-07
+
+### 新增 — debt/topology 的 `--scope` 路径过滤 (#61)
+- `loomgraph debt --scope src/` 和 `loomgraph topology --scope src/` 按
+  绝对路径前缀过滤 codeindex 静态层 + topology 层，docs/scripts/tests
+  不再污染审计结果（orphans / god functions / 耦合）。`--module` 保留为
+  弃用别名；scope 优先。
+
+### 新增 — MCP debt / check / git_metrics 独立 primitive (#62)
+- `loomgraph_debt` / `loomgraph_check` / `loomgraph_git_metrics` 作为独立
+  只读 primitive 暴露（之前只能经 `loomgraph_debt_audit` composite 到达）。
+  未加载 composite 的会话也能单调。
+
+### 移除 — 弃用的 workflow skills (#64, ⚠️ breaking)
+- 删除 `loomgraph-debt-radar` / `-evolution` / `-sync-advisor` 三个 skill
+  （v0.12.1 已弃用，被 `loomgraph_debt_audit` / `evolution_track` /
+  `sync_advice` MCP composite 替代）。`install-skills` 现只装 `init` +
+  `setup`。
+- **更新指引**: 原来用 `/loomgraph-debt-radar` 的，改用 MCP composite
+  `loomgraph_debt_audit`（一次调用并行多维度），或独立的
+  `loomgraph_debt` / `_check` / `_git_metrics` primitive。
+
+### 修复
+- `overall_health.summary.total_entities` 不再硬编码 0 (#60)。
+- `SERVER_VERSION` 此前停滞在 0.13.0，现已跟版本号同步。
+
 ## [0.14.2] - 2026-07-06
 
 ### 修复 — `workspace delete` 现在真正删除 .db 文件（#95）

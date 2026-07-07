@@ -24,6 +24,7 @@ from loomgraph.cli._analysis import _async_check, _async_deps, _async_overview, 
 from loomgraph.cli._debt import _async_debt
 from loomgraph.cli._workspace import _async_workspace_info
 from loomgraph.mcp.tools._common import error_response, resolve_workspace, success_response
+from loomgraph.mcp.tools.git_metrics import gather
 
 TOOL_SPEC = Tool(
     name="loomgraph_debt_audit",
@@ -100,40 +101,6 @@ async def _gather_named(named_coros: list[tuple[str, Any]]) -> dict[str, dict[st
     return out
 
 
-async def _git_metrics_dim(source_path: str, since: str) -> dict[str, Any]:
-    """Wrap the sync GitMetricsAnalyzer in a thread for parallel composition."""
-    from loomgraph.core.git_metrics import GitMetricsAnalyzer
-
-    def _run() -> dict[str, Any]:
-        result = GitMetricsAnalyzer(Path(source_path), since=since).analyze()
-        return {
-            "repo_path": str(result.repo_path),
-            "since": result.since,
-            "analyzed_at": result.analyzed_at.isoformat(),
-            "summary": result.summary,
-            "hotspots": [
-                {
-                    "file": h.file,
-                    "change_freq": h.change_freq,
-                    "hotspot_score": h.hotspot_score,
-                    "rank": h.rank,
-                }
-                for h in result.hotspots
-            ],
-            "bus_factor": [
-                {
-                    "file": bf.file,
-                    "owner": bf.owner,
-                    "contributors": bf.contributors,
-                    "risk_level": bf.risk_level,
-                }
-                for bf in result.bus_factor
-            ],
-        }
-
-    return await asyncio.to_thread(_run)
-
-
 async def _trends_for_hotspots(
     git_dim: dict[str, Any] | None, top_n: int, workspace: str | None
 ) -> list[dict[str, Any]]:
@@ -208,7 +175,7 @@ async def handle(arguments: dict[str, Any]) -> list[TextContent]:
         ("check", _async_check(repo_path=source_path, workspace=workspace)),
     ]
     if git_enabled:
-        named.append(("git_metrics", _git_metrics_dim(source_path, git_since)))
+        named.append(("git_metrics", gather(source_path, git_since)))
 
     try:
         dims = await _gather_named(named)
