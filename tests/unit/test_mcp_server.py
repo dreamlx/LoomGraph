@@ -32,6 +32,10 @@ EXPECTED_TOOLS = {
     "loomgraph_impact",
     "loomgraph_deps",
     "loomgraph_overview",
+    # Debt-surface read primitives (#62) — standalone, also in the composite
+    "loomgraph_debt",
+    "loomgraph_check",
+    "loomgraph_git_metrics",
     "loomgraph_workspace_list",
     "loomgraph_workspace_info",
 }
@@ -74,6 +78,18 @@ def test_build_server_constructs_without_error():
     """No stdio call — just verify the Server object is constructible."""
     server = build_server()
     assert server.name == "loomgraph"
+
+
+async def test_git_metrics_handle_errors_on_non_git_path(tmp_path):
+    """git_metrics primitive returns a structured error on a non-repo path (#62)."""
+    import json
+
+    from loomgraph.mcp.tools import git_metrics as t_git_metrics
+
+    result = await t_git_metrics.handle({"source_path": str(tmp_path)})
+    payload = json.loads(result[0].text)
+    assert payload["success"] is False
+    assert payload["error"]["code"] == "GIT_METRICS_FAILED"
 
 
 # ---- Workspace resolution ------------------------------------------------

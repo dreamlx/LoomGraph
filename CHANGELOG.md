@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-07-07
+
+### Added — `--scope` path-prefix filter for debt/topology (#61)
+- `loomgraph debt --scope src/` and `loomgraph topology --scope src/` limit
+  both the codeindex static layer (giant_files/functions/smells/file_reports)
+  and the topology layer (orphans/hubs/gods) to an absolute path prefix, so
+  docs/scripts/tests stop inflating audits. `--module` kept as a deprecated
+  alias; scope wins. Server-side coupling still uses the global prefix
+  (scoping it needs a store API change; noted inline).
+- `loomgraph_topology` + `loomgraph_debt` MCP tools gain `scope`.
+
+### Added — MCP debt/check/git_metrics primitives (#62)
+- `loomgraph_debt`, `loomgraph_check`, `loomgraph_git_metrics` exposed as
+  standalone read primitives (previously only reachable via the
+  `loomgraph_debt_audit` composite). `git_metrics.gather()` shared with the
+  composite (dedupes the inline `_git_metrics_dim`).
+
+### Fixed — `summary.total_entities` wired to topology run (#60)
+- `overall_health.summary.total_entities` was hardcoded 0 with a TODO; now
+  reflects the topology run's real entity count.
+
+### Removed — deprecated workflow skills (#64, breaking)
+- `loomgraph-debt-radar` / `-evolution` / `-sync-advisor` skills deleted
+  (deprecated v0.12.1; replaced by the `loomgraph_debt_audit` /
+  `loomgraph_evolution_track` / `loomgraph_sync_advice` MCP composites).
+  `install-skills` now ships only `init` + `setup`; ship-surface guard pins
+  the surviving set.
+
+### Fixed
+- `SERVER_VERSION` was stale (0.13.0); tracks the release version again.
+
 ## [0.14.2] - 2026-07-06
 
 ### Fixed — `workspace delete` now removes the .db file (#95)

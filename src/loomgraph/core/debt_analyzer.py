@@ -180,6 +180,29 @@ class DebtAnalyzer:
             file_reports=file_reports,
         )
 
+    def _apply_scope(self, data: CodeindexData, scope: str) -> CodeindexData:
+        """Filter codeindex lists to a path prefix (--scope, #61).
+
+        Excludes docs/scripts/tests/etc. from the static debt layer so they
+        don't inflate giant_files / test_smells / file_reports.
+        """
+        prefix = scope.strip().rstrip("/")
+        if not prefix:
+            return data
+
+        def in_scope(p: str) -> bool:
+            return p == prefix or p.startswith(prefix + "/")
+
+        data.giant_files = [d for d in data.giant_files if in_scope(d.get("path", ""))]
+        data.giant_functions = [
+            d for d in data.giant_functions if in_scope(d.get("path", ""))
+        ]
+        data.test_smells = [d for d in data.test_smells if in_scope(d.get("path", ""))]
+        data.file_reports = [
+            d for d in data.file_reports if in_scope(d.get("file_path", ""))
+        ]
+        return data
+
     def _enrich_giant_functions(
         self, functions: list[dict[str, Any]]
     ) -> list[dict[str, Any]]:
@@ -279,6 +302,7 @@ class DebtAnalyzer:
         module: str | None = None,
         with_git: bool = False,
         git_since: str = "3 months",
+        scope: str | None = None,
     ) -> dict[str, Any]:
         """
         Main analysis entry point.
@@ -291,6 +315,9 @@ class DebtAnalyzer:
             module: Optional module filter for topology analysis (e.g. "cli")
             with_git: Enable git metrics analysis (default: False)
             git_since: Time window for git analysis (default: "3 months")
+            scope: Optional absolute path-prefix filter (e.g. "src/") — limits
+                both the codeindex static layer and topology to production source,
+                excluding docs/scripts/tests. Wins over module (#61).
 
         Returns:
             Debt report in standardized format (ADR-012)
@@ -300,6 +327,10 @@ class DebtAnalyzer:
         if codeindex_data:
             imported_data = self.import_codeindex_data(codeindex_data)
 
+        # Step 1.5: Apply --scope path-prefix filter to the static layer (#61)
+        if scope and imported_data:
+            imported_data = self._apply_scope(imported_data, scope)
+
         # Step 2: Analyze issues from codeindex data
         if imported_data:
             await self._analyze_codeindex_issues(imported_data)
@@ -307,7 +338,9 @@ class DebtAnalyzer:
         # Step 3: Analyze graph topology (if client available)
         topology_score = 100  # Default perfect score
         if self.client:
-            topology_score = await self._analyze_topology_issues(module=module)
+            topology_score = await self._analyze_topology_issues(
+                module=module, scope=scope
+            )
 
         # Step 3.5: Analyze git history (EPIC-010 Feature 2)
         git_score = 100  # Default perfect score (no git penalties)
@@ -424,7 +457,9 @@ class DebtAnalyzer:
             )
             issue_id_counter += 1
 
-    async def _analyze_topology_issues(self, module: str | None = None) -> int:
+    async def _analyze_topology_issues(
+        self, module: str | None = None, scope: str | None = None
+    ) -> int:
         """
         Analyze graph topology for structural code smells.
 
@@ -443,6 +478,7 @@ class DebtAnalyzer:
             hub_threshold=8,
             god_threshold=10,
             module=module,
+            scope=scope,
         )
         result = await analyzer.analyze()
 

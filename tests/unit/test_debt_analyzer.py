@@ -88,6 +88,35 @@ class TestCodeindexDataImport:
         assert result.summary == {}
         assert result.giant_files == []
 
+    def test_apply_scope_filters_by_path_prefix(self, analyzer: DebtAnalyzer):
+        """_apply_scope keeps only entries whose path is under the prefix (#61)."""
+        data = CodeindexData(
+            target_path=".",
+            timestamp="",
+            summary={},
+            giant_files=[{"path": "src/app.py"}, {"path": "docs/readme.md"}],
+            giant_functions=[{"path": "src/f.py"}, {"path": "scripts/x.py"}],
+            test_smells=[{"path": "src/t.py"}, {"path": "tests/y.py"}],
+            file_reports=[{"file_path": "src/app.py"}, {"file_path": "docs/d.md"}],
+        )
+
+        filtered = analyzer._apply_scope(data, "src/")
+
+        assert [f["path"] for f in filtered.giant_files] == ["src/app.py"]
+        assert [f["path"] for f in filtered.giant_functions] == ["src/f.py"]
+        assert [s["path"] for s in filtered.test_smells] == ["src/t.py"]
+        assert [r["file_path"] for r in filtered.file_reports] == ["src/app.py"]
+
+    def test_apply_scope_strips_trailing_slash(self, analyzer: DebtAnalyzer):
+        """scope='src' and scope='src/' filter identically (#61)."""
+        data = CodeindexData(
+            target_path=".", timestamp="", summary={},
+            giant_files=[{"path": "src/a.py"}, {"path": "src_deep/leak.py"}],
+        )
+
+        assert len(analyzer._apply_scope(data, "src").giant_files) == 1
+        assert len(analyzer._apply_scope(data, "src/").giant_files) == 1
+
 
 class TestEnrichGiantFunctions:
     """Test _enrich_giant_functions method (complexity estimation)."""
