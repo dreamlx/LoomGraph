@@ -1511,6 +1511,57 @@ class TestAsyncGraphQuery:
         names = [c["entity"] for c in result["callers"]]
         assert names == sorted(names)
 
+    @patch("loomgraph.cli._search.prepare_workspace_store")
+    async def test_depth_bfs_reaches_multi_hop_callees(
+        self, mock_prepare: MagicMock,
+    ) -> None:
+        """`--depth N` does a real BFS, not a no-op: depth=2 reaches the
+        callee of a callee (#103). Default depth=1 stays at direct neighbours."""
+        mock_client = AsyncMock()
+        mock_client.get_all_entities.return_value = [
+            {"entity_name": n, "entity_type": "function", "source_id": f"{n}.py"}
+            for n in ["A", "B", "C", "D"]
+        ]
+        mock_client.get_all_relations.return_value = [
+            {"src_id": "A", "tgt_id": "B", "keywords": "CALLS"},
+            {"src_id": "B", "tgt_id": "C", "keywords": "CALLS"},
+            {"src_id": "C", "tgt_id": "D", "keywords": "CALLS"},
+        ]
+        mock_prepare.return_value = ("test-ws", mock_client)
+        from loomgraph.cli._search import _async_graph_query
+
+        r1 = await _async_graph_query("B", "callees", "all", "test-ws", depth=1)
+        assert [c["entity"] for c in r1["callees"]] == ["C"]
+
+        r2 = await _async_graph_query("B", "callees", "all", "test-ws", depth=2)
+        assert sorted(c["entity"] for c in r2["callees"]) == ["C", "D"]
+
+        # callers BFS too — A has no caller, so depth=2 == depth=1 here
+        r3 = await _async_graph_query("B", "callers", "all", "test-ws", depth=2)
+        assert [c["entity"] for c in r3["callers"]] == ["A"]
+
+    @patch("loomgraph.cli._search.prepare_workspace_store")
+    async def test_depth_bfs_respects_relation_type_filter(
+        self, mock_prepare: MagicMock,
+    ) -> None:
+        """BFS only traverses edges matching --relation-type (#103): a CALLS
+        hop followed by an INHERITS hop is blocked at depth=2 when filtering."""
+        mock_client = AsyncMock()
+        mock_client.get_all_entities.return_value = [
+            {"entity_name": n, "entity_type": "function", "source_id": f"{n}.py"}
+            for n in ["A", "B", "C"]
+        ]
+        mock_client.get_all_relations.return_value = [
+            {"src_id": "A", "tgt_id": "B", "keywords": "CALLS"},
+            {"src_id": "B", "tgt_id": "C", "keywords": "INHERITS"},
+        ]
+        mock_prepare.return_value = ("test-ws", mock_client)
+        from loomgraph.cli._search import _async_graph_query
+
+        # CALLS-only BFS from A reaches B (CALLS), NOT C (B→C is INHERITS)
+        r = await _async_graph_query("A", "callees", "CALLS", "test-ws", depth=5)
+        assert [c["entity"] for c in r["callees"]] == ["B"]
+
 
 class TestAsyncFind:
     """Tests for _async_find graph-layer entity search."""
