@@ -6,6 +6,24 @@
 
 ## [Unreleased]
 
+## [0.15.2] - 2026-07-08
+
+### 修复 — ambiguous CALLS 边不再产生幽灵模块依赖 (#101)
+- codeindex 把 dynamic-dispatch 调用（`db.exec`、`x.json()`）标为
+  `resolution_qualifier=ambiguous`，并把所有同名方法塞进 `candidates`
+  （如 4 个 `test.exec` 测试辅助）。`map_edge` 取 `candidates[0]`，导致
+  `src/lib/api/queries.ts` 里每个 `db.exec` 都被 resolve 到
+  `server.test.customers.test.exec` —— 系统性幽灵跨模块依赖，使 `deps` 和
+  `topology` 在 TS 项目上不可信。
+- `map_edge` 现在用 `dst_raw`（调用表达式）作 ambiguous 边的 `tgt_id`（同
+  `unresolved`），`deps`/`topology` 自然 skip（无 entity 匹配调用表达式 id），
+  candidates 保留在 `edge_data` 供 graph 调用方使用。
+- fabricOS 实测：544 条 ambiguous 边修前 100% 幽灵（全撞真实 entity），修后
+  0；`deps` 的 `→ server/test` 边从 ~20 降到 0。
+- **更新指引**：TS 项目（或大量 `obj.method()` dynamic-dispatch 的代码库）
+  升级后需 `loomgraph index --clear .` 重建，`deps`/`topology` 才清除假边。
+  实体级（`graph`/`find`）不受影响，无需重建。
+
 ## [0.15.1] - 2026-07-08
 
 ### 修复 — git 分支名含斜杠不再导致索引失败 (#99)

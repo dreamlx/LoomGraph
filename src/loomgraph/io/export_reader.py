@@ -158,10 +158,16 @@ def map_edge(rec: dict) -> RelationData | None:
     Per-qualifier handling:
     - resolved   → src→dst, weight=1.0. dst_raw (if present) preserved in
                    edge_data for display/debug.
-    - ambiguous  → src→candidates[0], weight=0.5, full candidate list
-                   preserved in edge_data["candidates"]. dst_raw kept too.
-                   Does NOT fan out to N parallel edges — that would
-                   inflate caller analytics.
+    - ambiguous  → src→dst_raw, weight=0.5, full candidate list preserved
+                   in edge_data["candidates"]. The edge does NOT point at
+                   candidates[0]: codeindex's candidates are same-name
+                   guesses that are wrong for dynamic dispatch
+                   (db.exec → test.exec), and pointing at a real candidate
+                   entity created systematic phantom module deps (#101).
+                   dst_raw (the call expression) is used instead, mirroring
+                   unresolved, so deps/topology skip the edge (no entity
+                   matches a call-expression tgt_id) while graph callers
+                   keep the candidate list for display.
     - unresolved → src→dst_raw if present (the original call expression,
                    `ai-codeindex>=0.27.0`), else UNRESOLVED_SENTINEL.
                    Each unresolved edge gets its own distinct tgt, so no
@@ -184,9 +190,14 @@ def map_edge(rec: dict) -> RelationData | None:
             return None
         tgt_id = dst
     elif qualifier == "ambiguous":
-        if not candidates:
+        # candidates are codeindex's same-name guesses — wrong for dynamic
+        # dispatch (db.exec → test.exec); pointing at candidates[0] made
+        # every ambiguous edge a phantom cross-module dep (#101). Use
+        # dst_raw (like unresolved) so deps/topology skip it; candidates
+        # stay in edge_data for graph callers that want them.
+        if not dst_raw:
             return None
-        tgt_id = candidates[0]
+        tgt_id = dst_raw
     elif qualifier == "unresolved":
         # 0.27.0+: use raw call expression as distinct tgt per edge.
         # Pre-0.27.0 (no dst_raw): fall back to sentinel.
