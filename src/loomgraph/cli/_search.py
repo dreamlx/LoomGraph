@@ -382,7 +382,18 @@ async def _async_graph_query(
         if name:
             source_id_map[name] = ent.get("source_id", "")
 
-    # Filter relations by entity_name (handle both field name variants)
+    # Resolve simple name → stored FQN (#98): a caller passing
+    # `downstreamBlockers` must hit `src.lib.api.queries.downstreamBlockers`.
+    # Exact wins; else a unique dotted-suffix match resolves; ambiguous/none
+    # leaves the name as-is (empty result, no worse than before).
+    resolved = entity_name
+    if entity_name not in source_id_map:
+        suffix = "." + entity_name
+        suffix_matches = [n for n in source_id_map if n.endswith(suffix)]
+        if len(suffix_matches) == 1:
+            resolved = suffix_matches[0]
+
+    # Filter relations by resolved name (handle both field name variants)
     callers: list[dict[str, str]] = []
     callees: list[dict[str, str]] = []
 
@@ -395,14 +406,14 @@ async def _async_graph_query(
         if relation_type != "all" and keywords != relation_type:
             continue
 
-        if tgt == entity_name:
+        if tgt == resolved:
             callers.append({"entity": src, "relation": keywords, "source_id": source_id_map.get(src, "")})
-        if src == entity_name:
+        if src == resolved:
             callees.append({"entity": tgt, "relation": keywords, "source_id": source_id_map.get(tgt, "")})
 
     result: dict[str, Any] = {
-        "entity": entity_name,
-        "source_id": source_id_map.get(entity_name, ""),
+        "entity": resolved,
+        "source_id": source_id_map.get(resolved, ""),
     }
 
     if direction in ("callers", "both"):
