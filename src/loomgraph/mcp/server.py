@@ -42,7 +42,7 @@ from loomgraph.mcp.tools import workspace as t_workspace
 logger = logging.getLogger(__name__)
 
 SERVER_NAME = "loomgraph"
-SERVER_VERSION = "0.15.1"
+SERVER_VERSION = "0.15.2"
 
 # Registry of available tools. Each entry: (Tool spec, async handler).
 # When adding a new tool, add its module to loomgraph.mcp.tools and

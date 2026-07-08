@@ -173,17 +173,50 @@ def test_map_edge_resolved_uses_dst_weight_1():
     assert rel.edge_data["keywords"] == "CALLS"
 
 
-def test_map_edge_ambiguous_uses_first_candidate_keeps_full_list():
+def test_map_edge_ambiguous_uses_dst_raw_keeps_candidates():
+    """codeindex's candidates for an ambiguous edge are same-name guesses —
+    often wrong for dynamic dispatch (db.exec → test.exec, #101). The edge
+    must NOT point at candidates[0] (a real entity) or it becomes a phantom
+    cross-module dep. tgt_id uses dst_raw (like unresolved); the candidate
+    list is preserved in edge_data for callers that want it."""
     rel = map_edge(EDGE_RECORDS[1])
     assert rel is not None
     assert rel.src_id == "app.workers.kickoff"
-    assert rel.tgt_id == "app.workers.Builder.run"
+    assert rel.tgt_id == "Builder.run"  # dst_raw, NOT candidates[0]
+    assert rel.tgt_id != "app.workers.Builder.run"  # not the phantom target
     assert rel.edge_data["weight"] == 0.5
     assert rel.edge_data["resolution_qualifier"] == "ambiguous"
     assert rel.edge_data["candidates"] == [
         "app.workers.Builder.run",
         "app.workers.Packer.run",
     ]
+
+
+def test_map_edge_ambiguous_dynamic_dispatch_not_phantom_target():
+    """#101: codeindex tags `db.exec` (db is a param — dynamic dispatch) as
+    ambiguous and stuffs every same-name method into candidates (here test
+    helpers). Taking candidates[0] resolved every db.exec call to
+    server.test.customers.test.exec — a systematic phantom module dep. tgt_id
+    must be the call expression (db.exec), never a candidate entity."""
+    rec = {
+        "type": "edge",
+        "kind": "CALLS",
+        "src": "src.lib.api.queries.downstreamBlockers",
+        "dst": None,
+        "dst_raw": "db.exec",
+        "candidates": [
+            "server.test.customers.test.exec",
+            "server.test.products.test.exec",
+        ],
+        "resolution_qualifier": "ambiguous",
+        "source_id": "src/lib/api/queries.ts:89",
+    }
+    rel = map_edge(rec)
+    assert rel is not None
+    assert rel.tgt_id == "db.exec"
+    for phantom in rec["candidates"]:
+        assert rel.tgt_id != phantom
+    assert rel.edge_data["candidates"] == rec["candidates"]
 
 
 def test_map_edge_unresolved_uses_dst_raw_when_present():
@@ -220,9 +253,12 @@ def test_map_edge_resolved_preserves_dst_raw_for_display():
     assert rel.edge_data["dst_raw"] == "self.authenticate"
 
 
-def test_map_edge_malformed_ambiguous_returns_none():
+def test_map_edge_ambiguous_without_dst_raw_returns_none():
+    """An ambiguous edge with no dst_raw can't get a distinct tgt_id —
+    return None so it's skipped (mirrors unresolved's dst_raw requirement,
+    #101)."""
     rec = dict(EDGE_RECORDS[1])
-    rec["candidates"] = []  # ambiguous but no candidates listed
+    del rec["dst_raw"]
     assert map_edge(rec) is None
 
 
