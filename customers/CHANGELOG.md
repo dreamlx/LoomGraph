@@ -6,6 +6,19 @@
 
 ## [Unreleased]
 
+## [0.15.3] - 2026-07-08
+
+### 修复 — `graph --depth` 现在做真 BFS，之前是 no-op (#103)
+- `graph()` 收了 `--depth` 但调 `_async_graph_query` 时丢了，导致 depth
+  1/2/3/5 返回完全相同结果（仅直接邻居）。`_async_graph_query` 现在建
+  relation_type 过滤的 adjacency，对 callers/callees 做 `depth` 层 BFS
+  （复用 `find --with-relations` 的 `_bfs_collect`）。depth=1 行为不变；
+  depth>1 传递性扩展，去重。
+- an internal TS monorepo 实测：`graph src.__tests__.db-seed.test. --callees --depth 1` →
+  22，`--depth 2` → 23（经一跳 callee 到达 `JSON.stringify`）。
+- **注意**：密集代码图（如 an internal TS monorepo 5794 relations）depth>2 可能返回大量
+  节点，按需选 depth。
+
 ## [0.15.2] - 2026-07-08
 
 ### 修复 — ambiguous CALLS 边不再产生幽灵模块依赖 (#101)

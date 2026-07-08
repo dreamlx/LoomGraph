@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.3] - 2026-07-08
+
+### Fixed — `graph --depth` now does a real BFS, was a no-op (#103)
+- `graph()` received `--depth` but dropped it before calling
+  `_async_graph_query`, so depth 1/2/3/5 returned identical results (direct
+  neighbours only). `_async_graph_query` now builds relation_type-filtered
+  adjacency and BFS-expands callers/callees to `depth` layers (reuses
+  `_bfs_collect`, the helper `find --with-relations` already uses).
+  depth=1 unchanged; depth>1 expands transitively, deduped.
+- Verified an internal TS monorepo: `graph src.__tests__.db-seed.test. --callees --depth 1`
+  → 22, `--depth 2` → 23 (reaches `JSON.stringify` via a callee hop).
+
 ## [0.15.2] - 2026-07-08
 
 ### Fixed — ambiguous CALLS edges no longer create phantom module deps (#101)
