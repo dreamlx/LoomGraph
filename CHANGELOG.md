@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.2] - 2026-07-08
+
+### Fixed — ambiguous CALLS edges no longer create phantom module deps (#101)
+- codeindex tags dynamic-dispatch calls (`db.exec`, `x.json()`) as
+  `resolution_qualifier=ambiguous` and stuffs every same-name method into
+  `candidates` (e.g. all four `test.exec` helpers). `map_edge` took
+  `candidates[0]`, so every `db.exec` in `src/lib/api/queries.ts` resolved
+  to `server.test.customers.test.exec` — a systematic phantom cross-module
+  dep that made `deps` and `topology` untrustworthy on TS projects.
+- `map_edge` now uses `dst_raw` (the call expression) as the ambiguous
+  edge's `tgt_id`, mirroring `unresolved`, so `deps`/`topology` skip it
+  (no entity matches a call-expression id) while the candidate list stays
+  in `edge_data` for graph callers that want it.
+- Verified on an internal TS monorepo: 544 ambiguous edges were 100% phantom before (all
+  hit a real entity), 0 after; `deps` `→ server/test` edges went from ~20
+  to 0. Note: the issue's original root cause ("inject resolves dst_raw
+  against the entity table") was wrong — loomgraph has no such logic; the
+  real cause was `candidates[0]`.
+
 ## [0.15.1] - 2026-07-08
 
 ### Fixed — slash in git branch name no longer breaks indexing (#99)
