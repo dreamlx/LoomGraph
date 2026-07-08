@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.1] - 2026-07-08
+
+### Fixed — slash in git branch name no longer breaks indexing (#99)
+- A branch like `codex/ui-grammar-filter-parity-us023` made the workspace
+  name contain `/`, which the filesystem parsed as a path — the DB landed
+  in a subdirectory with 0 rows injected and was undiscoverable by
+  `workspace list` (which globs top-level `*.db`). `_resolve_db_path` now
+  sanitizes `/` and `\` to `-`, so the DB stays at the top level and
+  round-trips (index → query). Affects every `feature/*` / `bugfix/*` /
+  `codex/*` branch (mainstream git convention); the silent-fail nature
+  had previously masqueraded as a "TS CALLS-edge quality bug".
+
+### Fixed — `graph <simple-name>` resolves to the stored FQN (#98)
+- `loomgraph graph downstreamBlockers` returned `callers: [], source_id: ""`
+  because the traversal compared the raw name with `==` against
+  module-qualified stored names and never resolved it. `_async_graph_query`
+  now resolves a simple name to its FQN (exact match wins; else a unique
+  dotted-suffix match). `graph downstreamBlockers` now returns the 2
+  callers (handler + test) that `find --with-relations` and Serena LSP
+  already saw. Root cause was in the query, not ingest.
+
 ## [0.15.0] - 2026-07-07
 
 ### Added — `--scope` path-prefix filter for debt/topology (#61)

@@ -6,6 +6,23 @@
 
 ## [Unreleased]
 
+## [0.15.1] - 2026-07-08
+
+### 修复 — git 分支名含斜杠不再导致索引失败 (#99)
+- 分支名如 `codex/ui-grammar-filter-parity-us023` 会让 workspace 名含 `/`，
+  文件系统将其当路径分隔符 —— DB 落到子目录且 0 行数据落库，`workspace
+  list` 也发现不了（只扫顶层 `*.db`）。`_resolve_db_path` 现把 `/` 和 `\`
+  净化为 `-`，DB 落顶层且 round-trip 自洽（index → 查询）。影响所有
+  `feature/*` / `bugfix/*` / `codex/*` 分支（git 主流约定）；此前这个
+  silent-fail 被误判为"TS CALLS 边 quality bug"。
+
+### 修复 — `graph <简单名>` 现解析到存储的 FQN (#98)
+- `loomgraph graph downstreamBlockers` 之前返回 `callers: [], source_id: ""`
+  —— 遍历用 `==` 把裸名跟模块限定名比较，从不解析。`_async_graph_query`
+  现把简单名解析到 FQN（精确匹配优先；否则唯一 dotted-suffix 匹配）。
+  `graph downstreamBlockers` 现返回 2 个调用方（handler + test），与
+  `find --with-relations` 和 Serena LSP 一致。根因在查询端，不在 ingest。
+
 ## [0.15.0] - 2026-07-07
 
 ### 新增 — debt/topology 的 `--scope` 路径过滤 (#61)
