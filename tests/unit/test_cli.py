@@ -1447,7 +1447,53 @@ class TestAsyncGraphQuery:
 
         assert result["callers"] == []
         assert result["callees"] == []
-        assert result["source_id"] == ""
+
+    @patch("loomgraph.cli._search.prepare_workspace_store")
+    async def test_resolves_simple_name_to_fqn(self, mock_prepare: MagicMock) -> None:
+        """A simple name that uniquely matches a stored FQN by dotted suffix
+        is resolved, so `graph <simple-name>` returns callers instead of an
+        empty graph (#98)."""
+        mock_client = AsyncMock()
+        mock_client.get_all_entities.return_value = [
+            {"entity_name": "src.lib.api.queries.downstreamBlockers",
+             "entity_type": "function", "source_id": "src/lib/api/queries.ts:86"},
+            {"entity_name": "src.mocks.handlers.voidHandler",
+             "entity_type": "function", "source_id": "src/mocks/handlers.ts:166"},
+        ]
+        mock_client.get_all_relations.return_value = [
+            {"src_id": "src.mocks.handlers.voidHandler",
+             "tgt_id": "src.lib.api.queries.downstreamBlockers", "keywords": "CALLS"},
+        ]
+        mock_prepare.return_value = ("test-ws", mock_client)
+        from loomgraph.cli._search import _async_graph_query
+
+        result = await _async_graph_query("downstreamBlockers", "both", "all", "test-ws")
+
+        assert result["entity"] == "src.lib.api.queries.downstreamBlockers"
+        assert result["source_id"] == "src/lib/api/queries.ts:86"
+        assert result["callers_count"] == 1
+        assert result["callers"][0]["entity"] == "src.mocks.handlers.voidHandler"
+
+    @patch("loomgraph.cli._search.prepare_workspace_store")
+    async def test_exact_match_wins_over_suffix(self, mock_prepare: MagicMock) -> None:
+        """When both an exact name and a dotted-suffix match exist, exact wins
+        — suffix resolution must not hijack an existing entity (#98)."""
+        mock_client = AsyncMock()
+        mock_client.get_all_entities.return_value = [
+            {"entity_name": "foo", "entity_type": "function", "source_id": "a.py"},
+            {"entity_name": "a.b.foo", "entity_type": "function", "source_id": "b.py"},
+        ]
+        mock_client.get_all_relations.return_value = [
+            {"src_id": "caller", "tgt_id": "foo", "keywords": "CALLS"},
+        ]
+        mock_prepare.return_value = ("test-ws", mock_client)
+        from loomgraph.cli._search import _async_graph_query
+
+        result = await _async_graph_query("foo", "callers", "all", "test-ws")
+
+        assert result["entity"] == "foo"
+        assert result["callers_count"] == 1
+        assert result["source_id"] == "a.py"
 
     @patch("loomgraph.cli._search.prepare_workspace_store")
     async def test_callers_sorted(

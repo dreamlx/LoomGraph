@@ -39,6 +39,28 @@ class TestDBPathResolution:
         resolved = _resolve_db_path(template, None)
         assert resolved == tmp_path / "fixed.db"
 
+    def test_sanitizes_slash_in_workspace_name(self, tmp_path: Path) -> None:
+        """A `/` in the branch (codex/foo) must not create a subdirectory —
+        sanitize to a single filename component so the DB stays discoverable
+        at the top level (#99)."""
+        template = str(tmp_path / "{workspace}.db")
+        resolved = _resolve_db_path(template, "internal-ts:codex/foo")
+        assert resolved.parent == tmp_path
+        assert resolved.name == "internal-ts:codex-foo.db"
+
+    def test_sanitizes_backslash_in_workspace_name(self, tmp_path: Path) -> None:
+        template = str(tmp_path / "{workspace}.db")
+        resolved = _resolve_db_path(template, r"proj:bugfix\x")
+        assert resolved.parent == tmp_path
+        assert resolved.name == "proj:bugfix-x.db"
+
+    def test_workspace_without_slash_unchanged(self, tmp_path: Path) -> None:
+        """Existing workspace names (no slash) must round-trip untouched (#99
+        regression guard)."""
+        template = str(tmp_path / "{workspace}.db")
+        resolved = _resolve_db_path(template, "loomgraph:main")
+        assert resolved == tmp_path / "loomgraph:main.db"
+
 
 class TestGraphStoreFactory:
     async def test_sqlite_backend_default(

@@ -20,10 +20,16 @@ if TYPE_CHECKING:
 
 
 def _resolve_db_path(template: str, workspace: str | None) -> Path:
-    """Expand the sqlite db_path template (`~` + `{workspace}`)."""
+    """Expand the sqlite db_path template (`~` + `{workspace}`).
+
+    Path separators in the workspace name are sanitized (#99): a git branch
+    like ``codex/foo`` would otherwise turn into a subdirectory and the DB
+    becomes undiscoverable (workspace list scans top-level ``*.db`` only).
+    """
     expanded = Path(template).expanduser()
     if "{workspace}" in str(expanded) and workspace:
-        expanded = Path(str(expanded).replace("{workspace}", workspace))
+        safe_workspace = workspace.replace("\\", "/").replace("/", "-")
+        expanded = Path(str(expanded).replace("{workspace}", safe_workspace))
     return expanded
 
 
