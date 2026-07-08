@@ -353,7 +353,7 @@ def graph(entity_name: str, direction: str, depth: int, relation_type: str, work
     returning exact callers and callees from stored relations.
     """
     try:
-        result = asyncio.run(_async_graph_query(entity_name, direction, relation_type, workspace))
+        result = asyncio.run(_async_graph_query(entity_name, direction, relation_type, workspace, depth))
         output_success(result)
     except Exception as e:
         output_error(
@@ -368,6 +368,7 @@ async def _async_graph_query(
     direction: str,
     relation_type: str,
     workspace: str | None = None,
+    depth: int = 1,
 ) -> dict[str, Any]:
     """Run graph traversal via graph layer API (precise structural query)."""
     ws, store = await prepare_workspace_store(workspace)
@@ -393,23 +394,29 @@ async def _async_graph_query(
         if len(suffix_matches) == 1:
             resolved = suffix_matches[0]
 
-    # Filter relations by resolved name (handle both field name variants)
-    callers: list[dict[str, str]] = []
-    callees: list[dict[str, str]] = []
+    # Build relation_type-filtered adjacency and BFS up to `depth` layers
+    # (#103): previously `--depth` was a no-op (graph() dropped it before
+    # calling here). depth=1 == direct neighbours (prior behaviour); depth>1
+    # expands callers/callees transitively, deduped, never revisiting start.
+    from collections import defaultdict
 
+    outgoing: dict[str, list[dict[str, str]]] = defaultdict(list)
+    incoming: dict[str, list[dict[str, str]]] = defaultdict(list)
     for rel in relations:
         src = rel.get("src_id", "") or rel.get("source", "")
         tgt = rel.get("tgt_id", "") or rel.get("target", "")
         keywords = rel.get("keywords", "UNKNOWN")
-
-        # Apply relation type filter
         if relation_type != "all" and keywords != relation_type:
             continue
+        if not (src and tgt):
+            continue
+        outgoing[src].append({"entity": tgt, "relation": keywords,
+                              "source_id": source_id_map.get(tgt, "")})
+        incoming[tgt].append({"entity": src, "relation": keywords,
+                              "source_id": source_id_map.get(src, "")})
 
-        if tgt == resolved:
-            callers.append({"entity": src, "relation": keywords, "source_id": source_id_map.get(src, "")})
-        if src == resolved:
-            callees.append({"entity": tgt, "relation": keywords, "source_id": source_id_map.get(tgt, "")})
+    callees = _bfs_collect(resolved, outgoing, depth)
+    callers = _bfs_collect(resolved, incoming, depth)
 
     result: dict[str, Any] = {
         "entity": resolved,
