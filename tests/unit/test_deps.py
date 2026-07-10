@@ -165,6 +165,92 @@ class TestDepsAnalyzer:
         assert dep["to"] == "src"
 
 
+class TestAutoDepthDrillDown:
+    """#106: single-package repos (src/<pkg>/*) collapse to one module at the
+    starting depth, hiding cli→core etc. auto_depth re-runs at increasing depth
+    until more than one real module appears. On by default; opt out with
+    auto_depth=False."""
+
+    @pytest.fixture
+    def mock_client(self) -> AsyncMock:
+        return AsyncMock()
+
+    @pytest.mark.asyncio
+    async def test_drills_single_package_repo(self, mock_client: AsyncMock) -> None:
+        """src/loomgraph/{cli,core} at depth=2 is one module → drill to depth=3."""
+        mock_client.get_all_entities.return_value = [
+            {"entity_name": "cli.run", "source_id": "src/lg/cli/run.py"},
+            {"entity_name": "core.Worker", "source_id": "src/lg/core/worker.py"},
+        ]
+        mock_client.get_all_relations.return_value = [
+            {"src_id": "cli.run", "tgt_id": "core.Worker", "keywords": "CALLS"},
+        ]
+
+        analyzer = DepsAnalyzer(client=mock_client, depth=2)  # auto_depth default True
+        result = await analyzer.analyze()
+
+        # depth=2 would give a single "src/lg" module + 0 deps; auto_depth
+        # drills to depth=3 so cli→core surfaces.
+        assert "src/lg/cli" in result.modules
+        assert "src/lg/core" in result.modules
+        assert len(result.dependencies) == 1
+        assert result.dependencies[0]["from"] == "src/lg/cli"
+        assert result.dependencies[0]["to"] == "src/lg/core"
+
+    @pytest.mark.asyncio
+    async def test_no_drill_when_already_multi_module(self, mock_client: AsyncMock) -> None:
+        """Multi-module repo at depth=2 already has >1 module → no drill."""
+        mock_client.get_all_entities.return_value = [
+            {"entity_name": "A", "source_id": "src/auth/a.py"},
+            {"entity_name": "B", "source_id": "src/api/b.py"},
+        ]
+        mock_client.get_all_relations.return_value = [
+            {"src_id": "A", "tgt_id": "B", "keywords": "CALLS"},
+        ]
+
+        analyzer = DepsAnalyzer(client=mock_client, depth=2)
+        result = await analyzer.analyze()
+
+        # stays at depth=2: src/auth, src/api (not drilled to src/auth/*, src/api/*)
+        assert result.modules == ["src/api", "src/auth"]
+        assert len(result.dependencies) == 1
+
+    @pytest.mark.asyncio
+    async def test_auto_depth_disabled_keeps_fixed_depth(self, mock_client: AsyncMock) -> None:
+        """auto_depth=False preserves exact depth even if it yields one module."""
+        mock_client.get_all_entities.return_value = [
+            {"entity_name": "cli.run", "source_id": "src/lg/cli/run.py"},
+            {"entity_name": "core.Worker", "source_id": "src/lg/core/worker.py"},
+        ]
+        mock_client.get_all_relations.return_value = [
+            {"src_id": "cli.run", "tgt_id": "core.Worker", "keywords": "CALLS"},
+        ]
+
+        analyzer = DepsAnalyzer(client=mock_client, depth=2, auto_depth=False)
+        result = await analyzer.analyze()
+
+        # fixed depth=2 → one module "src/lg", 0 deps (the pre-#106 behaviour)
+        assert result.modules == ["src/lg"]
+        assert len(result.dependencies) == 0
+
+    @pytest.mark.asyncio
+    async def test_drill_stops_at_first_multi_module_depth(self, mock_client: AsyncMock) -> None:
+        """Don't over-drill: stop as soon as >1 module appears (no finer split)."""
+        mock_client.get_all_entities.return_value = [
+            {"entity_name": "a", "source_id": "src/lg/cli/x/a.py"},
+            {"entity_name": "b", "source_id": "src/lg/core/y/b.py"},
+        ]
+        mock_client.get_all_relations.return_value = [
+            {"src_id": "a", "tgt_id": "b", "keywords": "CALLS"},
+        ]
+
+        analyzer = DepsAnalyzer(client=mock_client, depth=2)
+        result = await analyzer.analyze()
+
+        # depth=3 already yields src/lg/cli + src/lg/core → stop there, NOT depth=4
+        assert result.modules == ["src/lg/cli", "src/lg/core"]
+
+
 class TestDepsResult:
     """Tests for DepsResult serialization."""
 
