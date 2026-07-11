@@ -378,10 +378,12 @@ async def _async_graph_query(
 
     # Build entity name → source_id lookup
     source_id_map: dict[str, str] = {}
+    entity_type_map: dict[str, str] = {}
     for ent in entities:
         name = ent.get("entity_name", "") or ent.get("entity_id", "") or ent.get("id", "")
         if name:
             source_id_map[name] = ent.get("source_id", "")
+            entity_type_map[name] = ent.get("entity_type", "")
 
     # Resolve simple name → stored FQN (#98): a caller passing
     # `downstreamBlockers` must hit `src.lib.api.queries.downstreamBlockers`.
@@ -417,6 +419,22 @@ async def _async_graph_query(
 
     callees = _bfs_collect(resolved, outgoing, depth)
     callers = _bfs_collect(resolved, incoming, depth)
+
+    # #105: a class entity owns no outgoing edges itself — the calls live on
+    # its methods (Class.method). So `graph SomeClass` saw 0 callees even
+    # though every method was calling things. When the resolved entity is a
+    # class, fold its methods' callees in (additive over any direct edges the
+    # class already has, e.g. REFERENCES; deduped by target). callers are
+    # unaffected — constructor edges land on the class via codeindex #132.
+    if entity_type_map.get(resolved) == "class":
+        method_prefix = resolved + "."
+        seen_callees = {c["entity"] for c in callees}
+        for name in source_id_map:
+            if name.startswith(method_prefix):
+                for edge in _bfs_collect(name, outgoing, depth):
+                    if edge["entity"] not in seen_callees:
+                        seen_callees.add(edge["entity"])
+                        callees.append(edge)
 
     result: dict[str, Any] = {
         "entity": resolved,
