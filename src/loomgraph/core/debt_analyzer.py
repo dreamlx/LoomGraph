@@ -21,6 +21,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from loomgraph import __version__
 from loomgraph.storage.base import GraphStore
 
 logger = logging.getLogger(__name__)
@@ -380,7 +381,7 @@ class DebtAnalyzer:
             "project": "unknown",  # TODO: detect from workspace
             "generator": {
                 "tool": "loomgraph",
-                "version": "0.9.0",  # TODO: get from package version
+                "version": __version__,
             },
             "overall_health": overall_health,
             "issues": [self._issue_to_dict(issue) for issue in self.issues],
