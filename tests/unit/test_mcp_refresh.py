@@ -34,7 +34,7 @@ def fakes(monkeypatch: pytest.MonkeyPatch) -> types.SimpleNamespace:
     ns.store.insert_custom_kg = AsyncMock()
     ns.store.get_graph_stats = AsyncMock(return_value={"entities": 0, "relations": 0})
     ns.create = AsyncMock(return_value=ns.store)
-    ns.export = MagicMock(return_value=([], [], ImportSummary()))
+    ns.export = MagicMock(return_value=([], [], ImportSummary(), []))
     ns.is_git = MagicMock(return_value=True)
     ns.worktree = MagicMock(return_value=[])
     ns.incr = AsyncMock(
