@@ -283,6 +283,12 @@ def _attach_relations(
         tgt = rel.get("tgt_id", "") or rel.get("target", "")
         keywords = rel.get("keywords", "UNKNOWN")
 
+        # #113: skip low-trust (unresolved/ambiguous) edges so phantom callees
+        # don't leak into --with-relations output. find gives no escape hatch —
+        # use `graph --include-unresolved` to inspect raw call expressions.
+        if not _edge_is_trusted(rel, include_unresolved=False):
+            continue
+
         if src and tgt:
             outgoing[src].append({"entity": tgt, "relation": keywords})
             incoming[tgt].append({"entity": src, "relation": keywords})
@@ -328,6 +334,18 @@ def _bfs_collect(
     return result
 
 
+def _edge_is_trusted(rel: dict[str, Any], include_unresolved: bool) -> bool:
+    """#113: unresolved/ambiguous edges target a call expression (dst_raw), not
+    an in-repo entity — surfacing them yields phantom callees/callers
+    (``source_id=""``). Default to trusted-only (resolved). ``include_unresolved``
+    keeps them for raw-call inspection. A relation missing the field is treated
+    as resolved (old data / pre-#113 fixtures never get filtered)."""
+    if include_unresolved:
+        return True
+    qualifier = str(rel.get("resolution_qualifier", "resolved"))
+    return qualifier == "resolved"
+
+
 @main.command()
 @click.argument("entity_name")
 @click.option(
@@ -337,14 +355,15 @@ def _bfs_collect(
     help="Query direction",
 )
 @click.option("--depth", default=1, help="Traversal depth")
-@click.option(
-    "--relation-type",
+@click.option("--relation-type",
     type=click.Choice(["CALLS", "INHERITS", "IMPORTS", "all"]),
     default="all",
     help="Relation type filter",
 )
+@click.option("--include-unresolved", is_flag=True, default=False,
+    help="Include unresolved/ambiguous edges (phantom targets not in repo)")
 @click.option("--workspace", "-w", default=None, help="Workspace name (default: current directory name)")
-def graph(entity_name: str, direction: str, depth: int, relation_type: str, workspace: str | None) -> None:
+def graph(entity_name: str, direction: str, depth: int, relation_type: str, include_unresolved: bool, workspace: str | None) -> None:
     """Query entity relationships in the graph.
 
     ENTITY_NAME: Name of the entity to query
@@ -353,7 +372,7 @@ def graph(entity_name: str, direction: str, depth: int, relation_type: str, work
     returning exact callers and callees from stored relations.
     """
     try:
-        result = asyncio.run(_async_graph_query(entity_name, direction, relation_type, workspace, depth))
+        result = asyncio.run(_async_graph_query(entity_name, direction, relation_type, workspace, depth, include_unresolved))
         output_success(result)
     except Exception as e:
         output_error(
@@ -369,6 +388,7 @@ async def _async_graph_query(
     relation_type: str,
     workspace: str | None = None,
     depth: int = 1,
+    include_unresolved: bool = False,
 ) -> dict[str, Any]:
     """Run graph traversal via graph layer API (precise structural query)."""
     ws, store = await prepare_workspace_store(workspace)
@@ -409,6 +429,12 @@ async def _async_graph_query(
         tgt = rel.get("tgt_id", "") or rel.get("target", "")
         keywords = rel.get("keywords", "UNKNOWN")
         if relation_type != "all" and keywords != relation_type:
+            continue
+        # #113: skip low-trust (unresolved/ambiguous) edges by default — their
+        # tgt is a call expression (dst_raw), not an in-repo entity, so they'd
+        # surface as phantom callees/callers with source_id="". --include-unresolved
+        # brings them back for raw-call inspection.
+        if not _edge_is_trusted(rel, include_unresolved):
             continue
         if not (src and tgt):
             continue

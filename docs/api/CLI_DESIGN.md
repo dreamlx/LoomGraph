@@ -110,7 +110,9 @@ loomgraph import-export <artifact> [options]
 
 **默认 workspace 命名**: `<artifact-basename>:imported`（`:imported` 后缀避免与 `loomgraph index .` 的 workspace 撞名）
 
-**资格保真**: 每条 edge 的 `resolution_qualifier`（`resolved` / `ambiguous` / `unresolved`）原样保留在 `edge_data` 里，让下游 `find` / `graph` 查询能显式过滤。`unresolved` edges 不入库（避免单一 sentinel target 造成虚假 hub），但 `summary.edge_qualifiers["unresolved"]` 保留完整计数。
+**资格保真**: 每条 edge 的 `resolution_qualifier`（`resolved` / `ambiguous` / `unresolved`）原样保留在 `edge_data` 里。自 `ai-codeindex>=0.27.0` 起，`unresolved` / `ambiguous` 边入库（`tgt_id` = 调用表达式 `dst_raw`，如 `os.environ.get`，目标可能不在仓库 entity 表内），`summary.edge_qualifiers` 保留各 qualifier 完整计数。
+
+**查询默认只信 resolved**（#113）：`graph` 与 `find --with-relations` 默认只返回 `resolved` 边，避免 `unresolved` / `ambiguous` 的 phantom target（`source_id=""`）淹没真实 callees/callers。`graph` 加 `--include-unresolved` 可带回低信任边供 raw-call 调试（target 仍是 `dst_raw` 原文，`source_id` 为空）。`deps` / `topology` 不受影响（前者按 module 映射天然跳过 unmapped target，后者 `INNER JOIN entities` 过滤 phantom）。
 
 **成功输出**（`--dry-run`）:
 ```json
@@ -378,6 +380,7 @@ loomgraph graph <entity_name> [options]
 | `--direction` | 查询方向 | `both` |
 | `--depth` | 遍历深度 | `1` |
 | `--relation-type` | 关系类型 | `all` |
+| `--include-unresolved` | 包含 unresolved/ambiguous 低信任边（target 为调用表达式，可能不在仓库 entity 表内，显示为 `source_id=""`） | `false` |
 | `--workspace/-w` | Workspace 名称 | 当前目录名 |
 
 **方向**:
@@ -390,6 +393,8 @@ loomgraph graph <entity_name> [options]
 - `INHERITS` - 继承关系
 - `IMPORTS` - 导入关系
 - `all` - 所有关系
+
+> **#113 信任过滤**: 默认只返回 `resolved` 边。`unresolved`（builtin/stdlib/动态分发，如 `len`/`click.echo`）与 `ambiguous`（同名猜测，#101）边的 target 是调用表达式而非仓库实体，默认过滤掉以免 phantom callees/callers（`source_id=""`）淹没真实结果。需要查看原始调用表达式时加 `--include-unresolved`。
 
 **成功输出**:
 ```json
