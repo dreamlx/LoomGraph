@@ -104,7 +104,7 @@ def test_run_graph_export_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
     monkeypatch.setattr(
         "loomgraph.core.graph_export_ingest.Popen", lambda *a, **kw: proc
     )
-    entities, relations, summary = run_graph_export(tmp_path)
+    entities, relations, summary, _ = run_graph_export(tmp_path)
     assert len(entities) == 2
     assert [e.entity_name for e in entities] == ["pkg.a.handle", "pkg.b.handle"]
     assert len(relations) == 1
@@ -112,6 +112,43 @@ def test_run_graph_export_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
     assert relations[0].tgt_id == "pkg.b.handle"
     assert summary.entity_count == 2
     assert summary.relation_count == 1
+
+
+def test_run_graph_export_returns_stderr_warnings(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """#108: codeindex's partial-graph WARNING (few-entity false-positive, #131)
+    must reach the caller so `loomgraph index` isn't a silent success on a
+    misconfigured non-Python repo. returncode is 0; stderr holds the warning."""
+    proc = _FakeProc(
+        stdout=_ndjson([META, E1]),
+        stderr=(
+            "WARNING: partial graph — graph-export captured 1 entities but "
+            "configured languages ['python'] leave code files uncaptured "
+            "(.tsx (1), .ts (1)). Add typescript to .codeindex.yaml "
+            "`languages:` to capture them\n"
+        ),
+    )
+    monkeypatch.setattr(
+        "loomgraph.core.graph_export_ingest.Popen", lambda *a, **kw: proc
+    )
+    entities, relations, summary, warnings = run_graph_export(tmp_path)
+    assert len(entities) == 1
+    assert len(warnings) == 1
+    assert "partial graph" in warnings[0]
+    assert "typescript" in warnings[0]
+
+
+def test_run_graph_export_no_warnings_when_stderr_clean(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A clean export returns an empty warnings list (not None)."""
+    proc = _FakeProc(stdout=_ndjson([META, E1]), stderr="")
+    monkeypatch.setattr(
+        "loomgraph.core.graph_export_ingest.Popen", lambda *a, **kw: proc
+    )
+    _, _, _, warnings = run_graph_export(tmp_path)
+    assert warnings == []
 
 
 def test_run_graph_export_invokes_codeindex_graph_export(

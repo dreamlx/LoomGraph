@@ -39,13 +39,16 @@ def run_graph_export(
     repo: Any,
     *,
     timeout: int = 600,
-) -> tuple[list[EntityData], list[RelationData], ImportSummary]:
+) -> tuple[list[EntityData], list[RelationData], ImportSummary, list[str]]:
     """Invoke ``codeindex graph-export --root <repo> -o -`` and read the NDJSON.
 
     The export streams to stdout; we capture it via ``communicate`` and hand the
     bytes to :class:`GraphExportReader` (file-path based, hence the temp file).
 
-    Returns the mapped ``(entities, relations, summary)``. Raises
+    Returns ``(entities, relations, summary, warnings)``. ``warnings`` holds
+    codeindex's stderr WARNING lines (e.g. the few-entity partial-graph hint,
+    #131) so a misconfigured non-Python repo doesn't index as a silent success
+    (#108) — callers surface them to the user/agent. Raises
     :class:`GraphExportError` on non-zero exit or timeout.
     """
     # Invoke via the venv python (`sys.executable -m codeindex.cli`), never a
@@ -71,13 +74,21 @@ def run_graph_export(
             f"codeindex graph-export exited {proc.returncode}: {stderr.strip()}"
         )
 
+    # codeindex writes partial-graph diagnostics to stderr on a 0-exit (#131);
+    # surface those lines so callers don't see a silent success on a
+    # misconfigured repo (#108). Non-WARNING stderr (progress noise) is ignored.
+    warnings = [
+        line for line in stderr.splitlines() if line.strip().startswith("WARNING:")
+    ]
+
     fd, tmp_path = tempfile.mkstemp(suffix=".ndjson")
     try:
         with os.fdopen(fd, "w") as fh:
             fh.write(stdout)
-        return GraphExportReader(tmp_path).read()
+        entities, relations, summary = GraphExportReader(tmp_path).read()
     finally:
         os.unlink(tmp_path)
+    return entities, relations, summary, warnings
 
 
 def _emit(

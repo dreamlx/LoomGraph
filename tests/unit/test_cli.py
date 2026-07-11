@@ -454,6 +454,7 @@ class TestIndexCommand:
             [],
             [],
             ImportSummary(entity_count=2, relation_count=1),
+            [],
         )
         mock_async_index.return_value = {
             "cleared": True,
@@ -506,6 +507,7 @@ class TestIndexCommand:
             [e1, e2],
             [rel],
             ImportSummary(entity_count=2, relation_count=1),
+            [],
         )
         fake_store = AsyncMock()
         fake_store.delete_all = AsyncMock()
@@ -543,6 +545,7 @@ class TestIndexCommand:
             [],
             [],
             ImportSummary(entity_count=0, relation_count=0),
+            [],
         )
         mock_async_index.return_value = {
             "cleared": True,
@@ -583,6 +586,7 @@ class TestIndexCommand:
             [],
             [],
             ImportSummary(entity_count=0, relation_count=0),
+            [],
         )
         mock_async_index.return_value = {
             "cleared": True,
@@ -621,6 +625,7 @@ class TestIndexCommand:
             [],
             [],
             ImportSummary(entity_count=0, relation_count=0),
+            [],
         )
         mock_async_index.return_value = {
             "cleared": True,
@@ -669,6 +674,7 @@ class TestUpdateCommand:
             [],
             [],
             ImportSummary(entity_count=2, relation_count=0),
+            [],
         )
         mock_isgit.return_value = True
         mock_gcf.return_value = [Path("src/loomgraph/cli/_common.py")]
@@ -712,7 +718,7 @@ class TestUpdateCommand:
     ) -> None:
         """Non-git repo → whole-tree ingest(clear=False); incremental not used."""
         mock_check.return_value = {"installed": True, "version": "0.29.0"}
-        mock_export.return_value = ([], [], ImportSummary())
+        mock_export.return_value = ([], [], ImportSummary(), [])
         mock_isgit.return_value = False
         mock_ingest.return_value = {
             "cleared": False,
@@ -751,7 +757,7 @@ class TestUpdateCommand:
     ) -> None:
         """--files forces whole-tree upsert even in a git repo (simple fallback)."""
         mock_check.return_value = {"installed": True, "version": "0.29.0"}
-        mock_export.return_value = ([], [], ImportSummary())
+        mock_export.return_value = ([], [], ImportSummary(), [])
         mock_isgit.return_value = True  # git repo, but --files overrides
         mock_ingest.return_value = {
             "cleared": False,
@@ -781,7 +787,7 @@ class TestUpdateCommand:
     ) -> None:
         """--use-affected / --embedding-url are inert (compat); --since is ACTIVE."""
         mock_check.return_value = {"installed": True, "version": "0.29.0"}
-        mock_export.return_value = ([], [], ImportSummary())
+        mock_export.return_value = ([], [], ImportSummary(), [])
         mock_async_update.return_value = {
             "mode": "warm_incremental",
             "entities_created": 0,
