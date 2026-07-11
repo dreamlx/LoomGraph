@@ -44,6 +44,16 @@ TOOL_SPEC = Tool(
                 "description": "Filter by relation type. Default all.",
                 "default": "all",
             },
+            "include_unresolved": {
+                "type": "boolean",
+                "description": (
+                    "Include unresolved/ambiguous low-trust edges. Their "
+                    "targets are call expressions (dst_raw) that may not be "
+                    "in-repo entities, so they surface as phantom callees/"
+                    "callers with source_id=\"\". Default false (resolved only)."
+                ),
+                "default": False,
+            },
             "workspace": {
                 "type": "string",
                 "description": "Override the workspace to query.",
@@ -58,6 +68,7 @@ async def handle(arguments: dict[str, Any]) -> list[TextContent]:
     entity_name = arguments["entity_name"]
     direction = arguments.get("direction", "both")
     relation_type = arguments.get("relation_type", "all")
+    include_unresolved = arguments.get("include_unresolved", False)
     workspace = resolve_workspace(arguments)
 
     return await safe_call(
@@ -66,6 +77,7 @@ async def handle(arguments: dict[str, Any]) -> list[TextContent]:
             direction=direction,
             relation_type=relation_type,
             workspace=workspace,
+            include_unresolved=include_unresolved,
         ),
         failure_code="GRAPH_FAILED",
         failure_hint=(
