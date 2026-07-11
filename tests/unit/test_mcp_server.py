@@ -280,6 +280,7 @@ async def test_graph_handler_forwards_defaults():
         assert kwargs["direction"] == "both"
         assert kwargs["relation_type"] == "all"
         assert kwargs["workspace"] is None
+        assert kwargs["include_unresolved"] is False
         return {"callers_count": 0, "callees_count": 0}
 
     with patch.object(t_graph, "_async_graph_query", side_effect=fake_async_graph):
@@ -301,6 +302,21 @@ async def test_graph_handler_respects_explicit_direction():
 
     payload = json.loads(contents[0].text)
     assert payload["data"]["direction_seen"] == "callers"
+
+
+@pytest.mark.asyncio
+async def test_graph_handler_forwards_include_unresolved():
+    """#113: include_unresolved must propagate to _async_graph_query."""
+    async def fake_async_graph(**kwargs):
+        return {"include_unresolved": kwargs["include_unresolved"]}
+
+    with patch.object(t_graph, "_async_graph_query", side_effect=fake_async_graph):
+        contents = await t_graph.handle(
+            {"entity_name": "Foo.bar", "include_unresolved": True}
+        )
+
+    payload = json.loads(contents[0].text)
+    assert payload["data"]["include_unresolved"] is True
 
 
 # ---- Phase 2 handler smoke tests (mocked) --------------------------------

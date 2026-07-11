@@ -125,3 +125,123 @@ async def test_class_callees_dedup_across_methods(monkeypatch):
 
     assert result["callees_count"] == 1
     assert result["callees"][0]["entity"] == "app.shared"
+
+
+# ---------------------------------------------------------------------------
+# #113: unresolved/ambiguous edges target a call expression (dst_raw), not an
+# in-repo entity. Surfacing them yields phantom callees (source_id=""). graph
+# now defaults to trusted (resolved) edges only; --include-unresolved brings
+# the low-trust edges back for raw-call inspection.
+# ---------------------------------------------------------------------------
+
+def _phantom_fixture():
+    """app.output_error calls one real callee plus two phantom (dst_raw) ones.
+
+    - resolved   → app.real_callee  (in entities table, source_id populated)
+    - unresolved → click.echo       (dst_raw call expr, no matching entity)
+    - ambiguous  → json.dumps       (dst_raw call expr, no matching entity)
+    """
+    entities = [
+        {"entity_name": "app.output_error", "entity_type": "function",
+         "source_id": "app/cli.py:1"},
+        {"entity_name": "app.real_callee", "entity_type": "function",
+         "source_id": "app/cli.py:9"},
+    ]
+    relations = [
+        {"src_id": "app.output_error", "tgt_id": "app.real_callee",
+         "keywords": "CALLS", "resolution_qualifier": "resolved"},
+        {"src_id": "app.output_error", "tgt_id": "click.echo",
+         "keywords": "CALLS", "resolution_qualifier": "unresolved"},
+        {"src_id": "app.output_error", "tgt_id": "json.dumps",
+         "keywords": "CALLS", "resolution_qualifier": "ambiguous"},
+    ]
+    return entities, relations
+
+
+@pytest.mark.asyncio
+async def test_phantom_unresolved_callees_filtered_by_default(monkeypatch):
+    """#113: unresolved/ambiguous callees are phantom (target not in entities)
+    — filtered out by default so real callees aren't drowned out."""
+    entities, relations = _phantom_fixture()
+    _patch_store(monkeypatch, entities, relations)
+
+    result = await _async_graph_query(
+        "app.output_error", direction="callees", relation_type="all"
+    )
+
+    callees = {c["entity"] for c in result["callees"]}
+    assert callees == {"app.real_callee"}, callees
+    assert result["callees_count"] == 1
+    # No phantom (source_id="") entries leak through.
+    assert all(c["source_id"] for c in result["callees"])
+
+
+@pytest.mark.asyncio
+async def test_include_unresolved_flag_keeps_phantom_edges(monkeypatch):
+    """#113: --include-unresolved brings back the dst_raw callees (still
+    marked source_id="" since their target isn't an in-repo entity)."""
+    entities, relations = _phantom_fixture()
+    _patch_store(monkeypatch, entities, relations)
+
+    result = await _async_graph_query(
+        "app.output_error", direction="callees", relation_type="all",
+        include_unresolved=True,
+    )
+
+    callees = {c["entity"] for c in result["callees"]}
+    assert callees == {"app.real_callee", "click.echo", "json.dumps"}, callees
+    assert result["callees_count"] == 3
+    # Phantom entries keep dst_raw as entity name, source_id stays empty.
+    phantom = {c["entity"]: c["source_id"] for c in result["callees"]}
+    assert phantom["click.echo"] == ""
+    assert phantom["json.dumps"] == ""
+
+
+@pytest.mark.asyncio
+async def test_ambiguous_filtered_by_default(monkeypatch):
+    """#113: ambiguous edges are same-name guesses (wrong for dynamic
+    dispatch, #101) — filtered by default alongside unresolved."""
+    entities = [
+        {"entity_name": "app.foo", "entity_type": "function", "source_id": "app/f.py:1"},
+    ]
+    relations = [
+        # an ambiguous edge whose tgt happens to match no entity (typical)
+        {"src_id": "app.foo", "tgt_id": "db.exec", "keywords": "CALLS",
+         "resolution_qualifier": "ambiguous"},
+    ]
+    _patch_store(monkeypatch, entities, relations)
+
+    result = await _async_graph_query(
+        "app.foo", direction="callees", relation_type="all"
+    )
+
+    assert result["callees_count"] == 0
+
+    # Escape hatch surfaces it.
+    result_inc = await _async_graph_query(
+        "app.foo", direction="callees", relation_type="all",
+        include_unresolved=True,
+    )
+    assert {c["entity"] for c in result_inc["callees"]} == {"db.exec"}
+
+
+@pytest.mark.asyncio
+async def test_missing_qualifier_treated_as_resolved(monkeypatch):
+    """#113: relations without resolution_qualifier (old data / pre-#113
+    fixtures) are treated as resolved — never accidentally filtered. Guards
+    the four #105 tests above, which carry no qualifier."""
+    entities = [
+        {"entity_name": "app.main", "entity_type": "function", "source_id": "app/m.py:1"},
+        {"entity_name": "app.helper", "entity_type": "function", "source_id": "app/h.py:1"},
+    ]
+    relations = [
+        # No resolution_qualifier key at all.
+        {"src_id": "app.main", "tgt_id": "app.helper", "keywords": "CALLS"},
+    ]
+    _patch_store(monkeypatch, entities, relations)
+
+    result = await _async_graph_query(
+        "app.main", direction="callees", relation_type="all"
+    )
+
+    assert {c["entity"] for c in result["callees"]} == {"app.helper"}
