@@ -56,7 +56,7 @@ def index(repo_path: str, clear: bool, workspace: str | None) -> None:
     # Step 2: Run codeindex graph-export (qualified entity ids + edges)
     click.echo(f"[2/3] Exporting {repo.name}/ with codeindex graph-export...", err=True)
     try:
-        entities, relations, summary = run_graph_export(repo)
+        entities, relations, summary, warnings = run_graph_export(repo)
     except GraphExportError as e:
         output_error(
             code=ErrorCode.CODEINDEX_FAILED,
@@ -69,6 +69,13 @@ def index(repo_path: str, clear: bool, workspace: str | None) -> None:
         f"{summary.relation_count} relations.",
         err=True,
     )
+
+    # codeindex's partial-graph warnings (#131) — e.g. a non-Python repo
+    # indexed with default languages:[python] yields a few stray entities and
+    # a "WARNING: partial graph" line. Surface it so a misconfigured repo
+    # doesn't index as a silent success (#108).
+    for line in warnings:
+        click.echo(f"⚠️  {line}", err=True)
 
     # 0 entities is almost always a languages/grammar mismatch (#93) — warn
     # loudly instead of letting it sail through as a silent success. Kept as a
@@ -97,6 +104,8 @@ def index(repo_path: str, clear: bool, workspace: str | None) -> None:
 
     if zero_warning is not None:
         result["warning"] = zero_warning
+    elif warnings:
+        result["warning"] = "; ".join(warnings)
 
     output_success(result)
 
@@ -231,7 +240,7 @@ def update(
     # Step 2: Run codeindex graph-export (whole tree)
     click.echo("[2/3] Exporting whole tree with codeindex graph-export...", err=True)
     try:
-        entities, relations, summary = run_graph_export(repo)
+        entities, relations, summary, warnings = run_graph_export(repo)
     except GraphExportError as e:
         output_error(
             code=ErrorCode.CODEINDEX_FAILED,
@@ -244,6 +253,9 @@ def update(
         f"{summary.relation_count} relations.",
         err=True,
     )
+    # Surface codeindex partial-graph warnings (#108) — same as `index`.
+    for line in warnings:
+        click.echo(f"⚠️  {line}", err=True)
 
     # Step 3: Incremental (git) or whole-tree upsert (non-git / --files)
     click.echo("[3/3] Updating knowledge graph...", err=True)
@@ -262,6 +274,9 @@ def update(
     result["duration_seconds"] = round(duration, 2)
     result["repo_path"] = str(repo)
     click.echo(f"       Done in {result['duration_seconds']}s ({result['mode']}).", err=True)
+
+    if warnings:
+        result["warning"] = "; ".join(warnings)
 
     output_success(result)
 
@@ -364,7 +379,7 @@ async def _async_refresh(
     store = await create_graph_store(workspace=ws)
 
     if force_full:
-        entities, relations, _ = run_graph_export(repo)
+        entities, relations, _, _ = run_graph_export(repo)
         result = await ingest(entities, relations, store, clear=True)
         result["mode"] = "cold_rebuild"
         result["workspace"] = ws
@@ -386,7 +401,7 @@ async def _async_refresh(
     if strategy == "incremental" and not changed_files:
         return {"mode": "noop", "changed_files": [], "workspace": ws}
 
-    entities, relations, _ = run_graph_export(repo)
+    entities, relations, _, _ = run_graph_export(repo)
     if strategy == "incremental":
         result = await ingest_incremental(
             entities, relations, store, changed_files=changed_files
