@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.4] - 2026-07-11
+
+### Fixed — self-dogfood QA pass (#105, #106, #108)
+- `graph <Class>` now aggregates callees from the class's methods (#105).
+  Class entities don't own outgoing edges — calls live on their methods
+  (`Class.method`), so `graph SomeClass` showed 0 callees even when every
+  method called something. Method callees are now folded in, deduped
+  against any direct edges (e.g. REFERENCES). Callers are unaffected
+  (constructor edges land on the class via codeindex #132). Verified on
+  loomgraph itself: 0 → 80 callees for a class that calls extensively.
+- `deps` auto-drills module depth for single-package repos (#106). A repo
+  whose source sits one dir deep (e.g. all under `src/pkg/`) collapsed to a
+  single module at depth 1, hiding real internal coupling. `DepsAnalyzer`
+  now expands depth until ≥2 real modules appear, stopping at the first
+  multi-module depth (no over-splitting). `--depth` is now the *starting*
+  depth. Verified: 1 module/0 deps → 7 modules/11 deps on loomgraph.
+- `loomgraph index`/`update` surface codeindex's partial-graph WARNING
+  instead of a silent success (#108). A non-Python repo indexed with the
+  default `languages:[python]` yields a few stray entities + a stderr
+  WARNING; loomgraph discarded stderr on exit 0, so it reported `success:1`
+  with near-zero entities. The WARNING is now captured and echoed to stderr
+  and into the JSON result's `warning` field.
+
+### Changed — pin `ai-codeindex>=0.33.1` (#107, #111)
+- graph-export now honors `.codeindex.yaml` `include:` (codeindex #137), so
+  `loomgraph index .` no longer ingests `docs/`/`tests/`/`spikes/` when a
+  project scopes its index to `src/` — removing the phantom god/hub/orphan
+  nodes they created in `topology` (#107).
+- MCP server + debt-report versions are sourced from `loomgraph.__version__`
+  via `importlib.metadata`, not hardcoded constants that lagged the
+  installed package (#111).
+
 ## [0.15.3] - 2026-07-08
 
 ### Fixed — `graph --depth` now does a real BFS, was a no-op (#103)

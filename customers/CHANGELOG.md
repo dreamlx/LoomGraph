@@ -6,6 +6,38 @@
 
 ## [Unreleased]
 
+## [0.15.4] - 2026-07-11
+
+### 修复 — `graph <类>` 现在聚合方法的 callees (#105)
+- 类实体本身不拥有传出边，调用都在它的方法上（`Class.method`），所以
+  `graph SomeClass` 之前显示 0 个 callee，即使每个方法都在调东西。现在把
+  方法的 callees 折叠进来，对类已有的直接边去重（如 REFERENCES）。callers
+  不受影响（构造函数边通过 codeindex 落在类上）。loomgraph 自测：一个调用
+  密集的类 callees 从 0 → 80。
+
+### 修复 — `deps` 对单包仓库自动下钻模块深度 (#106)
+- 源码只深一层（如全在 `src/pkg/` 下）的仓库，在 depth 1 时塌成单一模块，
+  掩盖了真实的内部耦合。`DepsAnalyzer` 现在会扩展 depth 直到出现 ≥2 个真实
+  模块，停在第一个多模块深度（不过度拆分）。`--depth` 现在指「起始深度」。
+  loomgraph 自测：1 模块/0 依赖 → 7 模块/11 依赖。
+
+### 修复 — `index`/`update` 不再静默成功掩盖少实体 (#108)
+- 用默认 `languages:[python]` 索引非 Python 仓库时，codeindex 会抓到几个零
+  散实体并在 stderr 写 WARNING；之前 loomgraph 在 exit 0 时丢弃 stderr，于是
+  报 `success:1` 但实体近乎为零。现在 WARNING 被捕获并 echo 到 stderr + 写
+  入 JSON 结果的 `warning` 字段。
+
+### 变更 — pin `ai-codeindex>=0.33.1` (#107, #111)
+- graph-export 现在遵守 `.codeindex.yaml` 的 `include:`（codeindex #137），
+  所以当项目把索引范围限定到 `src/` 时，`loomgraph index .` 不再吃进
+  `docs/`/`tests/`/`spikes/` —— 清掉了它们在 `topology` 里造成的假
+  god/hub/orphan 节点（#107）。
+- MCP server 与 debt 报告的版本号改为从 `loomgraph.__version__` 取
+  （`importlib.metadata`），不再是滞后于已装包的硬编码常量（#111）。
+- **更新指引**：升级后建议 `loomgraph index --clear .` 重建，让 `topology`
+  清除旧的假 god/hub/orphan 节点。单点查询（`graph`/`find`/`deps`）行为
+  改善但不依赖重建。
+
 ## [0.15.3] - 2026-07-08
 
 ### 修复 — `graph --depth` 现在做真 BFS，之前是 no-op (#103)
