@@ -80,6 +80,21 @@ def test_build_server_constructs_without_error():
     assert server.name == "loomgraph"
 
 
+def test_build_server_version_tracks_package():
+    """Server version must come from __version__, not a hardcoded constant.
+
+    Regression guard for the drift where SERVER_VERSION was pinned to a
+    literal that lagged the installed package (0.15.0 install reported
+    0.15.3). The Server advertises loomgraph.__version__ so MCP clients see
+    the real installed version.
+    """
+    from loomgraph import __version__
+
+    server = build_server()
+    assert server.version == __version__
+    assert server.version != "0.15.3" or __version__ == "0.15.3"  # not hardcoded
+
+
 async def test_git_metrics_handle_errors_on_non_git_path(tmp_path):
     """git_metrics primitive returns a structured error on a non-repo path (#62)."""
     import json

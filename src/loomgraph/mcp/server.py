@@ -23,6 +23,7 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
+from loomgraph import __version__
 from loomgraph.mcp.tools import check as t_check
 from loomgraph.mcp.tools import debt as t_debt
 from loomgraph.mcp.tools import debt_audit as t_debt_audit
@@ -42,7 +43,6 @@ from loomgraph.mcp.tools import workspace as t_workspace
 logger = logging.getLogger(__name__)
 
 SERVER_NAME = "loomgraph"
-SERVER_VERSION = "0.15.3"
 
 # Registry of available tools. Each entry: (Tool spec, async handler).
 # When adding a new tool, add its module to loomgraph.mcp.tools and
@@ -85,7 +85,7 @@ def build_server() -> Server:
     Factored out so tests can introspect the server without starting
     stdio I/O.
     """
-    server: Server = Server(SERVER_NAME, version=SERVER_VERSION)
+    server: Server = Server(SERVER_NAME, version=__version__)
 
     @server.list_tools()
     async def list_tools() -> list[Tool]:

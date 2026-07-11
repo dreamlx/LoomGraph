@@ -294,6 +294,11 @@ class TestAnalyze:
         assert result["timestamp"]
         assert result["project"] == "unknown"
         assert result["generator"]["tool"] == "loomgraph"
+        # generator.version must track the installed package, not a stale
+        # hardcoded literal (was "0.9.0", 6 versions behind).
+        from loomgraph import __version__
+
+        assert result["generator"]["version"] == __version__
 
         # Check overall_health
         health = result["overall_health"]
