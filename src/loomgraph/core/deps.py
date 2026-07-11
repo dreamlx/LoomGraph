@@ -69,11 +69,18 @@ class DepsAnalyzer:
 
     Args:
         client: GraphStore instance
-        depth: Directory depth for module grouping
+        depth: Starting directory depth for module grouping
+        auto_depth: When True (default), if the starting depth collapses the
+            graph to a single real module (e.g. a single-package repo
+            ``src/<pkg>/*`` where depth=2 merges cli/core/mcp/storage into one
+            module), re-run at increasing depth until more than one module
+            appears or the deepest source path is exhausted (#106). Set False
+            to honor ``depth`` exactly.
     """
 
     client: Any  # GraphStore
     depth: int = 2
+    auto_depth: bool = True
 
     async def analyze(self) -> DepsResult:
         """Run dependency analysis.
@@ -84,12 +91,74 @@ class DepsAnalyzer:
             3. Skip same-module relations and unmapped entities
             4. Aggregate by (src_module, tgt_module)
 
+        With ``auto_depth`` (default), steps 1-4 run at increasing depth until
+        the grouping yields more than one real module, so single-package repos
+        surface their sub-package dependencies instead of collapsing.
+
         Returns:
             DepsResult with modules, dependencies, and stats
         """
         entities = await self.client.get_all_entities()
         relations = await self.client.get_all_relations()
 
+        # Cap auto-drill at the deepest directory level present in the graph,
+        # so we never recurse past what the data can distinguish.
+        max_depth = self.depth
+        if self.auto_depth:
+            for entity in entities:
+                source_id = entity.get("source_id", "")
+                if source_id and source_id != "external":
+                    dir_count = len(PurePosixPath(source_id).parts) - 1  # drop filename
+                    if dir_count > max_depth:
+                        max_depth = dir_count
+
+        modules_set: set[str] = set()
+        entity_module: dict[str, str] = {}
+        edge_agg: dict[tuple[str, str], dict[str, Any]] = {}
+        for d in range(self.depth, max_depth + 1):
+            modules_set, entity_module, edge_agg = self._analyze_at_depth(
+                entities, relations, d
+            )
+            # Stop as soon as more than one real module (excluding the root "."
+            # bucket) exists — the first depth with real structure. auto_depth
+            # off, or exhausted depth, also stops here.
+            if not self.auto_depth or len(modules_set - {"."}) > 1 or d == max_depth:
+                break
+
+        # Build sorted results
+        sorted_modules = sorted(modules_set)
+        dependencies = [
+            {
+                "from": src,
+                "to": tgt,
+                "count": agg["count"],
+                "types": dict(agg["types"]),
+            }
+            for (src, tgt), agg in sorted(edge_agg.items())
+        ]
+
+        return DepsResult(
+            modules=sorted_modules,
+            dependencies=dependencies,
+            stats={
+                "total_modules": len(sorted_modules),
+                "total_dependencies": len(dependencies),
+                "total_entities": len(entities),
+                "total_relations": len(relations),
+            },
+        )
+
+    @staticmethod
+    def _analyze_at_depth(
+        entities: list[dict[str, Any]],
+        relations: list[dict[str, Any]],
+        depth: int,
+    ) -> tuple[set[str], dict[str, str], dict[tuple[str, str], dict[str, Any]]]:
+        """Group entities/relations into modules at a fixed depth.
+
+        Returns ``(modules_set, entity_module, edge_agg)``. Pure (no I/O) so
+        ``analyze`` can re-run it at increasing depths cheaply.
+        """
         # Build entity_name → module mapping
         # Handle both injection format (entity_name) and API response format (entity_id/id)
         entity_module: dict[str, str] = {}
@@ -104,7 +173,7 @@ class DepsAnalyzer:
             # Skip external stubs — they produce meaningless "." module deps
             if entity_type == "external" or source_id == "external":
                 continue
-            module = extract_module(source_id, self.depth)
+            module = extract_module(source_id, depth)
             entity_module[name] = module
             modules_set.add(module)
 
@@ -135,25 +204,4 @@ class DepsAnalyzer:
             edge_agg[key]["count"] += 1
             edge_agg[key]["types"][rel_type] += 1
 
-        # Build sorted results
-        sorted_modules = sorted(modules_set)
-        dependencies = [
-            {
-                "from": src,
-                "to": tgt,
-                "count": agg["count"],
-                "types": dict(agg["types"]),
-            }
-            for (src, tgt), agg in sorted(edge_agg.items())
-        ]
-
-        return DepsResult(
-            modules=sorted_modules,
-            dependencies=dependencies,
-            stats={
-                "total_modules": len(sorted_modules),
-                "total_dependencies": len(dependencies),
-                "total_entities": len(entities),
-                "total_relations": len(relations),
-            },
-        )
+        return modules_set, entity_module, edge_agg
