@@ -2,9 +2,8 @@
 # Unified command interface for development, testing, and release workflows
 
 .PHONY: help install test lint format clean
-.PHONY: release bump delivery-summary token-check token-list token-verify
-.PHONY: package package-all package-customer
-.PHONY: run-index run-status run-find run-query
+.PHONY: release bump
+.PHONY: run-index run-status run-find run-graph
 
 # Default target
 .DEFAULT_GOAL := help
@@ -131,9 +130,8 @@ release: ## Full release workflow (VERSION=x.y.z required)
 	@echo "$(YELLOW)⏳ GitHub Actions is building the release...$(RESET)"
 	@echo ""
 	@echo "$(BOLD)Next steps:$(RESET)"
-	@echo "  1. Wait for GitHub Actions to complete (~1 min)"
-	@echo "  2. Run: make delivery-summary"
-	@echo "  3. Send $(CUSTOMERS)/*/INSTALL.md to customers"
+	@echo "  1. Wait for GitHub Actions (release.yml) to complete (~1-2 min)"
+	@echo "  2. PyPI + GitHub Release are auto-published by CI"
 
 bump: ## Bump version only (VERSION=x.y.z required)
 	@if [ -z "$(VERSION)" ]; then \
@@ -145,71 +143,6 @@ bump: ## Bump version only (VERSION=x.y.z required)
 	$(PYTHON) $(SCRIPTS)/bump_version.py $(VERSION)
 	@echo "$(GREEN)✓ Version bumped to $(VERSION)$(RESET)"
 	@echo "$(YELLOW)⚠ Don't forget to commit and tag!$(RESET)"
-
-delivery-summary: ## Generate customer delivery summary
-	@echo "$(BOLD)Generating delivery summary...$(RESET)"
-	$(PYTHON) $(SCRIPTS)/generate_delivery_summary.py
-	@echo ""
-	@echo "$(GREEN)✓ Delivery summary generated$(RESET)"
-	@echo "$(BOLD)View summary:$(RESET) cat /tmp/customer_delivery_summary.txt"
-
-##@ Token Management
-
-token-check: ## Check for expiring tokens (30-day warning)
-	@echo "$(BOLD)Checking token expiry...$(RESET)"
-	$(PYTHON) $(SCRIPTS)/manage_tokens.py --check-expiry
-
-token-list: ## List all customer tokens and status
-	@echo "$(BOLD)Customer token status:$(RESET)"
-	$(PYTHON) $(SCRIPTS)/manage_tokens.py --list
-
-token-verify: ## Verify token for a customer (CUSTOMER=xxx TOKEN=xxx required)
-	@if [ -z "$(CUSTOMER)" ] || [ -z "$(TOKEN)" ]; then \
-		echo "$(YELLOW)Error: CUSTOMER and TOKEN are required$(RESET)"; \
-		echo "Usage: make token-verify CUSTOMER=customer TOKEN=github_pat_..."; \
-		exit 1; \
-	fi
-	@echo "$(BOLD)Verifying token for $(CUSTOMER)...$(RESET)"
-	$(PYTHON) $(SCRIPTS)/manage_tokens.py --verify $(CUSTOMER) --token $(TOKEN)
-
-token-install: ## Generate install command for customer (CUSTOMER=xxx required)
-	@if [ -z "$(CUSTOMER)" ]; then \
-		echo "$(YELLOW)Error: CUSTOMER is required$(RESET)"; \
-		echo "Usage: make token-install CUSTOMER=customer"; \
-		exit 1; \
-	fi
-	@echo "$(BOLD)Install command for $(CUSTOMER):$(RESET)"
-	$(PYTHON) $(SCRIPTS)/manage_tokens.py --generate-install $(CUSTOMER)
-
-##@ Packaging (Offline Distribution)
-
-package-all: ## Package for all customers (offline tarballs)
-	@echo "$(BOLD)Packaging for all customers...$(RESET)"
-	$(PYTHON) $(SCRIPTS)/package.py --all
-	@echo "$(GREEN)✓ All packages created in $(DIST)/$(RESET)"
-
-package-customer: ## Package for single customer (CUSTOMER=xxx required)
-	@if [ -z "$(CUSTOMER)" ]; then \
-		echo "$(YELLOW)Error: CUSTOMER is required$(RESET)"; \
-		echo "Usage: make package-customer CUSTOMER=customer"; \
-		exit 1; \
-	fi
-	@echo "$(BOLD)Packaging for $(CUSTOMER)...$(RESET)"
-	$(PYTHON) $(SCRIPTS)/package.py --customer $(CUSTOMER)
-	@echo "$(GREEN)✓ Package created in $(DIST)/$(RESET)"
-
-package-upgrade: ## Package upgrade tarball for customer (CUSTOMER=xxx required)
-	@if [ -z "$(CUSTOMER)" ]; then \
-		echo "$(YELLOW)Error: CUSTOMER is required$(RESET)"; \
-		echo "Usage: make package-upgrade CUSTOMER=customer"; \
-		exit 1; \
-	fi
-	@echo "$(BOLD)Packaging upgrade for $(CUSTOMER)...$(RESET)"
-	$(PYTHON) $(SCRIPTS)/package.py --customer $(CUSTOMER) --mode upgrade
-	@echo "$(GREEN)✓ Upgrade package created in $(DIST)/$(RESET)"
-
-package-list: ## List available customers
-	@$(PYTHON) $(SCRIPTS)/package.py --list
 
 ##@ CLI Quick Commands
 
@@ -231,14 +164,6 @@ run-find: ## Search for entity (QUERY required)
 	fi
 	@$(PYTHON) -m loomgraph.cli.main find "$(QUERY)"
 
-run-query: ## Semantic query (QUERY required)
-	@if [ -z "$(QUERY)" ]; then \
-		echo "$(YELLOW)Error: QUERY is required$(RESET)"; \
-		echo "Usage: make run-query QUERY=\"how does auth work?\""; \
-		exit 1; \
-	fi
-	@$(PYTHON) -m loomgraph.cli.main query "$(QUERY)"
-
 run-graph: ## Show call graph (ENTITY required)
 	@if [ -z "$(ENTITY)" ]; then \
 		echo "$(YELLOW)Error: ENTITY is required$(RESET)"; \
@@ -246,21 +171,6 @@ run-graph: ## Show call graph (ENTITY required)
 		exit 1; \
 	fi
 	@$(PYTHON) -m loomgraph.cli.main graph "$(ENTITY)"
-
-##@ Docker Services
-
-docker-up: ## Start PostgreSQL database
-	@echo "$(BOLD)Starting PostgreSQL...$(RESET)"
-	docker compose up -d postgres
-	@echo "$(GREEN)✓ PostgreSQL started$(RESET)"
-
-docker-down: ## Stop all services
-	@echo "$(BOLD)Stopping services...$(RESET)"
-	docker compose down
-	@echo "$(GREEN)✓ Services stopped$(RESET)"
-
-docker-logs: ## Show PostgreSQL logs
-	@docker compose logs -f postgres
 
 ##@ Git Workflows
 

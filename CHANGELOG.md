@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — remove private customer-distribution scaffolding
+- LoomGraph is now public-PyPI-only (since v0.16); the enterprise private-
+  distribution framework (GitHub PAT management, per-customer INSTALL.md,
+  offline tarball packaging, delivery-summary generation) is dead code. This
+  release deletes it and aligns docs to the actual `release.yml` CI flow.
+- **Deleted scripts**: `scripts/manage_tokens.py` (PAT management),
+  `scripts/generate_delivery_summary.py` (customer delivery docs),
+  `scripts/quickstart.sh` + `scripts/upgrade.sh` (venv+TOKEN install/upgrade,
+  superseded by `pipx`), `scripts/package.py` (offline tarball packaging +
+  README.template rendering). `scripts/bump_version.py` / `check_version.py`
+  / `install-hooks.sh` kept (still serve the release flow).
+- **Deleted docs**: `docs/guides/CUSTOMER_PACKAGING.md`,
+  `CUSTOMER_QUICKSTART.md`, `TOKEN_MANAGEMENT.md`, `TOKEN_QUICKSTART.md`
+  (all private-distribution-era). `customers/DELIVERY_GUIDE.md`,
+  `customers/README.template.md`, `customers/customers.yaml.example` removed.
+- **`docs/PACKAGING.md`** rewritten from 399 lines (full private-distribution
+  playbook) to a focused guide: `release.yml` CI flow + three-file version
+  consistency + the two-CHANGELOG strategy (which is the still-relevant part).
+- **`Makefile`**: dropped 11 dead targets (`delivery-summary`, `token-*` ×4,
+  `package-*` ×4, `run-query`, `docker-*` ×3) + `docker-compose.yml` (HF TEI
+  embedding container, LightRAG-era, embedding now defaults to local Ollama).
+- **`CLAUDE.md`** MUST-READ table + change-log triggers updated: release now
+  keyed on `git tag vX.Y.Z` (was `scripts/package.py`); CLI command-table
+  authority is root `README.md` + `loomgraph --help` (was `README.template.md`).
+- **No runtime code change** (`src/` untouched). `pyproject.toml` sdist
+  exclude list trimmed (`/customers`, `/scripts/package.py` gone with the
+  files).
+
 ## [0.15.5] - 2026-07-12
 
 ### Fixed — pin `ai-codeindex>=0.33.3` (codeindex #144, downstream of #139)
