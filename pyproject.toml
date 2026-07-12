@@ -1,6 +1,6 @@
 [project]
 name = "loomgraph"
-version = "0.15.4"
+version = "0.15.5"
 description = "Local code knowledge graph — SQLite + sqlite-vec, AST-driven, no RAG framework needed"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -49,8 +49,8 @@ dependencies = [
     "click>=8.0",
     "rich>=13.0",
 
-    # Code parsing (>=0.33.1: + graph-export honors .codeindex.yaml include: #137, fixes loomgraph#107; 0.32.0: IMPORTS edges + Java caller fix #76)
-    "ai-codeindex>=0.33.1",
+    # Code parsing (>=0.33.3: + TS path-alias `./`-prefix fix codeindex#144 → an internal TS monorepo @/ alias 0%→96% resolved, drops 27 false-positive orphans; 0.33.1: graph-export honors include: #137; 0.32.0: IMPORTS edges + Java caller fix #76)
+    "ai-codeindex>=0.33.3",
     "tree-sitter-python>=0.23",
     "tree-sitter-php>=0.23",
 
