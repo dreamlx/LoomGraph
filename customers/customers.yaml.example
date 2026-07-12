@@ -1,44 +1,21 @@
 # LoomGraph 客户注册表模板
-# 复制为 customers.yaml 并填写实际配置
+# 复制为 customers/customers.yaml 并填写实际配置
 #
 # 用法:
 #   cp customers/customers.yaml.example customers/customers.yaml
 #   # 编辑 customers.yaml 填写客户信息
 #   python scripts/package.py --all
 #
-# Token 管理:
-#   python scripts/manage_tokens.py --check-expiry
-#   python scripts/manage_tokens.py --list
-#
-# 详细文档: docs/guides/TOKEN_MANAGEMENT.md
+# 注: v0.16+ 走公开 PyPI (pipx install loomgraph)，不再需要 GitHub Token /
+#     LightRAG URL。此处仅保留客户元数据用于生成客户专用 README。
+#     私有客户如需独立分发，自行扩展。
 
 example_customer:
   name: "示例客户"
   contact: "张三 <zhangsan@example.com>"  # 客户联系人（可选）
-
-  # GitHub Token 信息（敏感，不提交 Git）
-  # 创建方法: https://github.com/settings/tokens?type=beta
-  github_token_name: "loomgraph-example-20260224"  # Token 名称（便于在 GitHub 识别）
-  github_token_created: "2026-02-24"               # 创建日期
-  github_token_expires: "2026-05-25"               # 过期日期（提前 30 天预警）
-  github_token_last_4: "a1b2"                      # Token 最后 4 位（用于识别，不要写完整 token）
-
-  # 服务配置
-  lightrag_url: "http://your-server:3001"
-  language_hint: "Python"           # Python | Java | PHP
-  language_parser: "ai-codeindex"   # ai-codeindex[java] | ai-codeindex[php]
-  exclude_dirs: "__pycache__/, .git/"
+  language_hint: "Python"           # Python | Java | TypeScript（用于 README 安装提示）
 
 # another_customer:
 #   name: "另一个客户"
 #   contact: "李四 <lisi@another.com>"
-#
-#   github_token_name: "loomgraph-another-20260224"
-#   github_token_created: "2026-02-24"
-#   github_token_expires: "2026-05-25"
-#   github_token_last_4: "c3d4"
-#
-#   lightrag_url: "http://another-server:3001"
 #   language_hint: "Java"
-#   language_parser: "ai-codeindex[java]"
-#   exclude_dirs: "target/, build/"

@@ -104,10 +104,7 @@ def generate_readme(customer: str, config: dict, version: str) -> str:
 
     variables = {
         "customer_name": config.get("name", customer),
-        "lightrag_url": config.get("lightrag_url", "http://localhost:3001"),
         "language_hint": config.get("language_hint", "Python"),
-        "language_parser": config.get("language_parser", "ai-codeindex"),
-        "exclude_dirs": config.get("exclude_dirs", "__pycache__/, .git/"),
         "version": version,
         "customer_key": customer,
     }
@@ -167,21 +164,37 @@ def find_codeindex_wheel() -> Path | None:
 
 
 def get_cli_commands() -> set[str]:
-    """Extract real CLI command names from Click group definitions."""
-    cli_main = PROJECT_ROOT / "src" / "loomgraph" / "cli" / "main.py"
-    if not cli_main.exists():
+    """Extract real CLI command names from Click group definitions.
+
+    Scans `main.py` AND its submodules (`_*.py`) — commands are registered
+    via `@main.command(...)` decorators across the cli package, not just in
+    main.py itself. Returns the union so README.template validation can't
+    false-positive on commands defined in submodules. Bare `@main.command()`
+    decorators derive the command name from the function name.
+    """
+    cli_dir = PROJECT_ROOT / "src" / "loomgraph" / "cli"
+    if not cli_dir.exists():
         return set()
 
-    content = cli_main.read_text()
-    # Match cli.add_command(xxx, "name") or @cli.command("name")
     commands: set[str] = set()
-    for match in re.finditer(r'add_command\([^,]+,\s*"(\w+)"', content):
-        commands.add(match.group(1))
-    for match in re.finditer(r'@\w+\.command\(["\'](\w+)', content):
-        commands.add(match.group(1))
-    # Also match group names
-    for match in re.finditer(r'add_command\((\w+)_group', content):
-        commands.add(match.group(1).replace("_", "-"))
+    for py in cli_dir.glob("*.py"):
+        content = py.read_text()
+        # @main.command("name") — explicit name
+        for match in re.finditer(r'@\w+\.command\(["\']([\w-]+)', content):
+            commands.add(match.group(1))
+        # bare @main.command() — derive from the def name. Click options may
+        # span many lines between the decorator and the def, so match
+        # non-greedily across lines until the `def`.
+        for match in re.finditer(
+            r'@\w+\.command\(\)\s*\n(?:.*\n)*?\s*def\s+(\w+)', content
+        ):
+            commands.add(match.group(1).replace("_", "-"))
+        # cli.add_command(xxx, "name")
+        for match in re.finditer(r'add_command\([^,]+,\s*"([\w-]+)"', content):
+            commands.add(match.group(1))
+        # add_command(xxx_group) — group name
+        for match in re.finditer(r'add_command\((\w+)_group', content):
+            commands.add(match.group(1).replace("_", "-"))
     return commands
 
 
@@ -197,8 +210,10 @@ def validate_docs(version: str) -> list[str]:
     readme_template = README_TEMPLATE
     if readme_template.exists():
         content = readme_template.read_text()
-        # Check for known deprecated command names
-        deprecated = ["loomgraph search", "loomgraph scan"]
+        # Check for known deprecated command names. `search` was reclaimed in
+        # EPIC-015 as a first-class semantic-search command, so it is NOT
+        # deprecated; `query` was removed in v0.10 and must not resurface.
+        deprecated = ["loomgraph query", "loomgraph scan"]
         for cmd in deprecated:
             if cmd in content:
                 warnings.append(f"README.template.md references deprecated command: '{cmd}'")

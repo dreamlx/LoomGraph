@@ -1972,3 +1972,44 @@ class TestCodeindexPackageName:
             f"Stale 'matrix-codeindex' package name in: {offenders}. "
             "The PyPI package is 'ai-codeindex'."
         )
+
+
+class TestSetupConfigDeprecated:
+    """#114: `setup-config` dates from the LightRAG era — it generated
+    `lightrag.api_url` config, contradicting the v0.11+ SQLite default. It's
+    now deprecated: emits a stderr warning and writes a SQLite-era stub
+    instead of LightRAG config. Kept registered so existing scripts/docs
+    don't break."""
+
+    def test_setup_config_emits_deprecation_warning(
+        self, runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("HOME", str(tmp_path))
+        result = runner.invoke(main, ["setup-config", "--lightrag-url", "http://x"])
+        assert result.exit_code == 0
+        assert "deprecated" in (result.stderr or "").lower()
+
+    def test_setup_config_writes_sqlite_not_lightrag(
+        self, runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("HOME", str(tmp_path))
+        result = runner.invoke(main, ["setup-config"])
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert data["success"] is True
+        assert data["data"]["deprecated"] is True
+
+        cfg = (tmp_path / ".config" / "loomgraph" / "config.yaml").read_text()
+        assert "lightrag" not in cfg
+        assert "sqlite" in cfg
+
+    def test_setup_config_no_longer_prompts(
+        self, runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """--lightrag-url used to be a required click prompt; now it's an
+        ignored deprecated option so scripts run non-interactively."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        result = runner.invoke(main, ["setup-config"])
+        # No prompt abort (exit 0), no "LightRAG API URL" prompt text.
+        assert result.exit_code == 0
+        assert "LightRAG API URL" not in (result.output or "")
