@@ -6,6 +6,21 @@
 
 ## [Unreleased]
 
+### 变更 — 安装流程迁公开 PyPI + setup-config 废弃 (#114)
+- **安装方式**：从 `~/.loomgraph-venv` + GitHub TOKEN 私有分发，统一改为
+  `pipx install loomgraph`（公开 PyPI）。无需 TOKEN、无需远程 LightRAG 服务。
+  Java/TypeScript 项目用 `pipx install --force loomgraph[java]` /
+  `loomgraph[typescript]` 装语言解析器。
+- **`loomgraph setup-config` 废弃**：原命令生成 LightRAG config，与 v0.11+
+  SQLite 默认矛盾。现改为输出 stderr 废弃警告 + 写 SQLite config stub。命令保留
+  不 break 现有脚本，但日常无需运行（零配置默认可用）。
+- **`/loomgraph-setup` Skill**：去掉 venv/LightRAG 依赖；新增 flat layout 检测
+  （根目录 `*.py` 无 `src/` 时用 `include: ["."]`），修复此前 0 实体静默清空问题。
+- **CLAUDE.md / README 模板**：对齐当前架构（SQLite + codeindex + MCP native），
+  移除 LightRAG/Postgres/H200/`loomgraph query` 等过时内容。
+- **⚠️ 安全**：历史交付文档曾含真实 GitHub PAT 明文，已脱敏；但 git 历史仍含明文，
+  请到 github.com/settings/tokens 确认相关 token 已 revoke。
+
 ## [0.15.4] - 2026-07-11
 
 ### 修复 — `graph <类>` 现在聚合方法的 callees (#105)

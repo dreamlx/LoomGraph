@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — deprecate LightRAG-era onboarding artifacts (#114)
+- `loomgraph setup-config` is deprecated. It dated from the LightRAG era and
+  still generated `lightrag.api_url` config, contradicting the v0.11+ SQLite
+  default. It now emits a stderr warning and writes a SQLite-era config stub
+  (`storage.backend: sqlite`, embedding opt-in) instead of LightRAG config.
+  The command stays registered so existing scripts don't break.
+- `customers/README.template.md` rewritten for the public-PyPI era: `pipx
+  install loomgraph` replaces the `~/.loomgraph-venv` + GitHub TOKEN + remote
+  LightRAG-URL flow. CLI command table aligned with `loomgraph --help` (drops
+  removed `query`, marks `search` as semantic, adds `graph --include-unresolved`,
+  `debt`, `git-metrics`, `embed-backfill`, `trends`).
+- `skills/loomgraph-setup/SKILL.md` updated: `loomgraph version` (no hardcoded
+  venv path), `pipx install loomgraph[<lang>]` extras, dropped `setup-config
+  --lightrag-url`, added flat-layout detection (`include: ["."]` when `*.py`
+  at repo root with no `src/`) — fixes the 0-entity silent-clear dogfood bug.
+- `scripts/package.py`: `get_cli_commands` now scans all `cli/_*.py`
+  submodules (was main.py-only, false-positive-flagging real commands);
+  deprecated-command set corrected to `query`/`scan` (`search` is a
+  first-class semantic-search command since EPIC-015).
+- `CLAUDE.md` rewritten to the SQLite/codeindex/MCP-native architecture,
+  dropping the stale three-repo / LightRAG / Postgres / H200 / Jina / remote-
+  endpoint / `/mo:*`-skill / `loomgraph query` legacy content.
+- `customers/customers.yaml.example` simplified (drops `lightrag_url` /
+  `github_token_*` / `language_parser` / `exclude_dirs` — public PyPI needs
+  none of them).
+- `customers/DELIVERY_GUIDE.md` redacted: 6 plaintext GitHub PATs (customer /
+  customer / demo) replaced with placeholders. **git history still contains
+  the plaintext tokens — revoke them at github.com/settings/tokens.**
+
 ## [0.15.4] - 2026-07-11
 
 ### Fixed — self-dogfood QA pass (#105, #106, #108)

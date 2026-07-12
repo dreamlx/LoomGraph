@@ -9,51 +9,25 @@ argument-hint: "[--force]"
 
 在执行 `loomgraph index .` 之前，需要先配置 codeindex。此 skill 将引导你完成配置。
 
+> v0.16+: LoomGraph 走公开 PyPI（`pipx install loomgraph`），codeindex 作为依赖自动安装，默认零配置（本地 SQLite，无远程服务）。本向导只需检测语言 + 生成 `.codeindex.yaml`。
+
 ### Step 0: 版本检查
 
 **检查当前安装的 LoomGraph 版本：**
 ```bash
-~/.loomgraph-venv/bin/loomgraph version 2>/dev/null || echo '{"error": "loomgraph not installed"}'
+loomgraph version 2>/dev/null || echo '{"error": "loomgraph not installed"}'
 ```
 
 **如果未安装或需要更新：**
-
-在线安装/更新：
 ```bash
-source ~/.loomgraph-venv/bin/activate
-pip install --upgrade "loomgraph @ git+https://TOKEN@github.com/dreamlx/LoomGraph.git@vLATEST"
-loomgraph install-skills
+# 安装（公开 PyPI）
+pipx install loomgraph
+
+# 更新
+pipx install --upgrade loomgraph
 ```
 
-离线安装/更新：
-```bash
-source ~/.loomgraph-venv/bin/activate
-pip install ./loomgraph-*.whl
-loomgraph install-skills
-```
-
----
-
-### Step 0.5: 检查服务连接配置
-
-**检查是否已配置服务连接：**
-```bash
-~/.loomgraph-venv/bin/loomgraph status 2>/dev/null
-```
-
-**如果输出 `lightrag_api.connected: false` 或配置文件不存在：**
-
-检查是否已有配置文件：
-```bash
-cat ~/.config/loomgraph/config.yaml 2>/dev/null || echo "配置文件不存在"
-```
-
-如果不存在，提示用户提供 LightRAG 服务地址，然后执行：
-```bash
-loomgraph setup-config --lightrag-url <用户提供的URL> --embedding-url ""
-```
-
-> 服务地址由 LoomGraph 技术团队提供。如果用户不知道地址，请联系技术团队获取。
+> 没有 pipx？`python3 -m pip install --user pipx && python3 -m pipx ensurepath`
 
 ---
 
@@ -73,27 +47,19 @@ loomgraph setup-config --lightrag-url <用户提供的URL> --embedding-url ""
 ls -la pom.xml build.gradle composer.json pyproject.toml requirements.txt package.json 2>/dev/null
 ```
 
-### Step 2: 安装语言解析器
+### Step 2: 安装语言解析器（按需）
 
-根据检测到的语言，安装对应的 tree-sitter 解析器：
+Python 项目跳过此步（解析器默认包含）。Java / TypeScript 需要对应 tree-sitter extra：
 
 ```bash
 # Java 项目
-source ~/.loomgraph-venv/bin/activate
-pip install ai-codeindex[java]
+pipx install --force loomgraph[java]
 
-# PHP 项目
-pip install ai-codeindex[php]
-
-# Python 项目
-pip install ai-codeindex[python]
-
-# 多语言项目
-pip install ai-codeindex[java,python]
-
-# 所有语言
-pip install ai-codeindex[all]
+# TypeScript 项目
+pipx install --force loomgraph[typescript]
 ```
+
+> `--force` 让 pipx 在已装的 loomgraph 上重装带 extra。codeindex（parser engine）是 loomgraph 依赖，自动安装，无需用户直接操作。
 
 **验证安装：**
 ```bash
@@ -107,7 +73,7 @@ codeindex --version
 **常见的源码目录：**
 - Java Maven/Gradle: `src/main/java/`
 - PHP Laravel: `app/`
-- Python: `src/` 或项目名目录
+- Python: `src/` 或项目名目录，或 flat layout（`main.py` 在根目录）
 
 **执行检测：**
 ```bash
@@ -117,7 +83,14 @@ ls -d */ 2>/dev/null | head -10
 
 ### Step 4: 生成 .codeindex.yaml
 
-根据检测结果，在项目根目录创建 `.codeindex.yaml`：
+根据检测结果，在项目根目录创建 `.codeindex.yaml`。
+
+> **flat layout 检测（#114 问题 3）**：Python 项目若根目录直接有 `*.py` 且无 `src/` 目录（如 `main.py` 在 repo root），必须用 `include: ["."]`。若误用 `include: [src/]` 或 `include: ["*.py"]`，`codeindex graph-export` 会返回 0 entities 导致索引静默清空。
+>
+> 检测方式：
+> ```bash
+> ls *.py 2>/dev/null && [ ! -d src ] && echo "FLAT LAYOUT: use include: [\".\"]"
+> ```
 
 **Java 项目模板：**
 ```yaml
@@ -165,12 +138,34 @@ parallel_workers: 8
 batch_size: 50
 ```
 
-**Python 项目模板：**
+**Python 项目模板（src/ layout）：**
 ```yaml
 codeindex: 1
 
 include:
   - src/
+
+exclude:
+  - "**/__pycache__/**"
+  - "**/.git/**"
+  - "**/venv/**"
+  - "**/.venv/**"
+  - "**/test/**"
+  - "**/tests/**"
+
+languages:
+  - python
+
+parallel_workers: 8
+batch_size: 50
+```
+
+**Python 项目模板（flat layout — 根目录有 `*.py`，无 `src/`）：**
+```yaml
+codeindex: 1
+
+include:
+  - "."
 
 exclude:
   - "**/__pycache__/**"
@@ -201,8 +196,10 @@ codeindex scan . --dry-run 2>&1 | head -20
 
 配置完成后，提示用户：
 
-1. 执行 `/loomgraph-init` 配置项目 CLAUDE.md
+1. 执行 `/loomgraph-init` 配置项目 CLAUDE.md（Claude Code 用户）
 2. 执行 `loomgraph index .` 开始索引
+
+> 语义搜索（`loomgraph search`）默认关闭，需在 `.loomgraph.yaml` 配 `embedding.enabled: true` + provider（Ollama/OpenAI/Voyage）。结构化命令（`find`/`graph`/`topology`）无需 embedding。
 
 ---
 
@@ -214,11 +211,13 @@ codeindex scan . --dry-run 2>&1 | head -20
 - Java
 - PHP
 - Python
+- TypeScript
 - 多语言（请说明）
 
 **问题 2：源码目录在哪里？**
 - 默认检测到的目录
 - 自定义路径
+- flat layout（根目录 `*.py`）
 
 **问题 3：是否有特殊的排除目录？**
 - 使用默认排除规则
@@ -231,3 +230,4 @@ codeindex scan . --dry-run 2>&1 | head -20
 1. **大型项目**：建议设置 `symbols.project_symbols.enabled: false`
 2. **多模块项目**：每个模块可以有自己的 `.codeindex.yaml`
 3. **首次索引慢**：正常现象，后续增量索引会快很多
+4. **零配置可用**：默认本地 SQLite，无需 LightRAG/Postgres/远程服务（v0.11+ 起 LightRAG 已移除）。`loomgraph setup-config` 已 deprecated，仅在需要手写 config stub 时使用。
