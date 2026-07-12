@@ -309,8 +309,8 @@ mypy src/
 
 | 当你准备... | 先读... | 同步检查 |
 |------------|---------|---------|
-| 打包/发布（`scripts/package.py`） | `docs/PACKAGING.md` | 确认发布 checklist |
-| 新增/修改/删除 CLI 命令 | `customers/README.template.md` | 同步 CLI 命令表 + 前置条件列 |
+| 发版（`git tag vX.Y.Z`） | `docs/PACKAGING.md` | 确认三处版本一致 + release.yml 流程 |
+| 新增/修改/删除 CLI 命令 | 根 `README.md` + `loomgraph --help` | 同步 CLI 命令表 + 前置条件列 |
 | bump 版本 | `customers/CHANGELOG.md` + 根 `CHANGELOG.md` | 同步变更日志 |
 | 修改架构 | `docs/adr/` 对应 ADR | 确认是否需要新 ADR |
 
@@ -323,7 +323,7 @@ mypy src/
 
 **触发规则**：
 - 合并 feature 分支到 main 时 → 更新根 `CHANGELOG.md` 的 `[Unreleased]`
-- 执行 `python scripts/package.py` 打包发布时 → 先阅读 `docs/PACKAGING.md` 发布流程
+- 执行 `git tag vX.Y.Z` 发版时 → 先阅读 `docs/PACKAGING.md` 发布流程
 
 ## 关键文档
 

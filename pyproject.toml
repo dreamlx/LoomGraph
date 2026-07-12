@@ -101,8 +101,6 @@ exclude = ["**/README_AI.md", "**/PROJECT_SYMBOLS.md"]
 
 [tool.hatch.build.targets.sdist]
 exclude = [
-    "/customers",
-    "/scripts/package.py",
     "/docs/epics",
     "/docs/archive",
     "/.serena",
