@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.5] - 2026-07-12
+
+### Fixed — pin `ai-codeindex>=0.33.3` (codeindex #144, downstream of #139)
+- TS `tsconfig.json` `paths` aliases now resolve for the common `./`-prefixed
+  target form. codeindex #139 (v0.33.2) fixed `paths: {"@/*": ["src/*"]}` but
+  left `{"@/*": ["./src/*"]}` — the form Vite, Next.js, and the TS handbook
+  example all emit — **100% unresolved**, because `_load_tsconfig_paths`'s
+  `_dot` closure mangled `./src/*` into `..src.*` (leading `.` → dot) which
+  never matched `module_set`'s `src.*` entries. codeindex #144 (v0.33.3)
+  normalizes `_dot` to drop empty + `.` segments, matching the adjacent
+  `baseUrl` handling. Downstream effect, verified on fabricOS (630 entities):
+  `@/`-alias IMPORTS edges **0/381 (0%) → 840/868 (96%)** resolved; the
+  residual 4% target modules outside `include: [src/]` (correct `unresolved`).
+  `loomgraph topology` orphan count **235 → 208** (27 false-positive orphans
+  eliminated, 0 new orphans introduced) — symbols like `Button`, `appRoutes`,
+  `zhCN`, `TenantProvider` that were imported only via `@/` now have inbound
+  edges and are no longer flagged as orphans.
+- **Upgrade guidance**: after `pipx install --upgrade loomgraph`, run
+  `loomgraph index --clear .` once on TS repos using `@/` path aliases so
+  `topology` drops the stale false-positive orphans.
+
 ### Changed — deprecate LightRAG-era onboarding artifacts (#114)
 - `loomgraph setup-config` is deprecated. It dated from the LightRAG era and
   still generated `lightrag.api_url` config, contradicting the v0.11+ SQLite

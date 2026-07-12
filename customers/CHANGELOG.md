@@ -6,6 +6,26 @@
 
 ## [Unreleased]
 
+## [0.15.5] - 2026-07-12
+
+### 修复 — TS 项目 `@/` 路径别名现在正常解析（fabricOS 假孤儿节点消除）
+- **背景**：用 `@/components/ui/button` 这类 `tsconfig.json` `paths` 别名
+  的 TypeScript 仓库，之前 `loomgraph topology` 会把一批**实际被引用的**
+  组件（`Button`、`Checkbox`、`Dialog`、`appRoutes`、`zhCN`、
+  `TenantProvider` 等）误报为「孤儿节点」，因为这些 `@/` 导入边在
+  codeindex 侧全部 unresolved。根因是 codeindex #139（0.33.2）只修了
+  `src/*` 形式的别名目标，没修 `./src/*` 形式（Vite / Next.js / TS 官方
+  示例的默认写法）—— `_dot` 把 `./src/*` 错误转成 `..src.*`，匹配不上
+  `src.*` 模块名。codeindex #144（0.33.3）修好了这个归一化。
+- **实测**（fabricOS，630 实体）：`@/` 别名导入边解析率 **0/381 (0%) →
+  840/868 (96%)**；`topology` 孤儿节点 **235 → 208**（消除 27 个假孤儿，
+  0 个新增）。剩余 4% 是指向 `include: [src/]` 扫描范围外模块的 `@/` 导入
+  （如 `@/mocks/...`），属正常 unresolved，不是 bug。
+- **更新指引**：TypeScript 项目升级后请执行一次 `loomgraph index --clear .`
+  重建，让 `topology` 清掉旧的假孤儿节点。非 TS 项目无影响。
+
+## [0.15.4] - 2026-07-11
+
 ### 变更 — 安装流程迁公开 PyPI + setup-config 废弃 (#114)
 - **安装方式**：从 `~/.loomgraph-venv` + GitHub TOKEN 私有分发，统一改为
   `pipx install loomgraph`（公开 PyPI）。无需 TOKEN、无需远程 LightRAG 服务。
@@ -20,8 +40,6 @@
   移除 LightRAG/Postgres/H200/`loomgraph query` 等过时内容。
 - **⚠️ 安全**：历史交付文档曾含真实 GitHub PAT 明文，已脱敏；但 git 历史仍含明文，
   请到 github.com/settings/tokens 确认相关 token 已 revoke。
-
-## [0.15.4] - 2026-07-11
 
 ### 修复 — `graph <类>` 现在聚合方法的 callees (#105)
 - 类实体本身不拥有传出边，调用都在它的方法上（`Class.method`），所以
