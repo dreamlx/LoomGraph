@@ -6,6 +6,13 @@
 
 ## [Unreleased]
 
+### 变更 — 移除企业私有分发遗留（仅仓库内部清理）
+- LoomGraph 自 v0.16 起只走公开 PyPI（`pipx install loomgraph`），企业
+  私有分发框架（GitHub PAT 管理、客户专属 INSTALL.md、离线 tarball 打包、
+  交付总结生成器）已删除。**对公开用户无影响**——安装/升级命令不变。
+  仓库内 `docs/PACKAGING.md` 重写为当前 `release.yml` CI 流程，Makefile
+  清掉 11 个死 target。
+
 ## [0.15.5] - 2026-07-12
 
 ### 修复 — TS 项目 `@/` 路径别名现在正常解析（fabricOS 假孤儿节点消除）
