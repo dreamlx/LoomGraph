@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — non-Python repos no longer silently index to 0 entities (#118)
+- A pure-Swift repo indexed to **0 entities** with only a vague warning on a
+  fresh `pipx install loomgraph`: loomgraph declared no `[swift]` extra
+  (codeindex doesn't hard-depend on `tree-sitter-swift`), the new-user venv
+  shipped no Swift grammar, and the diagnostic chain dropped codeindex's
+  `Parser library not installed` stderr lines (only `WARNING:`-prefixed lines
+  were kept). The result: `success: true` + a hint blaming `.codeindex.yaml`
+  when the config was actually correct.
+- **`[swift]` extra** now declared in `pyproject.toml`
+  (`swift = ["tree-sitter-swift>=0.0.1"]`), parity with `[java]` (#93) /
+  `[typescript]` (#96). `pipx install loomgraph[swift]` surfaces the grammar.
+- **`run_graph_export`** now surfaces `Parser library not installed for <lang>`
+  lines (deduped to one) alongside `WARNING:` lines — covers Java/TS/Swift/
+  objc/JS grammar-missing cases, which all share codeindex's exit-0 + per-file
+  stderr behavior.
+- **`_zero_entities_warning`** now prefers codeindex's stderr diagnostic when
+  present (names the exact missing language + the config-vs-extensions gap,
+  even for PHP/objc/JS that have no extra branch), adds a `.swift` suffix-hint
+  branch (parity with java/typescript), and folds multi-line hints to their
+  leading line. A PHP repo with `languages: [python]` now reports the mismatch
+  instead of the generic config hint.
+- No runtime behavior change for Python repos (double safety net: `tree-sitter-
+  python` is a hard dep + codeindex defaults to `languages: ["python"]`).
+
 ## [0.16.0] - 2026-07-13
 
 ### Changed — remove private customer-distribution scaffolding

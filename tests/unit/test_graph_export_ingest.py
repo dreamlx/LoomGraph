@@ -151,6 +151,39 @@ def test_run_graph_export_no_warnings_when_stderr_clean(
     assert warnings == []
 
 
+def test_run_graph_export_surfaces_parser_library_not_installed(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """#118: codeindex emits per-file ``Parser library not installed for <lang>``
+    lines (no ``WARNING:`` prefix) when a tree-sitter grammar is missing. These
+    carry the actual root cause + fix (``pip install tree-sitter-<lang>``) and
+    must reach the caller — otherwise a missing-grammar repo indexes to 0 as a
+    silent success. codeindex repeats the line per file; dedupe to one.
+    """
+    proc = _FakeProc(
+        stdout=_ndjson([META]),
+        stderr=(
+            "Parser library not installed for swift: tree-sitter-swift is not "
+            "installed. Install it with: pip install tree-sitter-swift "
+            "(Sources/App/AppState.swift)\n"
+            "Parser library not installed for swift: tree-sitter-swift is not "
+            "installed. Install it with: pip install tree-sitter-swift "
+            "(Sources/App/ContentView.swift)\n"
+            "WARNING: no indexable directories found.\n"
+        ),
+    )
+    monkeypatch.setattr(
+        "loomgraph.core.graph_export_ingest.Popen", lambda *a, **kw: proc
+    )
+    _, _, _, warnings = run_graph_export(tmp_path)
+    # The parser-missing diagnostic is surfaced exactly once (deduped)…
+    parser_lines = [w for w in warnings if "Parser library not installed" in w]
+    assert len(parser_lines) == 1
+    assert "tree-sitter-swift" in parser_lines[0]
+    # …alongside the regular WARNING line.
+    assert any("no indexable directories" in w for w in warnings)
+
+
 def test_run_graph_export_invokes_codeindex_graph_export(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
