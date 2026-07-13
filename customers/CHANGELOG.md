@@ -4,7 +4,7 @@
 
 ---
 
-## [Unreleased]
+## [0.16.0] - 2026-07-13
 
 ### 变更 — 移除企业私有分发遗留（仅仓库内部清理）
 - LoomGraph 自 v0.16 起只走公开 PyPI（`pipx install loomgraph`），企业
