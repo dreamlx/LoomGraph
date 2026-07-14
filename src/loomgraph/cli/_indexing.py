@@ -80,8 +80,9 @@ def index(repo_path: str, clear: bool, workspace: str | None) -> None:
     # 0 entities is almost always a languages/grammar mismatch (#93) — warn
     # loudly instead of letting it sail through as a silent success. Kept as a
     # warning (exit 0): an empty repo legitimately indexes to 0.
+    # warning (exit 0): an empty repo legitimately indexes to 0.
     zero_warning = (
-        _zero_entities_warning(repo) if summary.entity_count == 0 else None
+        _zero_entities_warning(repo, warnings) if summary.entity_count == 0 else None
     )
     if zero_warning is not None:
         click.echo(f"⚠️  WARNING: {zero_warning}", err=True)
@@ -141,15 +142,35 @@ async def _async_index(
     return result
 
 
-def _zero_entities_warning(repo: Path) -> str:
-    """Diagnose a 0-entity graph-export for the user/agent (#93, #96).
+def _zero_entities_warning(repo: Path, warnings: list[str] | None = None) -> str:
+    """Diagnose a 0-entity graph-export for the user/agent (#93, #96, #118).
 
     ``codeindex graph-export`` returned nothing — almost always a
     ``.codeindex.yaml`` languages mismatch (codeindex defaults to python)
     or a missing tree-sitter grammar. Return an actionable hint rather than
-    a bare count. Java/TypeScript get a specific pointer to their extra;
-    the general case points at the languages config.
+    a bare count. Java/TypeScript/Swift get a specific pointer to their
+    extra; the general case points at the languages config or — when
+    codeindex reported a grammar/parser problem on stderr — surfaces that.
     """
+    if warnings:
+        # codeindex already told us the root cause on stderr (#118): a missing
+        # tree-sitter grammar (``Parser library not installed for <lang>``) or a
+        # languages-mismatch (``no indexable directories`` + ``Top extensions``).
+        # Prefer the codeindex diagnostic over file-suffix guessing — it names
+        # the exact missing language even for PHP/objc/JS (no extra / no suffix
+        # branch here yet) and cites the config vs file-extension gap directly.
+        # The raw WARNING lines are already echoed verbatim above; fold the
+        # multi-line hint into its leading sentence (keep the missing-language
+        # name + file-extension evidence, drop the per-file path noise).
+        first_lines: list[str] = []
+        for w in warnings:
+            first_lines.append(w.split("\n")[0].rstrip())
+        joined = "; ".join(first_lines)
+        return (
+            f"graph-export returned 0 entities; codeindex reports: {joined}. "
+            "Install the matching `loomgraph[<lang>]` extra and ensure that "
+            "language is listed under `languages` in .codeindex.yaml"
+        )
     if next(repo.rglob("*.java"), None) is not None:
         return (
             "graph-export returned 0 entities; found .java files — install "
@@ -161,6 +182,12 @@ def _zero_entities_warning(repo: Path) -> str:
             "graph-export returned 0 entities; found .ts/.tsx files — install "
             "TypeScript support with `pipx install loomgraph[typescript]` and "
             "ensure 'typescript' is listed under languages in .codeindex.yaml"
+        )
+    if next(repo.rglob("*.swift"), None) is not None:
+        return (
+            "graph-export returned 0 entities; found .swift files — install "
+            "Swift support with `pipx install loomgraph[swift]` and ensure "
+            "'swift' is listed under languages in .codeindex.yaml"
         )
     return (
         "graph-export returned 0 entities; check that .codeindex.yaml "
