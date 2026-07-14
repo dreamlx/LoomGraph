@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.1] - 2026-07-14
+
 ### Fixed — non-Python repos no longer silently index to 0 entities (#118)
 - A pure-Swift repo indexed to **0 entities** with only a vague warning on a
   fresh `pipx install loomgraph`: loomgraph declared no `[swift]` extra

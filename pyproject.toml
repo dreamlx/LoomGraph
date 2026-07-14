@@ -1,6 +1,6 @@
 [project]
 name = "loomgraph"
-version = "0.16.0"
+version = "0.16.1"
 description = "Local code knowledge graph — SQLite + sqlite-vec, AST-driven, no RAG framework needed"
 readme = "README.md"
 requires-python = ">=3.11"
