@@ -38,6 +38,29 @@ def test_java_extra_declared() -> None:
     )
 
 
+def test_swift_extra_declared() -> None:
+    """#118: ``pipx install loomgraph[swift]`` must surface the Swift grammar.
+
+    Parity with the ``[java]`` (#93) / ``[typescript]`` (#96) extras: a pure-Swift
+    repo otherwise indexes to 0 entities because the default install ships no
+    ``tree-sitter-swift`` and codeindex does not hard-depend on it. The
+    ``[swift]`` extra is the customer-facing escape hatch.
+    """
+    data = _pyproject()
+    project = data.get("project", {})
+    assert isinstance(project, dict)
+    extras = project.get("optional-dependencies", {})
+    assert isinstance(extras, dict)
+    assert "swift" in extras, (
+        "[project.optional-dependencies] must declare a `swift` extra "
+        "(#118: pipx install loomgraph[swift])"
+    )
+    joined = " ".join(extras["swift"])
+    assert "tree-sitter-swift" in joined, (
+        "`swift` extra must pull tree-sitter-swift (the grammar codeindex needs)"
+    )
+
+
 def test_typescript_extra_declared() -> None:
     """#96: ``pipx install loomgraph[typescript]`` must surface the TS grammar.
 

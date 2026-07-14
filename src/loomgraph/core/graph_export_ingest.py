@@ -80,6 +80,16 @@ def run_graph_export(
     warnings = [
         line for line in stderr.splitlines() if line.strip().startswith("WARNING:")
     ]
+    # #118: codeindex also emits per-file ``Parser library not installed for
+    # <lang>`` lines (no ``WARNING:`` prefix) when a tree-sitter grammar is
+    # missing. These carry the real root cause + fix (``pip install
+    # tree-sitter-<lang>``) for a 0-entity export; without them a missing-grammar
+    # repo looks like a config problem. Dedupe (one line per file → first only).
+    seen_parser = False
+    for line in stderr.splitlines():
+        if "Parser library not installed" in line and not seen_parser:
+            warnings.append(line.strip())
+            seen_parser = True
 
     fd, tmp_path = tempfile.mkstemp(suffix=".ndjson")
     try:

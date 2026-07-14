@@ -538,7 +538,12 @@ class TestIndexCommand:
         runner: CliRunner,
         tmp_path: Path,
     ) -> None:
-        """#93: 0 entities must not be a silent success — warn (stderr + JSON)."""
+        """#93: 0 entities must not be a silent success — warn (stderr + JSON).
+
+        ``run_graph_export`` returns no codeindex warnings here (clean 0), so
+        the suffix-based hint falls through to the general ``.codeindex.yaml``
+        message — not the codeindex-diagnostic branch (#118).
+        """
         (tmp_path / "main.py").write_text("print('hi')\n")  # non-java repo
         mock_check.return_value = {"installed": True, "version": "0.31.0"}
         mock_export.return_value = (
@@ -567,6 +572,60 @@ class TestIndexCommand:
         assert data["success"] is True
         assert "warning" in data["data"], "agent-visible warning field missing"
         assert "0 entities" in data["data"]["warning"]
+
+    @patch("loomgraph.cli._indexing._async_index", new_callable=AsyncMock)
+    @patch("loomgraph.cli._indexing.run_graph_export")
+    @patch("loomgraph.cli._indexing.check_codeindex")
+    def test_index_zero_entities_warns_php_languages_mismatch(
+        self,
+        mock_check: MagicMock,
+        mock_export: MagicMock,
+        mock_async_index: AsyncMock,
+        runner: CliRunner,
+        tmp_path: Path,
+    ) -> None:
+        """#118: 0 entities + codeindex ``no indexable directories`` warning
+        (PHP repo: parser present, but ``languages`` not configured) → surface
+        the codeindex diagnostic, not the suffix-based hint (PHP has no extra
+        branch). This is the ``parser present, language not enabled`` case:
+        codeindex's ``language_mismatch_hint`` fires only on non-empty repos."""
+        (tmp_path / "index.php").write_text("<?php echo 'hi';\n")
+        (tmp_path / "utils.php").write_text("<?php function foo() {}\n")
+        mock_check.return_value = {"installed": True, "version": "0.31.0"}
+        mock_export.return_value = (
+            [],
+            [],
+            ImportSummary(entity_count=0, relation_count=0),
+            [
+                "WARNING: no indexable directories found.\n"
+                "  Configured languages: ['python']\n"
+                "  Detected file types in include roots: .php (2)\n"
+                "  Hint: add php to .codeindex.yaml `languages:`\n"
+                "        (run: codeindex config explain languages)",
+            ],
+        )
+        mock_async_index.return_value = {
+            "cleared": True,
+            "entities_created": 0,
+            "relations_created": 0,
+            "embedded": 0,
+            "store_stats": {},
+            "workspace": "demo:main",
+            "mode": "cold_rebuild",
+        }
+
+        result = runner.invoke(main, ["index", str(tmp_path)])
+
+        assert result.exit_code == 0
+        # codeindex's diagnostic (config vs file-extensions gap) is surfaced…
+        assert "no indexable directories" in result.stderr
+        assert ".php" in result.stderr
+        # …and the actionable install/languages hint is present.
+        assert ".codeindex.yaml" in result.stderr
+        data = json.loads(result.stdout)
+        assert data["success"] is True
+        assert "no indexable directories" in data["data"]["warning"]
+
 
     @patch("loomgraph.cli._indexing._async_index", new_callable=AsyncMock)
     @patch("loomgraph.cli._indexing.run_graph_export")
@@ -645,6 +704,50 @@ class TestIndexCommand:
         data = json.loads(result.stdout)
         assert data["success"] is True
         assert "loomgraph[typescript]" in data["data"]["warning"]
+
+    @patch("loomgraph.cli._indexing._async_index", new_callable=AsyncMock)
+    @patch("loomgraph.cli._indexing.run_graph_export")
+    @patch("loomgraph.cli._indexing.check_codeindex")
+    def test_index_zero_entities_warns_swift_hint(
+        self,
+        mock_check: MagicMock,
+        mock_export: MagicMock,
+        mock_async_index: AsyncMock,
+        runner: CliRunner,
+        tmp_path: Path,
+    ) -> None:
+        """#118: 0 entities + .swift present → hint ``pipx install loomgraph[swift]``.
+
+        Parity with the java (#93) / typescript (#96) hints. Without the ``[swift]``
+        extra a pure-Swift repo indexes to 0 because codeindex does not hard-depend
+        on ``tree-sitter-swift`` and loomgraph ships no grammar by default.
+        """
+        (tmp_path / "AppState.swift").write_text("struct AppState {}\n")
+        mock_check.return_value = {"installed": True, "version": "0.31.0"}
+        mock_export.return_value = (
+            [],
+            [],
+            ImportSummary(entity_count=0, relation_count=0),
+            [],
+        )
+        mock_async_index.return_value = {
+            "cleared": True,
+            "entities_created": 0,
+            "relations_created": 0,
+            "embedded": 0,
+            "store_stats": {},
+            "workspace": "demo:main",
+            "mode": "cold_rebuild",
+        }
+
+        result = runner.invoke(main, ["index", str(tmp_path)])
+
+        assert result.exit_code == 0
+        assert "loomgraph[swift]" in result.stderr
+        assert ".codeindex.yaml" in result.stderr
+        data = json.loads(result.stdout)
+        assert data["success"] is True
+        assert "loomgraph[swift]" in data["data"]["warning"]
 
 
 class TestUpdateCommand:

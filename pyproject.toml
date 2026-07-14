@@ -65,6 +65,10 @@ java = ["tree-sitter-java>=0.23.0"]
 # TypeScript support is opt-in too — tree-sitter-typescript is heavy and
 # pure-Python repos don't need it. Install with: `pipx install loomgraph[typescript]` (#96).
 typescript = ["tree-sitter-typescript>=0.23"]
+# Swift support is opt-in — tree-sitter-swift is heavy and codeindex does not
+# hard-depend on it, so a pure-Swift repo otherwise indexes to 0 entities (#118).
+# Install with: `pipx install loomgraph[swift]`.
+swift = ["tree-sitter-swift>=0.0.1"]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",

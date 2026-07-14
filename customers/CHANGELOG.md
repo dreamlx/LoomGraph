@@ -4,6 +4,19 @@
 
 ---
 
+## [Unreleased]
+
+### 修复 — Swift 项目不再静默索引为 0 实体 (#118)
+- 全新安装后对纯 Swift 仓库跑 `loomgraph index` 会得到 **0 实体** + 一句
+  含糊警告。根因：loomgraph 没声明 `[swift]` extra，新用户 venv 没有
+  `tree-sitter-swift`，而诊断链又丢了 codeindex 的 `Parser library not
+  installed` 报错。
+- **新增 `loomgraph[swift]` extra**：`pipx install loomgraph[swift]` 即可装
+  上 Swift 解析器（与 `[java]` / `[typescript]` 对齐）。
+- **0 实体诊断改进**：现在会直接点名缺失的语言 + 给出"装 extra + 配
+  `languages`"的可执行指引，PHP/Java/TS/Swift 等都覆盖。Python 项目不受
+  影响（双保险：硬依赖 + 默认 `languages: ["python"]`）。
+
 ## [0.16.0] - 2026-07-13
 
 ### 变更 — 移除企业私有分发遗留（仅仓库内部清理）
