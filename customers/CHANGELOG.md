@@ -6,6 +6,15 @@
 
 ## [Unreleased]
 
+### 文档 — README 新增 `workspace` 概念说明
+- `workspace` 是贯穿全工具的核心概念（存储路径、查询目标、分支隔离、
+  自动降级），但 README 一直"用而不定义"。新加 "Workspaces" 小节：什么是
+  workspace（一个被索引的代码库快照，`~/.loomgraph/<ws>.db`）、命名规则
+  （`<仓目录>:<分支>`，全小写）、分支隔离语义、`--workspace` 覆盖、
+  `workspace list/info/delete`，以及空 workspace 自动降级到 `main → develop → master`。
+  新人跑完 `loomgraph index .` 后能立刻回答"它建了哪个 workspace、叫什么、
+  分支切换怎么办"。
+
 ### 修复 — `refresh`/`update` 在 0 实体时不再静默清空数据 (#120)
 - #118 修了 `index` 的 0 实体静默问题，但 `update` 和 `refresh`（含 MCP
   `loomgraph_refresh`）这两个同样调 `run_graph_export` 的入口没对齐：
