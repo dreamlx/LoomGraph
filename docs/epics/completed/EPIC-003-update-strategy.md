@@ -1,9 +1,21 @@
 # EPIC-003: 增量更新策略
 
-**状态**: 🚧 进行中 (Feature-001~003 ✅, Feature-004~006 🚧)
+> **归档说明 (2026-07-15, #124)**: 本 EPIC 的核心目标 —— 完整的增量更新策略 ——
+> **已达成**,迁移到 `completed/`。当前真实实现:
+> - Cold Rebuild / Warm Update: `loomgraph index --clear` / `loomgraph update`(per-file warm-diff via git,路 B)
+> - symbol-level 增量: content_hash diff(#91)
+> - post-commit hook 自动触发: `loomgraph hooks install`(核对时已 ship)
+> - MCP 写入触发的 reactive re-index: `loomgraph_refresh`(ADR-014)
+>
+> **下方正文保留作历史参考**。注意:正文中的 LightRAG 时代实现细节(`lightrag_client`、
+> `insert_custom_kg`、11 层写入、`DELETE /graph/clear` 等)已于 v0.10-0.11 退役,
+> 被 [ADR-013](../adr/ADR-013-sqlite-vec-replace-lightrag.md)(SQLite + sqlite-vec)supersede。
+> 正文不再逐字维护,权威实现以 `src/loomgraph/cli/_indexing.py` + `src/loomgraph/core/graph_export_ingest.py` 为准。
+
+**状态**: ✅ 已完成 (核心目标达成,2026-07-15 归档)
 **优先级**: P1
 **开始日期**: 2026-02-10
-**预计完成**: 2026-02-28
+**完成日期**: 2026-07-15
 
 ---
 
