@@ -29,7 +29,8 @@ def status() -> None:
     Returns status of all required dependencies:
     - codeindex: Code parsing tool
     - storage: SQLite + sqlite-vec local backend
-    - embedding: Jina Code V2 embedding service (optional, only needed for vec0)
+    - embedding: OpenAI-compatible embedding provider (optional, default local
+      Ollama; only needed for vec0 semantic search)
     """
     settings = get_settings()
 

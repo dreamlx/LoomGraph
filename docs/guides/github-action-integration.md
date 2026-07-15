@@ -1,12 +1,11 @@
 # GitHub Action 集成指南
 
-**自动增量更新知识图谱** — push 代码后自动同步到知识图谱（SQLite + sqlite-vec）
+**自动增量更新知识图谱** — push 代码后自动跑 `loomgraph update`（per-file warm-diff via git）。
 
-> ⚠️ **已知问题 (#125 follow-up)**: 底层的 reusable workflow
-> [`.github/workflows/incremental-update.yml`](https://github.com/dreamlx/LoomGraph/blob/main/.github/workflows/incremental-update.yml)
-> 未随 ADR-013（SQLite 迁移）更新 —— 它仍调用 `loomgraph update --lightrag-url ...`，而该参数在
-> 当前 CLI 中**已不存在**（见 `loomgraph update --help`，只接受 `--embedding-url`）。本指南描述的
-> 接入方式会触发该 workflow 报错，**在 #125 修复 workflow 前暂不可用**。下方内容保留作接入契约参考。
+> **存储说明（ADR-013）**: 知识图谱是本地 SQLite 文件（`~/.loomgraph/<workspace>.db`）。
+> 在 GitHub-hosted runner 上，这个文件随 runner 销毁而消失 —— 所以本 workflow 的主要价值是
+> **作为 reusable 模板**：push 后跑增量更新，验证索引管线在 CI 上正常工作。要持久化图谱需用
+> self-hosted runner（持久 home 目录），或在 workflow 末尾把 `.db` 作为 artifact 上传。
 
 ---
 
@@ -24,23 +23,31 @@ on: [push]
 jobs:
   update-graph:
     uses: dreamlx/LoomGraph/.github/workflows/incremental-update.yml@main
-    with:
-      lightrag_endpoint: ${{ secrets.LIGHTRAG_URL }}
-      embedding_endpoint: ${{ secrets.EMBEDDING_URL }}
+    # embedding_endpoint 可省略（见下方说明）
 ```
 
-### 2. 配置 Secrets
+### 2. 配置 Secrets（可选）
+
+只有需要 **vec0 语义搜索向量** 时才配 `EMBEDDING_URL`；纯结构化索引（`find`/`graph`/`topology`/`deps`/`impact`）不需要任何 secret。
 
 在项目的 **Settings → Secrets and variables → Actions** 添加:
 
 | Secret Name | 值 | 示例 |
 |-------------|-----|------|
-| `LIGHTRAG_URL` | 知识图谱存储/服务地址（见下方说明） | `http://your-store-endpoint:8000` |
-| `EMBEDDING_URL` | Embedding API 地址（OpenAI-compatible） | `http://your-embedding-endpoint:8000/v1` |
+| `EMBEDDING_URL` | Embedding API 地址（OpenAI-compatible，可选） | `http://your-embedding-endpoint:8000/v1` |
 
-> **注意**：GitHub Actions runner **无法连接你本地的 Ollama**。必须为 `EMBEDDING_URL` 配置一个 runner 可达的远程 OpenAI-compatible embedding endpoint（自托管 Ollama / TEI / 商用 API 均可）。本地开发默认的 Ollama `nomic-embed-text`（`http://localhost:11434/v1`）在 CI 环境中不可用，需自行替换为远程 endpoint。
->
-> 当前架构（ADR-013 后）使用 SQLite + sqlite-vec 存储，无 LightRAG / Postgres。`lightrag_endpoint` 输入名保留以兼容 reusable workflow 契约，按你的部署填入知识图谱服务的可达地址（若 runner 与存储同机，可用占位地址）。
+```yaml
+jobs:
+  update-graph:
+    uses: dreamlx/LoomGraph/.github/workflows/incremental-update.yml@main
+    with:
+      embedding_endpoint: ${{ secrets.EMBEDDING_URL }}
+```
+
+> **注意**：GitHub Actions runner **无法连接你本地的 Ollama**。若要让 CI 索引的 workspace 带向量，
+> 必须为 `embedding_endpoint` 配一个 runner 可达的远程 OpenAI-compatible endpoint（自托管 Ollama / TEI /
+> 商用 API 均可）。本地开发默认的 Ollama `nomic-embed-text`（`http://localhost:11434/v1`）在 CI 不可达。
+> 不配则产出无向量的结构化索引（语义搜索不可用，其余命令正常）。
 
 ### 3. 测试
 
@@ -62,8 +69,7 @@ git push
 
 | 参数 | 必需 | 默认值 | 说明 |
 |------|------|--------|------|
-| `lightrag_endpoint` | ✅ | - | 知识图谱存储/服务地址（输入名保留以兼容 reusable workflow 契约；ADR-013 后实际为 SQLite 存储） |
-| `embedding_endpoint` | ✅ | - | Embedding API URL（OpenAI-compatible，CI 需远程 endpoint） |
+| `embedding_endpoint` | ❌ | `''`（空，跳过向量） | Embedding API URL（OpenAI-compatible；空则产出无向量的结构化索引） |
 | `working_directory` | ❌ | `.` | 仓库工作目录 |
 | `since` | ❌ | `HEAD~1` | git diff 起始点 |
 
@@ -74,13 +80,12 @@ name: Update Knowledge Graph
 
 on:
   push:
-    branches: [main, develop]  # 仅在主分支触发
+    branches: [main]  # 仅在主分支触发
 
 jobs:
   update-graph:
     uses: dreamlx/LoomGraph/.github/workflows/incremental-update.yml@main
     with:
-      lightrag_endpoint: ${{ secrets.LIGHTRAG_URL }}
       embedding_endpoint: ${{ secrets.EMBEDDING_URL }}
       working_directory: './backend'  # 仅索引 backend 目录
       since: 'HEAD~3'  # 检测最近 3 次 commit 的变更

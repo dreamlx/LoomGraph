@@ -3,14 +3,16 @@ name: Incremental Update (Reusable)
 on:
   workflow_call:
     inputs:
-      lightrag_endpoint:
-        required: true
-        type: string
-        description: "LightRAG API endpoint URL"
       embedding_endpoint:
-        required: true
+        required: false
         type: string
-        description: "Embedding API endpoint URL"
+        default: ''
+        description: >-
+          Optional OpenAI-compatible embedding endpoint URL. Only needed if the
+          indexed workspace should carry vec0 vectors for semantic search
+          (embedding is opt-in; default local Ollama won't be reachable from a
+          GitHub-hosted runner — supply a runner-reachable endpoint or leave
+          blank for a vectors-free structural index).
       working_directory:
         required: false
         type: string
@@ -60,10 +62,13 @@ jobs:
         if: steps.changes.outputs.changed_count > 0
         run: |
           cd ${{ inputs.working_directory }}
+          EMBEDDING_FLAG=""
+          if [ -n "${{ inputs.embedding_endpoint }}" ]; then
+            EMBEDDING_FLAG="--embedding-url ${{ inputs.embedding_endpoint }}"
+          fi
           loomgraph update \
             --files "${{ steps.changes.outputs.files }}" \
-            --lightrag-url "${{ inputs.lightrag_endpoint }}" \
-            --embedding-url "${{ inputs.embedding_endpoint }}"
+            $EMBEDDING_FLAG
 
       - name: No changes
         if: steps.changes.outputs.changed_count == 0

@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — incremental-update.yml called removed `--lightrag-url` (#125)
+- The reusable workflow `.github/workflows/incremental-update.yml` invoked
+  `loomgraph update --lightrag-url ...`, but `update` dropped that option when
+  LightRAG was removed (v0.10-0.11, ADR-013). Any project referencing the
+  workflow hit a click "no such option" error on every push. Removed the
+  `--lightrag-url` line and the `lightrag_endpoint` input; `embedding_endpoint`
+  is now optional (default empty → vectors-free structural index, since
+  GitHub-hosted runners can't reach local Ollama anyway).
+- `src/loomgraph/cli/_setup.py`: `status` docstring still said "Jina Code V2
+  embedding service" (Jina retired v0.11). Corrected to "OpenAI-compatible
+  embedding provider (optional, default local Ollama)". `loomgraph status --help`
+  no longer misleads.
+- `docs/guides/github-action-integration.md`: removed the #124 "broken until
+  #125" warning (workflow now works); `LIGHTRAG_URL` secret dropped from the
+  quick-start; `EMBEDDING_URL` marked optional with the vectors-vs-structural
+  trade-off explained.
+
 ### Changed — CLI_DESIGN.md full detail realignment + EPIC-003 archived (#124)
 - `docs/api/CLI_DESIGN.md` rewritten end-to-end. The command overview table was
   fixed in #122 but the detail sections (`### N.x`, 646 lines) still contradicted
