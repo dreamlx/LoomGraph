@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -216,8 +217,12 @@ class ChangedSymbolExtractor:
             List of symbol dicts from codeindex
         """
         try:
+            # Invoke via the venv python (`sys.executable -m codeindex.cli`),
+            # never a bare `codeindex` PATH lookup — otherwise a stale codeindex
+            # elsewhere on PATH (e.g. pipx) shadows the pinned `ai-codeindex`
+            # dep (#76 PATH bypass; #120, same class as the graph-export entry).
             result = subprocess.run(
-                ["codeindex", "parse", str(file_path)],
+                [sys.executable, "-m", "codeindex.cli", "parse", str(file_path)],
                 capture_output=True,
                 text=True,
                 timeout=30,

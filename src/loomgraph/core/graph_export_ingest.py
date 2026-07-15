@@ -35,6 +35,44 @@ class GraphExportError(RuntimeError):
     """`codeindex graph-export` failed, timed out, or produced no readable output."""
 
 
+def assess_export(
+    summary: ImportSummary, warnings: list[str]
+) -> tuple[bool, str | None]:
+    """Gate a graph-export result before any write path touches the store (#120).
+
+    Returns ``(is_safe_to_write, warning)``:
+
+    - ``entity_count > 0`` → ``(True, None)``. A healthy export. Callers may
+      still echo ``warnings`` (partial-graph, #108) but the write proceeds.
+    - ``entity_count == 0`` → ``(False, <warning>)``. **Unsafe** for any write
+      path that clears or GCs (``clear=True``, ``ingest_incremental``'s symbol
+      GC): a 0-entity export on a non-empty repo is almost always a
+      languages/grammar mismatch (#93/#96/#108/#118), and writing through it
+      would silently wipe real data. The warning folds codeindex's own stderr
+      diagnostic (missing grammar / languages mismatch) into its leading line
+      when present — so the agent gets the real root cause, not a bare count.
+
+    Callers decide policy on top of this: ``index`` warns + still writes
+    (empty-repo is a legitimate 0); ``refresh force_full`` and ``update`` must
+    treat ``is_safe_to_write=False`` as a hard stop before ``clear``/``GC``.
+    """
+    if summary.entity_count > 0:
+        return True, None
+
+    if warnings:
+        first_lines = [w.split("\n")[0].rstrip() for w in warnings]
+        joined = "; ".join(first_lines)
+        return False, (
+            f"graph-export returned 0 entities; codeindex reports: {joined}. "
+            "Install the matching `loomgraph[<lang>]` extra and ensure that "
+            "language is listed under `languages` in .codeindex.yaml"
+        )
+    return False, (
+        "graph-export returned 0 entities; check that .codeindex.yaml "
+        "languages matches this repository's code"
+    )
+
+
 def run_graph_export(
     repo: Any,
     *,

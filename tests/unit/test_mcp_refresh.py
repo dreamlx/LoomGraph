@@ -34,7 +34,12 @@ def fakes(monkeypatch: pytest.MonkeyPatch) -> types.SimpleNamespace:
     ns.store.insert_custom_kg = AsyncMock()
     ns.store.get_graph_stats = AsyncMock(return_value={"entities": 0, "relations": 0})
     ns.create = AsyncMock(return_value=ns.store)
-    ns.export = MagicMock(return_value=([], [], ImportSummary(), []))
+    # Default to a HEALTHY export (entity_count > 0). The 0-entity gate (#120)
+    # would otherwise short-circuit every routing test to zero_entity_skipped.
+    # Tests that exercise the 0-entity path override this explicitly.
+    ns.export = MagicMock(
+        return_value=([object()], [], ImportSummary(entity_count=3), [])
+    )
     ns.is_git = MagicMock(return_value=True)
     ns.worktree = MagicMock(return_value=[])
     ns.incr = AsyncMock(
@@ -103,7 +108,18 @@ async def test_refresh_passes_untracked_through_to_incremental(
 async def test_refresh_force_full_clears_and_rebuilds(
     fakes: types.SimpleNamespace, tmp_path: Path
 ) -> None:
-    """force_full=True → ingest(clear=True) cold rebuild; incremental skipped."""
+    """force_full=True → ingest(clear=True) cold rebuild; incremental skipped.
+
+    Uses a NON-empty export: a 0-entity export must NOT reach the clear path
+    (would wipe the workspace — #120), so the healthy case needs entities."""
+    from loomgraph.io.export_reader import ImportSummary
+
+    fakes.export.return_value = (
+        [object()],  # non-empty → passes the 0-entity gate
+        [],
+        ImportSummary(entity_count=5),
+        [],
+    )
     fakes.ingest.return_value = {
         "cleared": True,
         "entities_created": 5,
@@ -120,6 +136,39 @@ async def test_refresh_force_full_clears_and_rebuilds(
     assert fakes.ingest.call_args.kwargs["clear"] is True
     fakes.incr.assert_not_called()
     fakes.worktree.assert_not_called()  # force_full short-circuits before worktree scan
+
+
+async def test_refresh_force_full_zero_entities_does_not_clear(
+    fakes: types.SimpleNamespace, tmp_path: Path
+) -> None:
+    """#120: force_full on a 0-entity export must NOT clear the workspace.
+
+    A misconfigured repo (missing grammar / languages mismatch) yields 0
+    entities; clearing on top of that silently wipes real data. The refresh
+    short-circuits to a noop-style result carrying the diagnosis, and never
+    calls ingest (so delete_all never fires)."""
+    from loomgraph.io.export_reader import ImportSummary
+
+    fakes.export.return_value = (
+        [],
+        [],
+        ImportSummary(entity_count=0),
+        [
+            "Parser library not installed for swift: tree-sitter-swift is not "
+            "installed. Install it with: pip install tree-sitter-swift "
+            "(Sources/App/AppState.swift)"
+        ],
+    )
+
+    result = await _async_refresh(
+        workspace="ws", repo=tmp_path, path=None, force_full=True
+    )
+
+    assert result["mode"] == "zero_entity_skipped"
+    assert "warning" in result
+    assert "tree-sitter-swift" in result["warning"]
+    fakes.ingest.assert_not_called()  # the critical assertion: no delete_all
+    fakes.incr.assert_not_called()
 
 
 async def test_refresh_path_file_scoped(

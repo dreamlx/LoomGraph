@@ -4,6 +4,22 @@
 
 ---
 
+## [Unreleased]
+
+### 修复 — `refresh`/`update` 在 0 实体时不再静默清空数据 (#120)
+- #118 修了 `index` 的 0 实体静默问题，但 `update` 和 `refresh`（含 MCP
+  `loomgraph_refresh`）这两个同样调 `run_graph_export` 的入口没对齐：
+  - **`loomgraph_refresh(force_full=True)`** 在配置错误的仓库（0 实体）上
+    会先清空整个 workspace 再插入空图 —— **静默数据丢失**。
+  - **`loomgraph update`** 会走到增量 GC，把变更文件里原本存在的符号当
+    "已删除"清掉。
+- 现在两者在 0 实体导出时**硬停**（`mode: zero_entity_skipped` + `warning`
+  带出 codeindex 的真实根因），不再触碰 store。`index` 保持原行为（空仓
+  合法 0 是允许的）。
+- 同时修复 `loomgraph impact` 的 PATH bypass：原本裸调 `codeindex parse`
+  走 PATH，可能命中旧版 pipx codeindex 绕过 pinned 依赖；现改为
+  `sys.executable -m codeindex.cli parse`（与 #76 同类）。
+
 ## [0.16.1] - 2026-07-14
 
 ### 修复 — Swift 项目不再静默索引为 0 实体 (#118)
