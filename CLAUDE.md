@@ -69,7 +69,7 @@ loomgraph/
 │   │   ├── main.py             # Click group 入口 + re-export
 │   │   ├── _common.py          # ErrorCode, output helpers, workspace auto-detect
 │   │   ├── _deps_check.py      # check_codeindex/embedding/storage
-│   │   ├── _indexing.py        # index, embed, inject, update
+│   │   ├── _indexing.py        # index, update, MCP refresh (_async_refresh)
 │   │   ├── _search.py          # find, search, graph
 │   │   ├── _analysis.py        # impact, deps, overview, topology, check, git-metrics, trends
 │   │   ├── _workspace.py       # workspace group + compare/similar
@@ -97,16 +97,18 @@ loomgraph/
 - **Labels**: `epic` / `feature` / `bug` / `docs` / `refactor` / `infra`
 - **文档**: Epic 详细设计在 `docs/epics/`，架构决策在 `docs/adr/`
 
-### GitFlow 分支策略
+### 分支策略（trunk-based，main-only）
 
 ```
-main (生产) ← develop ← feature/epic-NNN-short-name
-                       ← bugfix/short-name
+main ← feature/epic-NNN-short-name
+     ← fix/NN-short-name        # bug 修复，关联 issue 号
 ```
 
-- `main`: 生产就绪版本
-- `develop`: 开发主线，功能集成点
-- `feature/*`: 功能分支，命名 `feature/epic-NNN-short-name`
+- `main`: 生产就绪版本，PR 直接合入（无 develop 中间层）
+- `feature/*` / `fix/*`: 短命分支，命名带 issue/epic 号，squash merge 后删
+
+> 历史：曾按 GitFlow 规划 `main ← develop ← feature`，但实际未启用 develop 分支，
+> 2026-07 起明确 trunk-based（commit `ec2477a`）。
 
 ### TDD 开发循环
 
@@ -238,7 +240,7 @@ llm:
 |------|------|
 | `loomgraph version` | 显示版本信息 |
 | `loomgraph status` | 检查系统状态（storage / codeindex / embedding） |
-| `loomgraph index <path>` | 一键索引代码库（graph-export → embed → inject） |
+| `loomgraph index <path>` | 一键索引代码库（graph-export → embed → insert 内部 pipeline，非独立命令） |
 | `loomgraph index --clear <path>` | Cold Rebuild（清空重建） |
 | `loomgraph update [--since REF]` | Warm Update（per-file 增量，git diff） |
 | `loomgraph find "<query>"` | 结构化实体发现（名字匹配 + 类型过滤） |
