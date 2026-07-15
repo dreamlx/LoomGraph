@@ -18,6 +18,7 @@ from loomgraph.core.git import (
 )
 from loomgraph.core.graph_export_ingest import (
     GraphExportError,
+    assess_export,
     ingest,
     ingest_incremental,
     run_graph_export,
@@ -284,6 +285,22 @@ def update(
     for line in warnings:
         click.echo(f"⚠️  {line}", err=True)
 
+    # #120: a 0-entity whole-tree export is almost always a languages/grammar
+    # mismatch. Letting it through to ingest_incremental would GC the changed
+    # files' symbols (treated as "removed"); letting it through to the whole-
+    # tree upsert writes an empty graph. Hard-stop with a diagnosis instead.
+    safe, zero_warning = assess_export(summary, warnings)
+    if not safe:
+        click.echo(f"⚠️  WARNING: {zero_warning}", err=True)
+        output_success(
+            {
+                "mode": "zero_entity_skipped",
+                "repo_path": str(repo),
+                "warning": zero_warning,
+            }
+        )
+        return
+
     # Step 3: Incremental (git) or whole-tree upsert (non-git / --files)
     click.echo("[3/3] Updating knowledge graph...", err=True)
     try:
@@ -406,7 +423,17 @@ async def _async_refresh(
     store = await create_graph_store(workspace=ws)
 
     if force_full:
-        entities, relations, _, _ = run_graph_export(repo)
+        entities, relations, summary, warnings = run_graph_export(repo)
+        # #120: a 0-entity export is almost always a languages/grammar mismatch
+        # — clearing on top of it would silently wipe the whole workspace.
+        # Hard-stop before ingest(clear=True); surface the diagnosis instead.
+        safe, warning = assess_export(summary, warnings)
+        if not safe:
+            return {
+                "mode": "zero_entity_skipped",
+                "workspace": ws,
+                "warning": warning,
+            }
         result = await ingest(entities, relations, store, clear=True)
         result["mode"] = "cold_rebuild"
         result["workspace"] = ws
@@ -428,7 +455,17 @@ async def _async_refresh(
     if strategy == "incremental" and not changed_files:
         return {"mode": "noop", "changed_files": [], "workspace": ws}
 
-    entities, relations, _, _ = run_graph_export(repo)
+    entities, relations, summary, warnings = run_graph_export(repo)
+    # #120: same gate on the incremental/whole-tree path — ingest_incremental's
+    # symbol GC would treat a 0-entity export as "all symbols removed" and
+    # delete them. Hard-stop before any write.
+    safe, warning = assess_export(summary, warnings)
+    if not safe:
+        return {
+            "mode": "zero_entity_skipped",
+            "workspace": ws,
+            "warning": warning,
+        }
     if strategy == "incremental":
         result = await ingest_incremental(
             entities, relations, store, changed_files=changed_files

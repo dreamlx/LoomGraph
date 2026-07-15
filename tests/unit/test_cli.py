@@ -821,7 +821,9 @@ class TestUpdateCommand:
     ) -> None:
         """Non-git repo → whole-tree ingest(clear=False); incremental not used."""
         mock_check.return_value = {"installed": True, "version": "0.29.0"}
-        mock_export.return_value = ([], [], ImportSummary(), [])
+        # Healthy (non-empty) export — this test pins the routing, not the
+        # 0-entity gate (#120); an empty ImportSummary would short-circuit it.
+        mock_export.return_value = ([], [], ImportSummary(entity_count=2), [])
         mock_isgit.return_value = False
         mock_ingest.return_value = {
             "cleared": False,
@@ -860,7 +862,8 @@ class TestUpdateCommand:
     ) -> None:
         """--files forces whole-tree upsert even in a git repo (simple fallback)."""
         mock_check.return_value = {"installed": True, "version": "0.29.0"}
-        mock_export.return_value = ([], [], ImportSummary(), [])
+        # Healthy export — routing test, not the 0-entity gate (#120).
+        mock_export.return_value = ([], [], ImportSummary(entity_count=2), [])
         mock_isgit.return_value = True  # git repo, but --files overrides
         mock_ingest.return_value = {
             "cleared": False,
@@ -877,6 +880,38 @@ class TestUpdateCommand:
         mock_ingest.assert_awaited_once()  # whole-tree upsert
         mock_incr.assert_not_awaited()
         mock_gcf.assert_not_called()  # git diff skipped under --files
+
+    @patch("loomgraph.cli._indexing._async_update", new_callable=AsyncMock)
+    @patch("loomgraph.cli._indexing.run_graph_export")
+    @patch("loomgraph.cli._indexing.check_codeindex")
+    def test_update_zero_entities_skips_ingest(
+        self,
+        mock_check: MagicMock,
+        mock_export: MagicMock,
+        mock_async_update: AsyncMock,
+        runner: CliRunner,
+    ) -> None:
+        """#120: a 0-entity export must not reach ingest_incremental (whose symbol
+        GC would delete the changed files' real symbols). Hard-stop with a
+        diagnosis; _async_update is never awaited."""
+        mock_check.return_value = {"installed": True, "version": "0.29.0"}
+        mock_export.return_value = (
+            [],
+            [],
+            ImportSummary(entity_count=0),
+            [
+                "Parser library not installed for swift: tree-sitter-swift is "
+                "not installed. Install it with: pip install tree-sitter-swift "
+                "(Sources/App/AppState.swift)"
+            ],
+        )
+
+        result = runner.invoke(main, ["update"])
+        assert result.exit_code == 0, result.output
+
+        mock_async_update.assert_not_awaited()  # the critical assertion: no GC
+        assert "zero_entity_skipped" in result.output
+        assert "tree-sitter-swift" in result.output
 
     @patch("loomgraph.cli._indexing._async_update", new_callable=AsyncMock)
     @patch("loomgraph.cli._indexing.run_graph_export")

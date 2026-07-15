@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — 0-entity / silent-success paths hardened across update/refresh/impact (#120)
+- The #118 fix hardened **`index`** against silent 0-entity exports, but the
+  same `run_graph_export` callers — **`update`** and **`refresh`** (incl.
+  MCP `loomgraph_refresh`) — were not aligned. A misconfigured repo (missing
+  grammar / languages mismatch) yielding 0 entities could:
+  - **`refresh --force-full`**: call `ingest(clear=True)` on an empty export,
+    silently **wiping the whole workspace** before inserting nothing.
+  - **`update`**: reach `ingest_incremental`, whose symbol GC would treat the
+    empty export as "all changed-file symbols removed" and **delete real
+    symbols**.
+- New shared `assess_export(summary, warnings)` gate: 0-entity exports return
+  `is_safe_to_write=False` + a diagnosis (folding codeindex's stderr root cause).
+  `refresh` (both `force_full` and incremental) and `update` now hard-stop at
+  the gate with `mode: zero_entity_skipped` + `warning` instead of touching the
+  store. `index` keeps its richer suffix-hint warning but the gate logic is
+  shared.
+- **`impact` PATH bypass** (`core/impact/extractor.py:_run_codeindex`) — same
+  class of bug as #76: a bare `codeindex parse` subprocess went through PATH
+  and could pick up a stale pipx codeindex, ignoring the pinned
+  `ai-codeindex` dep. Now invokes `sys.executable -m codeindex.cli parse`.
+
 ## [0.16.1] - 2026-07-14
 
 ### Fixed — non-Python repos no longer silently index to 0 entities (#118)

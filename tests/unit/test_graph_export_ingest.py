@@ -19,11 +19,13 @@ import pytest
 from loomgraph.core.config import reset_settings
 from loomgraph.core.graph_export_ingest import (
     GraphExportError,
+    assess_export,
     ingest,
     ingest_incremental,
     run_graph_export,
 )
 from loomgraph.core.models import EntityData, RelationData
+from loomgraph.io.export_reader import ImportSummary
 
 META = {
     "type": "meta",
@@ -536,3 +538,76 @@ async def test_ingest_incremental_garbage_collects_deleted_symbol() -> None:
     assert store.deleted_source_ids == []  # no file-level delete anymore
     inserted = store.insert_custom_kg.call_args.args[0]
     assert inserted == []  # pkg.a.kept hash matches → skipped
+
+
+# ----- assess_export (shared 0-entity gate, #120) --------------------------
+
+
+def _summary(entity_count: int, relation_count: int = 0) -> ImportSummary:
+    return ImportSummary(
+        entity_count=entity_count, relation_count=relation_count
+    )
+
+
+def test_assess_export_non_empty_is_safe_no_warning() -> None:
+    """A healthy export: safe to write, no warning."""
+    safe, warning = assess_export(_summary(entity_count=5), warnings=[])
+    assert safe is True
+    assert warning is None
+
+
+def test_assess_export_zero_entities_no_warnings_unsafe() -> None:
+    """#120: 0 entities with no codeindex diagnostic — unsafe to write through
+    clear/GC paths. Warning is the generic config-mismatch hint (the caller
+    may still surface it but must not clear/delete on top of it)."""
+    safe, warning = assess_export(_summary(entity_count=0), warnings=[])
+    assert safe is False
+    assert warning is not None
+    assert "0 entities" in warning
+
+
+def test_assess_export_zero_entities_surfaces_codeindex_diagnostic() -> None:
+    """#120: when codeindex already diagnosed the 0-entity cause on stderr
+    (missing grammar / languages mismatch), fold that into the warning so the
+    agent gets the real root cause, not just '0 entities'."""
+    safe, warning = assess_export(
+        _summary(entity_count=0),
+        warnings=[
+            "Parser library not installed for swift: tree-sitter-swift is not "
+            "installed. Install it with: pip install tree-sitter-swift "
+            "(Sources/App/AppState.swift)"
+        ],
+    )
+    assert safe is False
+    assert warning is not None
+    assert "tree-sitter-swift" in warning
+    assert "swift" in warning
+
+
+def test_assess_export_zero_entities_folds_multiline_hint_to_leading_line() -> None:
+    """#120: codeindex's language-mismatch hint is one multi-line WARNING;
+    the leading line carries the missing-language name + evidence. Fold to it
+    (drop per-file path noise) rather than dumping the whole block."""
+    safe, warning = assess_export(
+        _summary(entity_count=0),
+        warnings=[
+            "WARNING: no indexable directories found.\n"
+            "  Configured languages: ['python']\n"
+            "  Detected file types in include roots: .php (2)\n"
+            "  Hint: add php to .codeindex.yaml languages"
+        ],
+    )
+    assert safe is False
+    assert warning is not None
+    assert "no indexable directories" in warning
+
+
+def test_assess_export_warnings_present_but_entities_nonempty_is_safe() -> None:
+    """A partial-graph WARNING (#108) on a repo that DID yield entities is
+    informational only — safe to write. Don't treat it as a 0-entity gate."""
+    safe, warning = assess_export(
+        _summary(entity_count=3),
+        warnings=["WARNING: partial graph — ... .tsx (1)"],
+    )
+    assert safe is True
+    assert warning is None  # caller still echoes warnings separately; gate passes

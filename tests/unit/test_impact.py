@@ -115,6 +115,37 @@ index abc..def 100644
 class TestChangedSymbolExtractor:
     """Tests for extracting symbols from changed code."""
 
+    def test_run_codeindex_uses_venv_python_not_path(self) -> None:
+        """#120/#76 regression: ``_run_codeindex`` must invoke codeindex via the
+        venv python (``sys.executable -m codeindex.cli parse``), never a bare
+        ``codeindex`` PATH lookup — otherwise a stale codeindex elsewhere on
+        PATH (e.g. pipx) shadows the pinned ``ai-codeindex`` dep. Same class of
+        bug as the graph-export PATH bypass (#76); this is the ``parse`` entry.
+        """
+        import sys
+
+        from loomgraph.core.impact.extractor import ChangedSymbolExtractor
+
+        captured: dict = {}
+        fake_proc = MagicMock()
+        fake_proc.returncode = 1  # short-circuit before json.loads
+        fake_proc.stdout = ""
+        fake_proc.stderr = ""
+
+        def _fake_run(args, **kwargs):
+            captured["args"] = args
+            return fake_proc
+
+        extractor = ChangedSymbolExtractor()
+        with patch("loomgraph.core.impact.extractor.subprocess.run", _fake_run):
+            extractor._run_codeindex(Path("src/a.py"))
+
+        cmd = captured["args"]
+        assert cmd[0] == sys.executable, (
+            "must invoke codeindex via sys.executable (venv python), not a bare PATH lookup"
+        )
+        assert cmd[1:4] == ["-m", "codeindex.cli", "parse"]
+
     def test_extract_from_modified_file(self) -> None:
         """Test extracting symbols from modified file."""
         file = ChangedFile(
