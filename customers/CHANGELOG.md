@@ -6,6 +6,20 @@
 
 ## [Unreleased]
 
+### 文档 — CLI 设计文档整篇对齐当前命令面 (#124)
+- `docs/api/CLI_DESIGN.md` 的命令详情段（646 行）多处与实际 CLI 冲突：`update`
+  被描述为全量重导（实际是 per-file warm-diff + content_hash 增量）、`status`
+  示例里还有 PostgreSQL/Jina/LightRAG/docker（均已退役）、错误码表列了不存在的
+  `LIGHTRAG_ERROR`。已整篇重写，每个参数表对照 `--help` 核实，并补齐
+  `deps`/`debt`/`impact`/`overview`/`git-metrics`/`trends`/`workspace`/`hooks`/`mcp`
+  等原本只在概览表里出现、没有详情段的命令。顶部声明本文为"写作时快照，以
+  `--help` 为唯一权威"。
+- **EPIC-003（增量更新策略）已归档** —— 核心目标已达成（warm-diff、content_hash
+  增量、post-commit hook、MCP refresh）。`docs/epics/active/` 现已空。
+- ⚠️ **GitHub Action 集成暂不可用**：底层 reusable workflow 仍调用已移除的
+  `--lightrag-url` 参数。`docs/guides/github-action-integration.md` 已加显著警告，
+  待 #125 修复 workflow 后恢复。
+
 ### 文档 — README 新增 `workspace` 概念说明
 - `workspace` 是贯穿全工具的核心概念（存储路径、查询目标、分支隔离、
   自动降级），但 README 一直"用而不定义"。新加 "Workspaces" 小节：什么是

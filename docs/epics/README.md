@@ -13,33 +13,32 @@ epics/
 
 ---
 
-## 🔥 Active Epics（v0.7.0）
+## 🔥 Active Epics
 
-| Epic | 标题 | 版本 | 状态 | 文档 |
-|------|------|------|------|------|
-| EPIC-003 | 增量更新策略 | v0.7.0 | ✅ 已完成 | [active/EPIC-003-update-strategy.md](active/EPIC-003-update-strategy.md) |
-| EPIC-008 | 搜索体系重构 | v0.7.0 | ✅ 已完成 | [active/EPIC-008-search-architecture-redesign.md](active/EPIC-008-search-architecture-redesign.md) |
-| EPIC-009 | 图谱拓扑债务分析 | v0.7.0 | ✅ 已完成 | [active/EPIC-009-graph-topology-debt-analysis.md](active/EPIC-009-graph-topology-debt-analysis.md) |
+> `active/` 当前为空（2026-07-15, EPIC-003 归档后）。下方"计划中"也无在途 Epic。
+> 最近的演进以 ADR + CHANGELOG 跟踪，不强制走 Epic 文档。
 
 ---
 
-## ✅ Completed Epics（v0.6.0 及以前）
+## ✅ Completed Epics
 
 | Epic | 标题 | 版本 | 状态 | 文档 |
 |------|------|------|------|------|
 | EPIC-002 | Git 集成 + Warm Update | v0.2.x | ✅ 已完成 | [completed/EPIC-002-git-integration-skills.md](completed/EPIC-002-git-integration-skills.md) |
+| EPIC-003 | 增量更新策略 | v0.7.0 | ✅ 已完成 | [completed/EPIC-003-update-strategy.md](completed/EPIC-003-update-strategy.md) |
 | EPIC-004 | 双向调度器 (deps/overview) | v0.2.5 | ✅ 已完成 | [completed/EPIC-004-bidirectional-orchestrator.md](completed/EPIC-004-bidirectional-orchestrator.md) |
 | EPIC-005 | Workspace 管理 | v0.4.0 | ✅ 已完成 | [completed/EPIC-005-workspace-management.md](completed/EPIC-005-workspace-management.md) |
 | EPIC-006 | 跨 Workspace 对比 | v0.5.0 | ✅ 已完成 | [completed/EPIC-006-cross-workspace-comparison.md](completed/EPIC-006-cross-workspace-comparison.md) |
 | EPIC-007 | 研发熵减 Skills | v0.6.0 | ✅ 已完成 | [completed/EPIC-007-entropy-reduction-skills.md](completed/EPIC-007-entropy-reduction-skills.md) |
+| EPIC-008 | 搜索体系重构 | v0.7.0 | ✅ 已完成 | [completed/EPIC-008-search-architecture-redesign.md](completed/EPIC-008-search-architecture-redesign.md) |
+| EPIC-009 | 图谱拓扑债务分析 | v0.7.0 | ✅ 已完成 | [completed/EPIC-009-graph-topology-debt-analysis.md](completed/EPIC-009-graph-topology-debt-analysis.md) |
+| EPIC-010 | Git × 知识图谱时空融合 | v0.10-0.11 | ✅ 已完成 | [completed/EPIC-010-git-metrics-integration.md](completed/EPIC-010-git-metrics-integration.md)（[技术设计](completed/EPIC-010-technical-design.md)，[ADR-015](../adr/ADR-015-git-knowledge-graph-integration.md)） |
 
 ---
 
-## 📋 Planned Epics（未来版本）
+## 📋 Planned Epics
 
-| Epic | 标题 | 版本 | 状态 | Issue |
-|------|------|------|------|-------|
-| EPIC-010 | MCP Server — IDE 集成 | v0.8.0 | 📅 计划中 | [#19](https://github.com/dreamlx/LoomGraph/issues/19) |
+（无在途 Epic。MCP server 已在 v0.12 ship —— 见 [MCP_DESIGN.md](../api/MCP_DESIGN.md)。）
 
 ---
 

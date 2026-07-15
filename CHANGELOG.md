@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — CLI_DESIGN.md full detail realignment + EPIC-003 archived (#124)
+- `docs/api/CLI_DESIGN.md` rewritten end-to-end. The command overview table was
+  fixed in #122 but the detail sections (`### N.x`, 646 lines) still contradicted
+  the real CLI: `update` was described as whole-tree re-export (it's per-file
+  warm-diff + content_hash since #85/#91); `status` example showed
+  PostgreSQL/Jina/LightRAG/docker (all retired v0.10-0.11, ADR-013); error-code
+  table listed `LIGHTRAG_ERROR` (doesn't exist in `ErrorCode`); env-var table
+  used `LOOMGRAPH_DB_URL` (PostgreSQL-era). Missing detail sections added for
+  `deps`/`debt`/`impact`/`overview`/`git-metrics`/`trends`/`workspace`/
+  `compare`/`similar`/`hooks`/`mcp` (only existed in the overview). Every
+  parameter table re-verified against `loomgraph <cmd> --help`; top-of-file
+  snapshot-authority notice added (option A from #124: detail is a writing-time
+  snapshot, `--help` is the only authority — a CI command-name diff would not
+  have caught the `update` semantic-inversion since the command name was right).
+- `docs/epics/active/EPIC-003-update-strategy.md` → `completed/`. Its core goal
+  (incremental update strategy) shipped: warm-diff (#85), content_hash (#91),
+  `loomgraph hooks install` (post-commit auto-trigger), `loomgraph_refresh`
+  (ADR-014). File gains an archive banner pointing to current implementation and
+  flagging the LightRAG-era internals as superseded by ADR-013. `epics/active/`
+  is now empty.
+- `docs/guides/github-action-integration.md`: top-of-file warning added — the
+  reusable `incremental-update.yml` still calls `loomgraph update --lightrag-url`
+  (removed arg), so the documented integration is broken until #125 fixes the
+  workflow. LightRAG-era API names in the flow diagram replaced; Feature-005/006
+  status corrected to shipped.
+
 ### Added — README now defines the `workspace` concept (heir-lens follow-up)
 - `workspace` is a load-bearing concept (storage path, query target, branch
   isolation, auto-fallback) but README used it throughout without ever

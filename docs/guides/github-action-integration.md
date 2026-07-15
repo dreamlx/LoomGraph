@@ -2,6 +2,12 @@
 
 **自动增量更新知识图谱** — push 代码后自动同步到知识图谱（SQLite + sqlite-vec）
 
+> ⚠️ **已知问题 (#125 follow-up)**: 底层的 reusable workflow
+> [`.github/workflows/incremental-update.yml`](https://github.com/dreamlx/LoomGraph/blob/main/.github/workflows/incremental-update.yml)
+> 未随 ADR-013（SQLite 迁移）更新 —— 它仍调用 `loomgraph update --lightrag-url ...`，而该参数在
+> 当前 CLI 中**已不存在**（见 `loomgraph update --help`，只接受 `--embedding-url`）。本指南描述的
+> 接入方式会触发该 workflow 报错，**在 #125 修复 workflow 前暂不可用**。下方内容保留作接入契约参考。
+
 ---
 
 ## 快速开始
@@ -93,10 +99,10 @@ codeindex affected --json (检测变更文件)
   ↓
 loomgraph update --files src/foo.py,src/bar.py
   ↓
-  ├─ 删除旧数据 (delete_by_source)
-  └─ 重新注入 (insert_custom_kg)
+  ├─ per-file warm-diff: 删除变更文件旧 entity/relation
+  └─ 重新 parse + embed + insert 变更文件 (content_hash diff, #91)
   ↓
-知识图谱更新完成
+知识图谱更新完成 (SQLite + sqlite-vec)
 ```
 
 **关键特性**：
@@ -194,8 +200,8 @@ with:
 
 ## 下一步
 
-- **Feature-005**: 本地 post-commit hook 集成 (进行中)
-- **Feature-006**: `codeindex affected` 智能检测 (计划中)
+- **Feature-005**: 本地 post-commit hook 集成 ✅ —— `loomgraph hooks install` 已 ship(EPIC-003 归档)
+- **Feature-006**: `codeindex affected` 智能检测 ✅ —— workflow 内已用 `codeindex affected --json`(EPIC-003 归档)
 
 ---
 
