@@ -200,6 +200,5 @@ with:
 ---
 
 **相关文档**:
-- [EPIC-003: 增量更新策略](../epics/EPIC-003-update-strategy.md)
-- [LightRAG API 集成](../api/LIGHTRAG_INTEGRATION.md)
+- [更新策略](../architecture/UPDATE_STRATEGY.md)
 - [CLI 设计规范](../api/CLI_DESIGN.md)

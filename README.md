@@ -3,7 +3,7 @@
 [![PyPI](https://img.shields.io/pypi/v/loomgraph.svg)](https://pypi.org/project/loomgraph/)
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](pyproject.toml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-460%20passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-passing-brightgreen.svg)](tests/)
 
 **Local code knowledge graph for AI agents.** SQLite + sqlite-vec, AST-driven,
 no RAG framework needed. Designed as a [Claude Code](https://claude.com/claude-code)
@@ -178,7 +178,7 @@ The full architecture rationale is in
 - v0.10.0 — LightRAG and PostgreSQL removed; local SQLite backend
 - v0.11.0 — Embedding provider decoupled; OpenAI-compatible by default, off by default
 
-495 unit tests passing, ruff clean. Dogfood-benchmarked on `loomgraph`
+600+ unit tests passing, ruff clean. Dogfood-benchmarked on `loomgraph`
 (10.9k LoC, indexed in 0.88s) and `codeindex` (22.0k LoC, indexed in
 0.93s) with sub-0.4s wall on every query — see
 [docs/benchmarks/dogfood.md](docs/benchmarks/dogfood.md) for the full

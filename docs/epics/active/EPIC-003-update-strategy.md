@@ -366,7 +366,6 @@ for file in affected["files"]:
 ## 相关文档
 
 - [UPDATE_STRATEGY.md](../architecture/UPDATE_STRATEGY.md) - 更新策略设计
-- [LIGHTRAG_INTEGRATION.md](../api/LIGHTRAG_INTEGRATION.md) - LightRAG API 集成
 - [CLI_DESIGN.md](../api/CLI_DESIGN.md) - CLI 规范
 
 ---

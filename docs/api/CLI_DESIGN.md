@@ -22,18 +22,29 @@
 
 ## 命令概览
 
+> 命令面以 `loomgraph --help` 为唯一权威。下表是写作时快照,可能与最新版本有出入。
+
 ```
 loomgraph
-├── index      # 一键索引 (codeindex graph-export → embed → inject; qualified id, #66)
-├── update     # whole-tree re-export + upsert (post-commit; --since/--files 已废弃)
-├── embed      # 生成向量 (从 ParseResult JSON)
-├── inject     # 注入图谱 (ParseResult + Embeddings → LightRAG)
-├── find       # 结构化实体发现 (名字匹配 + 可选关系)
-├── search     # 语义搜索 (按含义, embedding KNN; find 的对等项)
+├── index           # 一键索引 (codeindex graph-export → embed → insert 内部 pipeline; qualified id, #66)
+├── update          # 增量更新 (per-file warm-diff via git, 路 B; --since 默认 HEAD~1)
+├── import-export   # 消费 codeindex graph-export NDJSON artifact (不走 subprocess)
+├── find            # 结构化实体发现 (名字匹配 + 可选 callers/callees)
+├── search          # 语义搜索 (按含义, embedding KNN; opt-in, 需 embedding.enabled)
 ├── embed-backfill  # 为已有 workspace 补充向量 (不重新解析)
-├── graph      # 精确关系遍历 (callers/callees + source_id)
-├── status     # 检查系统状态
-└── version    # 版本信息
+├── graph           # 精确关系遍历 (callers/callees + source_id, --depth BFS)
+├── topology        # 拓扑债务分析 (orphans/hubs/god functions/coupling)
+├── deps            # 模块依赖分析
+├── debt            # 多维度技术债务评分 (--with-git)
+├── impact          # 变更影响分析 (git diff → affected callers)
+├── overview        # 项目模块概览 (--no-summary 跳过 LLM)
+├── check           # 索引新鲜度检查 (source_id vs 磁盘文件)
+├── git-metrics     # Git 热点 / 总线因子 / 缺陷率
+├── trends          # 代码复杂度趋势
+├── workspace       # workspace 管理 (list/info/delete)
+├── compare/similar # 跨 workspace diff / 相似实体
+├── status          # 检查系统状态 (storage/codeindex/embedding)
+└── version         # 版本信息
 ```
 
 ---
@@ -42,7 +53,7 @@ loomgraph
 
 ### 1. `loomgraph index` - 一键索引
 
-**用途**: 调用完整 Pipeline (`codeindex graph-export` → embed → inject)。实体用 **module-qualified id**（修复跨模块同名函数冲突，#66），边带 `resolution_qualifier` + 跨文件 callee 解析。需要 `ai-codeindex >= 0.28.0`。
+**用途**: 一键索引。内部 pipeline 为 `codeindex graph-export` → (可选)embed → insert，不是独立的 `embed`/`inject` 命令（v0.13 起 legacy programmatic API + embed/inject CLI 已移除，#84）。实体用 **module-qualified id**（修复跨模块同名函数冲突，#66），边带 `resolution_qualifier` + 跨文件 callee 解析。需要 `ai-codeindex >= 0.33.3`。
 
 ```bash
 loomgraph index <repo_path> [options]
