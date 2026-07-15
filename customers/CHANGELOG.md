@@ -6,6 +6,15 @@
 
 ## [Unreleased]
 
+### 修复 — GitHub Action 集成不再因 `--lightrag-url` 报错 (#125)
+- 可复用 workflow `incremental-update.yml` 仍调用 `loomgraph update --lightrag-url`，
+  而该参数在 LightRAG 退役（v0.10-0.11）后已从 CLI 移除——任何引用该 workflow 的项目
+  每次 push 都会报 "no such option"。已删除该参数及 `lightrag_endpoint` 输入；
+  `embedding_endpoint` 改为可选（默认空 → 仅结构化索引，因为 GitHub-hosted runner
+  无法访问本地 Ollama）。接入文档同步更新，移除 `LIGHTRAG_URL` secret。
+- `loomgraph status --help` 的说明不再误标 "Jina Code V2"（Jina 已退役），改为
+  "OpenAI-compatible embedding provider（默认本地 Ollama）"。
+
 ### 文档 — CLI 设计文档整篇对齐当前命令面 (#124)
 - `docs/api/CLI_DESIGN.md` 的命令详情段（646 行）多处与实际 CLI 冲突：`update`
   被描述为全量重导（实际是 per-file warm-diff + content_hash 增量）、`status`
