@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — README now defines the `workspace` concept (heir-lens follow-up)
+- `workspace` is a load-bearing concept (storage path, query target, branch
+  isolation, auto-fallback) but README used it throughout without ever
+  defining it. New "Workspaces" section between Quick start and Configuration:
+  what a workspace is (one indexed snapshot, `~/.loomgraph/<ws>.db`), how the
+  name auto-derives (`<repo-dir>:<branch>`, lowercase), branch isolation
+  semantics, `--workspace` override, `workspace list/info/delete`, and the
+  empty-workspace `main → develop → master` auto-fallback. Every claim
+  verified against `_common.py` (get_auto_workspace / resolve_workspace_with_fallback)
+  and `workspace --help` — no new drift introduced.
+
 ### Changed — docs truth-realignment (heir-lens review)
 - Removed stale `inject`/`embed` command references (v0.13 legacy removal, #84):
   `CLAUDE.md` project-structure tree + `CLI_DESIGN.md` command overview now

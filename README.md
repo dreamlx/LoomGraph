@@ -63,6 +63,33 @@ loomgraph deps
 
 Every command outputs JSON to stdout (logs go to stderr) — pipe-friendly for agents.
 
+## Workspaces
+
+A **workspace** is one indexed snapshot of a codebase, stored as a single
+SQLite file at `~/.loomgraph/<workspace>.db`. The name auto-derives from your
+current directory and git branch:
+
+```
+<repo-dir>:<branch>    # git repo, e.g.  loomgraph:main
+<repo-dir>             # non-git fallback (lowercase)
+```
+
+So indexing the same repo on two branches gives **two independent graphs** —
+querying `feature-x` won't see `main`'s entities, and vice versa. You rarely
+type a workspace name: `loomgraph index .` auto-detects it, and every query
+command auto-targets the current branch's workspace. Override with `--workspace`.
+
+```bash
+loomgraph workspace list          # what's indexed
+loomgraph workspace info          # current workspace details (auto-detected)
+loomgraph workspace delete NAME --yes   # remove a workspace (unlinks the .db)
+```
+
+If the current branch's workspace is empty (e.g. you're on a fresh branch that
+was never indexed), query commands **auto-fall-back** to `main` → `develop` →
+`master` so you still get results — index the current branch explicitly with
+`loomgraph index .` when you want branch-specific data.
+
 ## Configuration
 
 LoomGraph reads `.loomgraph.yaml` from the current dir, then `~/.config/loomgraph/config.yaml`.
