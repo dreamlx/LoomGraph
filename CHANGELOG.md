@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — docs truth-realignment (heir-lens review)
+- Removed stale `inject`/`embed` command references (v0.13 legacy removal, #84):
+  `CLAUDE.md` project-structure tree + `CLI_DESIGN.md` command overview now
+  describe the real command surface (`index` internal pipeline, `embed-backfill`,
+  + `topology`/`deps`/`impact`/`debt`/`overview`/`check`/`git-metrics`/`trends`
+  that were missing from the overview). Command authority redirected to
+  `loomgraph --help`.
+- Branch strategy doc: `CLAUDE.md` GitFlow (`main ← develop ← feature`) replaced
+  with the real trunk-based `main ← feature/fix` (no develop branch ever existed;
+  made explicit by `ec2477a`). The runtime workspace fallback chain
+  (`main → develop → master`) in `_common.py:97` is unchanged — it's real code,
+  not a doc fiction.
+- README tests badge: dropped the stale hardcoded count (`460` badge vs `495`
+  body, both wrong vs actual 623) → static `passing`; body now says `600+`.
+- Moved dated completion-state docs out of `docs/` (violates the "no
+  completion-state in docs/" rule): `debt-analysis-2026-03-06.md`,
+  `DOGFOODING_EPIC010.md` → `docs/archive/`. `LIGHTRAG_INTEGRATION.md` (LightRAG
+  + PostgreSQL era, retired v0.10-0.11 / ADR-013) moved `docs/api/` →
+  `docs/archive/` alongside its already-archived source fragments; 2 dead links
+  fixed.
+- NOT changed (verified false alarms): AGILE_GUIDE Task row ("建 Issue" was a
+  misread of the "可关闭" column — CLAUDE.md and AGILE_GUIDE already agree Task
+  doesn't get an Issue); the workspace fallback chain (real runtime behavior).
+
 ### Fixed — 0-entity / silent-success paths hardened across update/refresh/impact (#120)
 - The #118 fix hardened **`index`** against silent 0-entity exports, but the
   same `run_graph_export` callers — **`update`** and **`refresh`** (incl.
