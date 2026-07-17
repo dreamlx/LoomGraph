@@ -101,3 +101,81 @@ def test_install_command_errors_when_all_skipped(
         f"expected HOOK_INSTALL_FAILED, got {payload['error'].get('code')}"
     )
     assert "skipped" in payload["data"] or "skipped" in str(payload.get("data", {}))
+
+
+# ---------------------------------------------------------------------------
+# core.hooksPath awareness (#130)
+#
+# Same blind spot as #128: a test that only exercises the default `.git/hooks`
+# path passes while the bug persists. These set `core.hooksPath` explicitly and
+# assert the hook lands where git actually reads it. Without this, `hooks
+# install` reports success but the hook is dead (git ignores .git/hooks when a
+# hooksPath is set).
+# ---------------------------------------------------------------------------
+
+
+def _init_git_repo(repo: Path) -> None:
+    """Create a real git repo so `git rev-parse --git-path hooks` resolves."""
+    import subprocess
+
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "config", "user.email", "t@t.com"],
+        cwd=repo, check=True, capture_output=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "t"],
+        cwd=repo, check=True, capture_output=True,
+    )
+
+
+def test_get_hooks_dir_respects_core_hooks_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """get_hooks_dir must honor `core.hooksPath`, not hardcode .git/hooks."""
+    import subprocess
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_git_repo(repo)
+    custom_hooks = repo / ".myhooks"
+    custom_hooks.mkdir()
+    subprocess.run(
+        ["git", "config", "core.hooksPath", ".myhooks"],
+        cwd=repo, check=True, capture_output=True,
+    )
+    monkeypatch.chdir(repo)
+
+    hooks_dir = _hooks.get_hooks_dir()
+
+    assert hooks_dir == custom_hooks.resolve(), (
+        f"get_hooks_dir ignored core.hooksPath: got {hooks_dir}, "
+        f"expected {custom_hooks.resolve()}"
+    )
+
+
+def test_install_hook_lands_in_custom_hooks_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """install_hook must write where git reads (core.hooksPath-aware)."""
+    import subprocess
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_git_repo(repo)
+    custom_hooks = repo / ".myhooks"
+    custom_hooks.mkdir()
+    subprocess.run(
+        ["git", "config", "core.hooksPath", ".myhooks"],
+        cwd=repo, check=True, capture_output=True,
+    )
+    monkeypatch.chdir(repo)
+
+    assert install_hook("post-commit") is True
+
+    assert (custom_hooks / "post-commit").exists()
+    assert _hooks.LOOMGRAPH_MARKER in (custom_hooks / "post-commit").read_text()
+    assert not (repo / ".git" / "hooks" / "post-commit").exists(), (
+        "install_hook wrote to .git/hooks which git ignores when "
+        "core.hooksPath is set — the hook would be dead (#130)"
+    )

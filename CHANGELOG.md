@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — `hooks install` wrote a dead hook when `core.hooksPath` is set (#130)
+- `loomgraph hooks install` reported `success: true` but the hook never fired
+  on repos with a custom `core.hooksPath` (husky, shared-hook setups, this
+  repo's own `.githooks/`). git with a `core.hooksPath` reads ONLY that dir and
+  ignores `.git/hooks/` entirely — but `get_hooks_dir()` hardcoded `.git/hooks`,
+  so the installed hook landed where git never looks. Fix: resolve the hooks dir
+  via `git rev-parse --git-path hooks`, which respects `core.hooksPath` (and
+  falls back to `.git/hooks` when unset). Distinct from #128 (couldn't install
+  at all); here it installed to a dead location.
+- Added `core.hooksPath`-aware tests. Ship-gated on a repo with a custom
+  hooksPath — the default-path-only trap that masked #128 applies here too.
+- This repo now dogfoods its own post-commit hook in `.githooks/` (shared; the
+  script skips silently when `loomgraph` isn't on PATH, harmless to contributors).
+
 ### Fixed — `loomgraph hooks install` failed on every wheel/pipx install (#128)
 - `loomgraph hooks install` returned `installed_count: 0` with the template
   "not found" on every wheel/pipx install — the core "commit → index this
