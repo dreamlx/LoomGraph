@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shutil
+from importlib.resources import as_file, files
 from pathlib import Path
 
 import click
@@ -61,13 +62,20 @@ def install_hook(hook_name: str, force: bool = False) -> bool:
             backup_path = hooks_dir / f"{hook_name}.backup"
             shutil.copy2(hook_path, backup_path)
 
-    # Copy template from scripts/hooks/
-    template_path = Path(__file__).parent.parent.parent.parent / "scripts" / "hooks" / hook_name
+    # Resolve template from inside the installed package — works identically
+    # for editable / wheel / pipx installs. The template lives at
+    # src/loomgraph/_hooks_templates/ and ships inside the wheel. The old
+    # source-tree path (Path(__file__).parent×4 / "scripts/hooks") only
+    # coincidentally resolved under editable install, masking the bug (#128).
+    template_path = files("loomgraph") / "_hooks_templates" / hook_name
 
-    if not template_path.exists():
-        raise FileNotFoundError(f"Hook template not found: {template_path}")
+    if not template_path.is_file():
+        raise FileNotFoundError(f"Hook template not found in package: {hook_name}")
 
-    shutil.copy2(template_path, hook_path)
+    # as_file() yields a real filesystem Path (works for on-disk packages and
+    # transparently extracts zipapp-packed resources), which shutil.copy2 needs.
+    with as_file(template_path) as src:
+        shutil.copy2(src, hook_path)
     hook_path.chmod(0o755)  # Make executable
 
     return True
@@ -146,6 +154,21 @@ def install(install_all: bool, force: bool) -> None:
 
     if skipped:
         result["skipped"] = skipped
+
+    # Surface total failure as an error rather than success:true — otherwise a
+    # packaging regression (e.g. missing wheel template, #128) is silently
+    # swallowed and users walk away believing the hook was installed.
+    if not installed:
+        output_error(
+            code=ErrorCode.HOOK_INSTALL_FAILED,
+            message=f"No hooks installed ({len(skipped)} failed)",
+            suggestion=(
+                "Check the 'skipped' errors. If the template is missing, "
+                "reinstall loomgraph to get a package with hook templates."
+            ),
+            data=result,
+        )
+        return
 
     output_success(result)
 
