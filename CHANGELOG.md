@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — `loomgraph hooks install` failed on every wheel/pipx install (#128)
+- `loomgraph hooks install` returned `installed_count: 0` with the template
+  "not found" on every wheel/pipx install — the core "commit → index this
+  round's changes" feature was broken for all normal install paths. Double
+  defect: (A) the post-commit template was never packaged into the wheel;
+  (B) the path logic assumed a source-tree layout (`Path(__file__).parent×4 /
+  "scripts/hooks"`) that only coincidentally resolved under editable install —
+  which is why it was never caught (developers dogfood editable, users install
+  wheel). Moved the template into the package (`src/loomgraph/_hooks_templates/`)
+  and resolved it via `importlib.resources`, so editable/wheel/pipx all behave
+  identically.
+- Silent-success masking: `loomgraph hooks install` returned `success: true`
+  even when every hook was skipped. A total failure now reports
+  `HOOK_INSTALL_FAILED` so future packaging regressions aren't swallowed.
+- Added `tests/unit/test_hooks.py` (zero coverage before). Ship-gated on a real
+  pipx install — the bug only reproduces outside editable mode.
+
 ### Fixed — incremental-update.yml called removed `--lightrag-url` (#125)
 - The reusable workflow `.github/workflows/incremental-update.yml` invoked
   `loomgraph update --lightrag-url ...`, but `update` dropped that option when
