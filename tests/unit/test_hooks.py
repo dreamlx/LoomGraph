@@ -87,8 +87,17 @@ def test_install_command_errors_when_all_skipped(
     runner = CliRunner()
     res = runner.invoke(main, ["hooks", "install"])
 
+    # Process-level failure contract, not just JSON body: a command that emits
+    # success:false but exits 0 would still fool a shell/CI `&&` chain. Assert
+    # the non-zero exit and the structured error code together.
+    assert res.exit_code == 1, (
+        f"install must exit 1 on total failure (got {res.exit_code})"
+    )
     payload = json.loads(res.output)
     assert payload["success"] is False, (
         "install returned success:true despite all hooks failing — silent regression"
+    )
+    assert payload["error"]["code"] == "HOOK_INSTALL_FAILED", (
+        f"expected HOOK_INSTALL_FAILED, got {payload['error'].get('code')}"
     )
     assert "skipped" in payload["data"] or "skipped" in str(payload.get("data", {}))
