@@ -187,6 +187,7 @@ class ErrorCode:
     DEPENDENCIES_MISSING = "DEPENDENCIES_MISSING"
     GIT_ERROR = "GIT_ERROR"
     NO_CHANGES = "NO_CHANGES"
+    HOOK_INSTALL_FAILED = "HOOK_INSTALL_FAILED"
 
 
 # ============================================

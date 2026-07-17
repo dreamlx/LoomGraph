@@ -6,6 +6,19 @@
 
 ## [Unreleased]
 
+### 修复 — `loomgraph hooks install` 在 wheel/pipx 安装下失败 (#128)
+- `loomgraph hooks install` 对所有 wheel/pipx 安装返回 `installed_count: 0`，
+  模板 "not found"——"commit 即索引本轮变动"这个核心功能对所有正常安装路径失效。
+  双重缺陷：(A) post-commit 模板从未打进 wheel；(B) 路径逻辑假设源码树布局
+  （`Path(__file__).parent×4 / "scripts/hooks"`），只在 editable 安装下碰巧成立——
+  这正是长期未被发现的原因（开发者用 editable dogfood，用户用 wheel 安装）。
+  已将模板移入包内（`src/loomgraph/_hooks_templates/`）并用 `importlib.resources` 定位，
+  editable/wheel/pipx 三种安装方式行为一致。
+- 静默成功掩盖：`loomgraph hooks install` 即使全部 hook 失败仍返回 `success: true`。
+  现在全部失败时报 `HOOK_INSTALL_FAILED` 错误，避免未来同类打包回归被吞掉。
+- **更新指引**：升级后请重跑 `loomgraph hooks install --force` 重新生成 post-commit hook
+  （旧版本虽报 `success`，但 hook 实际没装上）。
+
 ### 修复 — GitHub Action 集成不再因 `--lightrag-url` 报错 (#125)
 - 可复用 workflow `incremental-update.yml` 仍调用 `loomgraph update --lightrag-url`，
   而该参数在 LightRAG 退役（v0.10-0.11）后已从 CLI 移除——任何引用该 workflow 的项目
