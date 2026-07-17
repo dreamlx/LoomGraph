@@ -6,6 +6,16 @@
 
 ## [Unreleased]
 
+### 修复 — 设了 `core.hooksPath` 的项目 hook 装了不生效 (#130)
+- `loomgraph hooks install` 报 `success: true` 但 hook 从不触发——当项目设了
+  自定义 `core.hooksPath`（husky、共享 hook、本仓库自己的 `.githooks/`）时。
+  git 设了 hooksPath 后**只读该目录，完全忽略 `.git/hooks/`**，而
+  `get_hooks_dir()` 硬编码了 `.git/hooks`，hook 落到了 git 永远不看的位置。
+  修复：改用 `git rev-parse --git-path hooks` 定位 hooks 目录（尊重 hooksPath，
+  未设时回退 `.git/hooks`）。与 #128 不同（#128 是装不上，#130 是装到死位置）。
+- **更新指引**：升级后请重跑 `loomgraph hooks install --force`，hook 会装到
+  git 实际读取的目录（husky 用户会进 `.husky/`，本仓库进 `.githooks/`）。
+
 ### 修复 — `loomgraph hooks install` 在 wheel/pipx 安装下失败 (#128)
 - `loomgraph hooks install` 对所有 wheel/pipx 安装返回 `installed_count: 0`，
   模板 "not found"——"commit 即索引本轮变动"这个核心功能对所有正常安装路径失效。
