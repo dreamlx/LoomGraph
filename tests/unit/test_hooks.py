@@ -26,14 +26,19 @@ from loomgraph.cli._hooks import install_hook
 from loomgraph.cli.main import main
 
 
-def _point_hooks_dir_at(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> Path:
-    """Make ``find_git_repo``/``get_hooks_dir`` resolve to a temp git repo."""
-    repo = tmp_path / "repo"
-    (repo / ".git" / "hooks").mkdir(parents=True)
-    monkeypatch.setattr(_hooks, "find_git_repo", lambda: repo)
-    return repo
+def _init_git_repo(repo: Path) -> None:
+    """Create a real git repo so `git rev-parse --git-path hooks` resolves."""
+    import subprocess
+
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "config", "user.email", "t@t.com"],
+        cwd=repo, check=True, capture_output=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "t"],
+        cwd=repo, check=True, capture_output=True,
+    )
 
 
 def test_template_resolvable_from_package() -> None:
@@ -50,15 +55,22 @@ def test_template_resolvable_from_package() -> None:
     assert _hooks.LOOMGRAPH_MARKER in content
 
 
-def test_install_hook_creates_executable_post_commit(
+def test_install_hook_creates_executable_post_commit_default_path(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """install_hook writes an executable post-commit carrying our marker."""
-    repo = _point_hooks_dir_at(tmp_path, monkeypatch)
+    """install_hook writes an executable post-commit carrying our marker.
 
-    result = install_hook("post-commit")
+    Uses a real git repo with NO core.hooksPath set (default .git/hooks) — so
+    get_hooks_dir's real `git rev-parse` code path is exercised, not a stubbed
+    fallback (which would normalize a broken fallback per codex review).
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_git_repo(repo)
+    monkeypatch.chdir(repo)
 
-    assert result is True
+    assert install_hook("post-commit") is True
+
     hook_path = repo / ".git" / "hooks" / "post-commit"
     assert hook_path.exists()
     assert _hooks.LOOMGRAPH_MARKER in hook_path.read_text()
@@ -101,3 +113,98 @@ def test_install_command_errors_when_all_skipped(
         f"expected HOOK_INSTALL_FAILED, got {payload['error'].get('code')}"
     )
     assert "skipped" in payload["data"] or "skipped" in str(payload.get("data", {}))
+
+
+# ---------------------------------------------------------------------------
+# core.hooksPath awareness (#130)
+#
+# Same blind spot as #128: a test that only exercises the default `.git/hooks`
+# path passes while the bug persists. These set `core.hooksPath` explicitly and
+# assert the hook lands where git actually reads it. Without this, `hooks
+# install` reports success but the hook is dead (git ignores .git/hooks when a
+# hooksPath is set).
+# ---------------------------------------------------------------------------
+
+
+def test_get_hooks_dir_respects_core_hooks_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """get_hooks_dir must honor `core.hooksPath`, not hardcode .git/hooks."""
+    import subprocess
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_git_repo(repo)
+    custom_hooks = repo / ".myhooks"
+    custom_hooks.mkdir()
+    subprocess.run(
+        ["git", "config", "core.hooksPath", ".myhooks"],
+        cwd=repo, check=True, capture_output=True,
+    )
+    monkeypatch.chdir(repo)
+
+    hooks_dir = _hooks.get_hooks_dir()
+
+    assert hooks_dir == custom_hooks.resolve(), (
+        f"get_hooks_dir ignored core.hooksPath: got {hooks_dir}, "
+        f"expected {custom_hooks.resolve()}"
+    )
+
+
+def test_install_hook_lands_in_custom_hooks_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """install_hook must write where git reads (core.hooksPath-aware)."""
+    import subprocess
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_git_repo(repo)
+    custom_hooks = repo / ".myhooks"
+    custom_hooks.mkdir()
+    subprocess.run(
+        ["git", "config", "core.hooksPath", ".myhooks"],
+        cwd=repo, check=True, capture_output=True,
+    )
+    monkeypatch.chdir(repo)
+
+    assert install_hook("post-commit") is True
+
+    assert (custom_hooks / "post-commit").exists()
+    assert _hooks.LOOMGRAPH_MARKER in (custom_hooks / "post-commit").read_text()
+    assert not (repo / ".git" / "hooks" / "post-commit").exists(), (
+        "install_hook wrote to .git/hooks which git ignores when "
+        "core.hooksPath is set — the hook would be dead (#130)"
+    )
+
+
+def test_get_hooks_dir_does_not_fail_open(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """get_hooks_dir must raise on git failure, not silently fall back.
+
+    A silent fallback to .git/hooks recreates the #130 dead-hook bug on any
+    repo with a core.hooksPath set (codex review: fails-open). When git is
+    unavailable or rev-parse errors, surface the failure so the install
+    command reports HOOK_INSTALL_FAILED instead of installing a dead hook.
+    """
+    import subprocess
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_git_repo(repo)
+    monkeypatch.chdir(repo)
+
+    # Force `git rev-parse` to fail as if git were missing from PATH.
+    real_run = subprocess.run
+
+    def _fail_git(*args: object, **kwargs: object) -> None:
+        argv = args[0] if args else kwargs.get("args")
+        if isinstance(argv, list) and argv[:1] == ["git"]:
+            raise FileNotFoundError("git")
+        return real_run(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(_hooks.subprocess, "run", _fail_git)
+
+    with pytest.raises(FileNotFoundError):
+        _hooks.get_hooks_dir()

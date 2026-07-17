@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shutil
+import subprocess
 from importlib.resources import as_file, files
 from pathlib import Path
 
@@ -25,9 +26,31 @@ def find_git_repo() -> Path:
 
 
 def get_hooks_dir() -> Path:
-    """Get .git/hooks directory."""
+    """Get the hooks directory git actually reads.
+
+    Honors ``core.hooksPath`` (set by husky, shared-hook setups, or this repo's
+    own ``.githooks/``): when it's set, git reads ONLY that dir and ignores
+    ``.git/hooks`` entirely — installing to ``.git/hooks`` would be a dead hook
+    (#130). We ask git directly via ``git rev-parse --git-path hooks``, which
+    respects ``core.hooksPath`` and returns ``.git/hooks`` when unset.
+
+    Does NOT fail open: if git is unavailable or rev-parse errors, we raise
+    rather than silently fall back to ``.git/hooks`` — a silent fallback would
+    recreate the #130 dead-hook bug on any repo with a hooksPath set (codex
+    review). The caller (``install`` command) surfaces this as
+    ``HOOK_INSTALL_FAILED``.
+    """
     repo_root = find_git_repo()
-    hooks_dir = repo_root / ".git" / "hooks"
+    result = subprocess.run(
+        ["git", "rev-parse", "--git-path", "hooks"],
+        cwd=str(repo_root),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    # rev-parse returns a path relative to the repo root (or absolute);
+    # resolve it to an absolute path either way.
+    hooks_dir = (repo_root / result.stdout.strip()).resolve()
     hooks_dir.mkdir(parents=True, exist_ok=True)
     return hooks_dir
 
