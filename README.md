@@ -39,6 +39,20 @@ pipx install loomgraph
 
 That's it. [codeindex](https://github.com/dreamlx/codeindex) is pulled in automatically as the parser engine — no separate install, no direct operation. No additional services required for the structural commands.
 
+### LLM code interpretation — codeindex `--ai`, not loomgraph
+
+LoomGraph's index is **pure AST** (entities, relations, call graph) — no LLM, fully reproducible. If you want **LLM-generated natural-language descriptions** of modules/functions (richer `README_AI.md`, AI-completed docstrings), that's codeindex's own `--ai` mode, which is **orthogonal to loomgraph**:
+
+```bash
+# Requires ai_command in .codeindex.yaml (e.g. claude -p, deepseek, etc.)
+codeindex scan . --ai          # enrich README_AI.md via LLM
+codeindex scan-all --ai        # whole tree
+```
+
+- **When you need it**: unfamiliar large codebase where you want an LLM to narrate what each module does, or to fill in missing docstrings.
+- **When you don't**: structural queries via loomgraph (`find`/`graph`/`topology`/`deps`). The AST is ground truth there; LLM would only add latency and hallucination risk.
+- **Relationship**: loomgraph consumes codeindex's `graph-export` (the structural AST output), never the `--ai` enrichment. The two are independent — `--ai` makes codeindex's human-facing docs richer; loomgraph's graph stays structural either way.
+
 ## Quick start
 
 ```bash
