@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [0.16.2] - 2026-07-18
+
 ### 重构 — `/loomgraph-setup` 委托 codeindex 向导生成配置；新增 `loomgraph codeindex` 透传命令 (#132)
 - 旧版 setup skill 用**手写静态模板**生成 `.codeindex.yaml`，且模板里有臆造的
   schema 键（`codeindex: 1` 应为 `version: 1`；不存在的 `symbols.project_symbols`）。
