@@ -7,28 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Refactored — `loomgraph-setup` skill delegates `.codeindex.yaml` to codeindex's wizard (#132)
+### Refactored — `loomgraph-setup` skill delegates `.codeindex.yaml` to codeindex's wizard; new `loomgraph codeindex` passthrough (#132)
 - The setup skill generated `.codeindex.yaml` from **static hand-written templates
   with invented schema keys** (`codeindex: 1` instead of `version: 1`; fake
   `symbols.project_symbols`). On real layouts it silently indexed 0 entities:
   multi-module Maven (hardcoded `src/main/java/`), plain Composer PHP (assumed
   `app/`/`src/`), mixed JS/TS (no template), non-standard source roots. Root
   cause: the skill **reinvented codeindex's own wizard, worse**.
-- Rewritten to **pure delegation**: the skill now runs
-  `python -m codeindex.cli init --yes --force` (codeindex's own automation-ready
-  wizard, `init_wizard.py` — `detect_languages`/`infer_include_patterns`/
+- Rewritten to **pure delegation**: the skill runs codeindex's own automation-ready
+  wizard (`init_wizard.py` — `detect_languages`/`infer_include_patterns`/
   `infer_exclude_patterns`). All four static templates + the flat-layout bash
   hack + the broken `scan --dry-run` validation deleted. codeindex is the
   authority on its own schema; loomgraph stops hand-writing it.
-- Also fixed: `codeindex --version` walked PATH (could hit a non-pinned install,
-  #76 class) → now `python -m codeindex.cli`; removed the misleading "each module
-  can have its own .codeindex.yaml" note (graph-export reads only root config).
-- Spike-gated: verified `codeindex init --yes` → `loomgraph index .` produces
-  >0 entities on 5 layouts (multi-module Java, plain PHP, mixed JS/TS, Python
-  flat, Python src). The old skill produced 0 on the first two.
-- Known gap surfaced (not blocking): loomgraph has no `[javascript]` extra, so
-  JS files skip with a warning until `tree-sitter-javascript` is installed
-  manually — the skill documents this. codeindex's detection is still correct.
+- **New `loomgraph codeindex <args>` passthrough CLI command**: runs codeindex in
+  loomgraph's pinned venv (`sys.executable -m codeindex.cli`), exposing the same
+  pinned-env guarantee the internals already use (`graph_export_ingest.py`). The
+  skill calls `loomgraph codeindex init` instead of a PATH-resolved `python` /
+  `codeindex` that could hit a non-pinned install (#76 class). Unit-tested
+  (`test_codeindex_passthrough.py`).
+- Codex review hardening (6 findings, all accepted): removed false claims that
+  go/rust are supported (codeindex parser only does python/php/java/ts/js/swift/
+  objc); warned that `codeindex init` has side effects (injects CLAUDE.md, adds
+  README_AI.md to .gitignore) and that `--force` overwrites; tightened the smoke
+  test to check coverage completeness, not just `entities_created > 0`
+  (monorepo could index a wrong subset and still pass); documented the wizard's
+  limits (1000-file detection cap, fixed include-dir list); JS/ObjC grammar
+  install via `pipx runpip loomgraph install tree-sitter-<lang>` (no first-class
+  extra yet — #134).
+- Spike-gated: `codeindex init --yes` → `loomgraph index .` produces >0 entities
+  on 5 layouts (multi-module Java, plain PHP, mixed JS/TS, Python flat, Python
+  src); old skill produced 0 on the first two.
 
 ### Fixed — `hooks install` wrote a dead hook when `core.hooksPath` is set (#130)
 - `loomgraph hooks install` reported `success: true` but the hook never fired
