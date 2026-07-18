@@ -6,6 +6,28 @@
 
 ## [Unreleased]
 
+### 重构 — `/loomgraph-setup` 委托 codeindex 向导生成配置；新增 `loomgraph codeindex` 透传命令 (#132)
+- 旧版 setup skill 用**手写静态模板**生成 `.codeindex.yaml`，且模板里有臆造的
+  schema 键（`codeindex: 1` 应为 `version: 1`；不存在的 `symbols.project_symbols`）。
+  在真实项目布局下会**静默索引 0 实体**：多模块 Maven（硬编码 `src/main/java/`）、
+  普通 Composer PHP 包（假设 `app/`/`src/`）、混合 JS/TS（无模板）、非标准源码根目录。
+  根因：skill 在重新发明 codeindex 自己的向导，且做得更差。
+- 重构为**纯委托**：skill 跑 codeindex 自带的、适合自动化的向导（按项目实际文件检测
+  语言/框架/源码布局）。删除全部四个静态模板 + flat-layout bash hack + 失效的 `scan --dry-run`
+  验证。codeindex 是自己 schema 的权威源，loomgraph 不再手写。
+- **新增 `loomgraph codeindex <args>` 透传 CLI 命令**：在 loomgraph 自己的 pinned venv 里跑
+  codeindex（`sys.executable -m codeindex.cli`），与 loomgraph 内部已有的调用方式一致。
+  skill 现在调 `loomgraph codeindex init` 而非走 PATH 的 `python`/`codeindex`（后者可能命中
+  与 loomgraph 依赖版本不一致的 codeindex，#76 同类坑）。
+- **codex review 加固（6 项全采纳）**：删除"go/rust 支持"的虚假宣称（codeindex parser 只支持
+  python/php/java/ts/js/swift/objc）；警告 `codeindex init` 有副作用（注入 CLAUDE.md、把
+  README_AI.md 加进 .gitignore）且 `--force` 会覆盖；烟测改为检查**覆盖完整性**而非只看
+  `entities_created > 0`（monorepo 可能索引了错误子集仍计数 >0）；说明 wizard 的局限
+  （1000 文件检测上限、固定 include 目录列表）；JS/ObjC grammar 用 `pipx runpip loomgraph
+  install tree-sitter-<lang>` 注入 loomgraph venv（暂无一等 extra，#134）。
+- **验证**：实测 `codeindex init --yes` → `loomgraph index .` 在 5 种布局（多模块 Java、
+  普通 PHP、混合 JS/TS、Python flat、Python src）都产出 >0 实体。旧 skill 在前两种是 0。
+
 ### 修复 — 设了 `core.hooksPath` 的项目 hook 装了不生效 (#130)
 - `loomgraph hooks install` 报 `success: true` 但 hook 从不触发——当项目设了
   自定义 `core.hooksPath`（husky、共享 hook、本仓库自己的 `.githooks/`）时。
