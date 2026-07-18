@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Refactored — `loomgraph-setup` skill delegates `.codeindex.yaml` to codeindex's wizard (#132)
+- The setup skill generated `.codeindex.yaml` from **static hand-written templates
+  with invented schema keys** (`codeindex: 1` instead of `version: 1`; fake
+  `symbols.project_symbols`). On real layouts it silently indexed 0 entities:
+  multi-module Maven (hardcoded `src/main/java/`), plain Composer PHP (assumed
+  `app/`/`src/`), mixed JS/TS (no template), non-standard source roots. Root
+  cause: the skill **reinvented codeindex's own wizard, worse**.
+- Rewritten to **pure delegation**: the skill now runs
+  `python -m codeindex.cli init --yes --force` (codeindex's own automation-ready
+  wizard, `init_wizard.py` — `detect_languages`/`infer_include_patterns`/
+  `infer_exclude_patterns`). All four static templates + the flat-layout bash
+  hack + the broken `scan --dry-run` validation deleted. codeindex is the
+  authority on its own schema; loomgraph stops hand-writing it.
+- Also fixed: `codeindex --version` walked PATH (could hit a non-pinned install,
+  #76 class) → now `python -m codeindex.cli`; removed the misleading "each module
+  can have its own .codeindex.yaml" note (graph-export reads only root config).
+- Spike-gated: verified `codeindex init --yes` → `loomgraph index .` produces
+  >0 entities on 5 layouts (multi-module Java, plain PHP, mixed JS/TS, Python
+  flat, Python src). The old skill produced 0 on the first two.
+- Known gap surfaced (not blocking): loomgraph has no `[javascript]` extra, so
+  JS files skip with a warning until `tree-sitter-javascript` is installed
+  manually — the skill documents this. codeindex's detection is still correct.
+
 ### Fixed — `hooks install` wrote a dead hook when `core.hooksPath` is set (#130)
 - `loomgraph hooks install` reported `success: true` but the hook never fired
   on repos with a custom `core.hooksPath` (husky, shared-hook setups, this

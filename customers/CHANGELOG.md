@@ -6,6 +6,23 @@
 
 ## [Unreleased]
 
+### 重构 — `/loomgraph-setup` 改为委托 codeindex 自己的向导生成配置 (#132)
+- 旧版 setup skill 用**手写静态模板**生成 `.codeindex.yaml`，且模板里有臆造的
+  schema 键（`codeindex: 1` 应为 `version: 1`；不存在的 `symbols.project_symbols`）。
+  在真实项目布局下会**静默索引 0 实体**：多模块 Maven（硬编码 `src/main/java/`）、
+  普通 Composer PHP 包（假设 `app/`/`src/`）、混合 JS/TS（无模板）、非标准源码根目录。
+  根因：skill 在重新发明 codeindex 自己的向导，且做得更差。
+- 重构为**纯委托**：skill 现在跑 `python -m codeindex.cli init --yes --force`
+  （codeindex 自带的、适合自动化的向导，按项目实际文件检测语言/框架/源码布局）。
+  删除全部四个静态模板 + flat-layout bash hack + 失效的 `scan --dry-run` 验证。
+  codeindex 是自己 schema 的权威源，loomgraph 不再手写。
+- 同步修：`codeindex --version` 走 PATH（可能命中非 pinned 的旧版）→ 改 `python -m codeindex.cli`；
+  删除误导性的"每个模块可有自己 .codeindex.yaml"说明（graph-export 只读 root 配置）。
+- **验证**：实测 `codeindex init --yes` → `loomgraph index .` 在 5 种布局（多模块 Java、
+  普通 PHP、混合 JS/TS、Python flat、Python src）都产出 >0 实体。旧 skill 在前两种是 0。
+- **已知限制**（不阻塞）：loomgraph 暂无 `[javascript]` extra，JS 文件会跳过 + 警告，
+  需手动 `pip install tree-sitter-javascript`——skill 已说明。codeindex 的语言检测本身正确。
+
 ### 修复 — 设了 `core.hooksPath` 的项目 hook 装了不生效 (#130)
 - `loomgraph hooks install` 报 `success: true` 但 hook 从不触发——当项目设了
   自定义 `core.hooksPath`（husky、共享 hook、本仓库自己的 `.githooks/`）时。
