@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — `loomgraph[javascript]` / `loomgraph[objc]` extras for first-class JS/ObjC support (#134)
+- loomgraph already had `[java]` / `[typescript]` / `[swift]` opt-in grammar
+  extras, but JS/JSX and Objective-C were missing — even though codeindex's
+  parser supports them (`FILE_EXTENSIONS`: `.js`/`.jsx` → javascript, `.h`/`.m`
+  → objc). Without the grammar, JS/ObjC files skip with a warning during
+  indexing. The only workaround was an undiscoverable
+  `pipx runpip loomgraph install tree-sitter-javascript`.
+- Added `javascript = ["tree-sitter-javascript>=0.23"]` and
+  `objc = ["tree-sitter-objc>=3.0.0"]` to `pyproject.toml`. Parity with the
+  existing extras: `pipx install "loomgraph[javascript]"` (quotes required —
+  `[extra]` is a glob in zsh/bash). The ObjC lower bound mirrors codeindex's
+  own `[objc]` extra; pre-3.0.0 `tree-sitter-objc` predates the `language()`
+  binding API codeindex's parser dispatches against.
+- `loomgraph-setup` skill's grammar-install table updated: JS/JSX and ObjC now
+  use the proper extras (was: the `pipx runpip` workaround). The "known gap"
+  note removed.
+- **Note**: `.mm` (Objective-C++) is not supported — codeindex matches only
+  `.h` + `.m`.
+
 ## [0.16.2] - 2026-07-18
 
 ### Refactored — `loomgraph-setup` skill delegates `.codeindex.yaml` to codeindex's wizard; new `loomgraph codeindex` passthrough (#132)

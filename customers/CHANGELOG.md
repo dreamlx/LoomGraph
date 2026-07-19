@@ -6,6 +6,22 @@
 
 ## [Unreleased]
 
+### 新增 — `loomgraph[javascript]` / `loomgraph[objc]` 安装 extras，JS 与 Objective-C 成为一等支持 (#134)
+- loomgraph 此前已有 `[java]` / `[typescript]` / `[swift]` 可选 grammar extras，但
+  **缺 JavaScript/JSX 和 Objective-C**——尽管 codeindex parser 本就支持它们。grammar 未装时，
+  JS/ObjC 文件在索引时会被跳过并告警，唯一的临时办法是不好发现的
+  `pipx runpip loomgraph install tree-sitter-javascript`。
+- `pyproject.toml` 新增 `javascript` 与 `objc` extras，与现有 extras 对齐：
+  ```bash
+  pipx install "loomgraph[javascript]"   # JS / JSX（引号必要，[extra] 是 shell glob）
+  pipx install "loomgraph[objc]"         # Objective-C（.h / .m）
+  ```
+  ObjC 下限对齐 codeindex 自己的 `[objc]` extra（`tree-sitter-objc>=3.0.0`）——
+  3.0.0 之前版本的 `language()` binding API 与 codeindex parser 的调用方式不兼容。
+- `/loomgraph-setup` skill 的 grammar 安装表已更新：JS/JSX 和 ObjC 改用正式 extras
+  （原先写的是 `pipx runpip` 临时方案）。
+- **注意**：`.mm`（Objective-C++）不支持——codeindex 只匹配 `.h` + `.m`。
+
 ## [0.16.2] - 2026-07-18
 
 ### 重构 — `/loomgraph-setup` 委托 codeindex 向导生成配置；新增 `loomgraph codeindex` 透传命令 (#132)

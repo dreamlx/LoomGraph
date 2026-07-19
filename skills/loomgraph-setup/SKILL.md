@@ -42,14 +42,14 @@ codeindex 实际支持的 parser（`codeindex/parser.py` `FILE_EXTENSIONS`，权
 | 检测到的语言 | 安装（装进 loomgraph venv） |
 |---|---|
 | Python | 无需（默认） |
-| Java | `pipx install --force loomgraph[java]` |
-| TypeScript / TSX | `pipx install --force loomgraph[typescript]` |
-| Swift | `pipx install --force loomgraph[swift]` |
-| **JavaScript / JSX** | loomgraph 暂无 `[javascript]` extra。手动注入 loomgraph venv：`pipx runpip loomgraph install tree-sitter-javascript` |
-| **Objective-C** | 同上：`pipx runpip loomgraph install tree-sitter-objc` |
+| Java | `pipx install --force "loomgraph[java]"` |
+| TypeScript / TSX | `pipx install --force "loomgraph[typescript]"` |
+| Swift | `pipx install --force "loomgraph[swift]"` |
+| JavaScript / JSX | `pipx install --force "loomgraph[javascript]"` |
+| Objective-C | `pipx install --force "loomgraph[objc]"` |
 
 > 语言检测交给 Step 2 的 codeindex wizard 做。这里只需知道：装好对应 grammar 再进 Step 2。
-> JS/ObjC 没有一等 extra 是已知 gap（待加 `loomgraph[javascript]` extra，另开 issue）。
+> **引号必要**：`[extra]` 会被 zsh/bash 当 glob（`no matches found`），务必用引号包住 `"loomgraph[javascript]"`。
 
 ---
 
