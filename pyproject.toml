@@ -69,6 +69,14 @@ typescript = ["tree-sitter-typescript>=0.23"]
 # hard-depend on it, so a pure-Swift repo otherwise indexes to 0 entities (#118).
 # Install with: `pipx install loomgraph[swift]`.
 swift = ["tree-sitter-swift>=0.0.1"]
+# JavaScript/JSX support is opt-in — tree-sitter-javascript is heavy and
+# pure-Python repos don't need it. Install with: `pipx install loomgraph[javascript]` (#134).
+javascript = ["tree-sitter-javascript>=0.23"]
+# Objective-C support is opt-in — tree-sitter-objc is heavy and codeindex does
+# not hard-depend on it. Install with: `pipx install loomgraph[objc]` (#134).
+# >=3.0.0 mirrors codeindex's own [objc] extra lower bound; <3.0.0 releases
+# predate the language() binding API codeindex's parser dispatches against.
+objc = ["tree-sitter-objc>=3.0.0"]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
