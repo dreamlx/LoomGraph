@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [0.16.3] - 2026-07-19
+
 ### 新增 — `loomgraph[javascript]` / `loomgraph[objc]` 安装 extras，JS 与 Objective-C 成为一等支持 (#134)
 - loomgraph 此前已有 `[java]` / `[typescript]` / `[swift]` 可选 grammar extras，但
   **缺 JavaScript/JSX 和 Objective-C**——尽管 codeindex parser 本就支持它们。grammar 未装时，

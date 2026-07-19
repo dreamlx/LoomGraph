@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.3] - 2026-07-19
+
 ### Added — `loomgraph[javascript]` / `loomgraph[objc]` extras for first-class JS/ObjC support (#134)
 - loomgraph already had `[java]` / `[typescript]` / `[swift]` opt-in grammar
   extras, but JS/JSX and Objective-C were missing — even though codeindex's
