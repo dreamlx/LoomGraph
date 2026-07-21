@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Docs — README documents the multi-language extras; ROADMAP removed
+- README's Install section now documents the opt-in grammar extras
+  (`[typescript]`/`[javascript]`/`[swift]`/`[java]`/`[objc]`). A pure TS/JS/Swift/
+  Java/ObjC repo indexes to 0 (or stray) entities without the matching grammar,
+  and the README — the primary entry point — never mentioned this. Added the
+  install commands (quotes required — `[extra]` is a zsh/bash glob) + a pointer
+  to `/loomgraph-setup` for `.codeindex.yaml` `languages:` setup.
+- Removed `docs/ROADMAP.md`. It was a v0.9.0-era (2026-03-07) Phase 1–4 sprint
+  log still narrating the retired LightRAG/Jina/H200 architecture — untouched
+  for ~4.5 months (last commit `f60e06d` at v0.9.0; now 0.16.3), and never
+  updated after ADR-013 (2026-06-24) retired that stack. Exactly the
+  "docs/ 不留完成态" anti-pattern. Direction/planning is covered by GitHub
+  issues + CHANGELOG. Cleaned its 4 inbound links (CLAUDE.md, AGILE_GUIDE,
+  SYSTEM_DESIGN, epics/README). AGILE_GUIDE's §6 three-repo coordination
+  section also de-LightRAG'd (three-repo → two-repo: codeindex graph-export →
+  loomgraph SQLite).
+
 ## [0.16.3] - 2026-07-19
 
 ### Added — `loomgraph[javascript]` / `loomgraph[objc]` extras for first-class JS/ObjC support (#134)

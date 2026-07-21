@@ -1,6 +1,6 @@
 # 敏捷开发流程指南
 
-**适用范围**: LoomGraph / codeindex / LightRAG 三仓库
+**适用范围**: LoomGraph / codeindex 两仓库（LightRAG 于 v0.10-0.11 退役，见 ADR-013）
 **更新日期**: 2026-02-20
 
 ---
@@ -222,8 +222,8 @@ scope: core / cli / skills / embedding / ...
 
 ```markdown
 **依赖**:
-- codeindex >= v0.18 (目录树展开)
-- LightRAG API: /graph/entities/all 端点
+- codeindex >= v0.33 (graph-export NDJSON 契约)
+- loomgraph: 消费 graph-export，持久化到 SQLite
 ```
 
 ### 6.2 数据契约
@@ -231,18 +231,14 @@ scope: core / cli / skills / embedding / ...
 跨仓库的接口通过 `docs/api/DATA_CONTRACT.md` 约定：
 
 ```
-codeindex parse JSON → LoomGraph mapper → LightRAG HTTP API
+codeindex graph-export NDJSON → loomgraph import-export → SQLite + sqlite-vec
 ```
 
 接口变更必须同步更新 DATA_CONTRACT.md 并通知下游仓库。
 
 ### 6.3 版本对齐
 
-三仓库版本独立，但在 ROADMAP.md 中标注版本对应关系：
-
-```
-codeindex v0.20+  ←→  LoomGraph v0.9.0  ←→  LightRAG (latest API)
-```
+两仓（codeindex / loomgraph）版本独立演进，无强同步——CLI 改 parser、loomgraph 改 query 互不阻塞。各仓版本以各自 `pyproject.toml` + `CHANGELOG.md` 为准；LightRAG 已于 v0.10-0.11 退役（ADR-013），不再有三仓对应关系。
 
 ---
 
@@ -268,4 +264,3 @@ codeindex v0.20+  ←→  LoomGraph v0.9.0  ←→  LightRAG (latest API)
 | Epic 进度跟踪 | GitHub Issue (label: `epic`) |
 | 版本进度 | GitHub Milestone |
 | 变更记录 | `CHANGELOG.md` |
-| 路线图 | `docs/ROADMAP.md` |
