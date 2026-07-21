@@ -433,7 +433,6 @@ ollama pull gemma3:12b-it-qat
 
 - [DATA_CONTRACT.md](../api/DATA_CONTRACT.md) — codeindex ↔ LoomGraph 数据映射
 - [CLI_DESIGN.md](../api/CLI_DESIGN.md) — CLI 命令详细设计
-- [ROADMAP.md](../ROADMAP.md) — 开发路线图
 - [ADR-013](../adr/ADR-013-sqlite-vec-replace-lightrag.md) — SQLite + sqlite-vec 替换 LightRAG
 - [EPIC-004](../epics/EPIC-004-bidirectional-orchestrator.md) — deps / overview
 - [EPIC-005](../epics/EPIC-005-workspace-management.md) — workspace 管理

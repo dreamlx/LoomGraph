@@ -6,6 +6,18 @@
 
 ## [Unreleased]
 
+### 文档 — README 补多语言 extras 说明；移除过时 ROADMAP
+- README 的 Install 段新增「多语言仓库需装对应 grammar extra」小节。纯
+  TypeScript/JavaScript/Swift/Java/Objective-C 项目若不装对应 extra，会索引出
+  0（或零星）实体——README 作为首要入口之前从未提及。补了安装命令（引号必要，
+  `[extra]` 是 zsh/bash glob）+ 指向 `/loomgraph-setup` 配 `languages:`。
+- 移除 `docs/ROADMAP.md`。它是 v0.9.0 时代（2026-03-07）的 Phase 1–4 sprint log，
+  仍讲已退役的 LightRAG/Jina/H200 架构——约 4.5 个月未维护（最后提交停在 v0.9.0，
+  现 0.16.3），且 ADR-013（2026-06-24）退役该架构后从未更新。典型的
+  "docs/ 不留完成态"反例。方向/规划由 GitHub issue + CHANGELOG 承担。已清理 4 处入链，
+  AGILE_GUIDE §6 三仓协作段同步去 LightRAG（三仓→两仓：codeindex graph-export →
+  loomgraph SQLite）。
+
 ## [0.16.3] - 2026-07-19
 
 ### 新增 — `loomgraph[javascript]` / `loomgraph[objc]` 安装 extras，JS 与 Objective-C 成为一等支持 (#134)

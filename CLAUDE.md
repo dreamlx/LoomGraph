@@ -331,7 +331,6 @@ mypy src/
 
 ```
 docs/
-├── ROADMAP.md              # 版本路线图
 ├── AGILE_GUIDE.md          # 敏捷开发流程
 ├── PACKAGING.md            # 打包发布流程 + CHANGELOG 维护策略
 ├── adr/                    # 架构决策记录（ADR-013/014/015 是当前，001-012 历史归档）
