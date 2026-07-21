@@ -2098,8 +2098,8 @@ class TestCodeindexPackageName:
 
     def test_no_stale_package_name_in_live_source(self) -> None:
         """No live source module may reference the old `matrix-codeindex`
-        package name. Historical records under docs/adr + docs/archive are
-        intentionally exempt (point-in-time decisions)."""
+        package name. Historical records under docs/adr are intentionally
+        exempt (point-in-time decisions)."""
         src_root = Path(__file__).resolve().parents[2] / "src" / "loomgraph"
         offenders = [
             str(p.relative_to(src_root))
