@@ -62,7 +62,6 @@ epics/
 
 ## 🔗 相关资源
 
-- **ROADMAP**: [../ROADMAP.md](../ROADMAP.md)
 - **CHANGELOG**: [../../CHANGELOG.md](../../CHANGELOG.md)
 - **ADR**: [../adr/](../adr/)
 - **GitHub Issues**: https://github.com/dreamlx/LoomGraph/issues

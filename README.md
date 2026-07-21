@@ -39,6 +39,23 @@ pipx install loomgraph
 
 That's it. [codeindex](https://github.com/dreamlx/codeindex) is pulled in automatically as the parser engine — no separate install, no direct operation. No additional services required for the structural commands.
 
+### Multi-language repos — install the matching grammar extra
+
+Python and PHP grammars ship by default. A pure **TypeScript / JavaScript / Swift / Java / Objective-C** repo indexes to 0 (or a few stray) entities unless you install the matching `tree-sitter` grammar — the parser skips files with a warning when the grammar is absent.
+
+```bash
+pipx install "loomgraph[typescript]"    # TypeScript / TSX
+pipx install "loomgraph[javascript]"    # JavaScript / JSX
+pipx install "loomgraph[swift]"
+pipx install "loomgraph[java]"
+pipx install "loomgraph[objc]"          # Objective-C (.h / .m; .mm not supported)
+```
+
+> Quotes are required — `[extra]` is a shell glob in zsh/bash (`no matches found`
+> without them). Add several at once: `pipx install "loomgraph[typescript,javascript]"`.
+> Then ensure the languages are listed under `languages:` in `.codeindex.yaml`
+> (the `/loomgraph-setup` skill generates this via codeindex's own wizard).
+
 ### LLM code interpretation — codeindex `--ai`, not loomgraph
 
 LoomGraph's index is **pure AST** (entities, relations, call graph) — no LLM, fully reproducible. If you want **LLM-generated natural-language descriptions** of modules/functions (richer `README_AI.md`, AI-completed docstrings), that's codeindex's own `--ai` mode, which is **orthogonal to loomgraph**:
