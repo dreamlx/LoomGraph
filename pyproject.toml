@@ -114,7 +114,6 @@ exclude = ["**/README_AI.md", "**/PROJECT_SYMBOLS.md"]
 [tool.hatch.build.targets.sdist]
 exclude = [
     "/docs/epics",
-    "/docs/archive",
     "/.serena",
     "/tests/integration",
     "**/README_AI.md",

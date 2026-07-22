@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Docs — removed `docs/archive/` (15 v0.1–0.5 LightRAG-era dead files)
+- Deleted the entire `docs/archive/` directory (PRD, TOOLBOX_OVERVIEW,
+  WORKSTREAM_ASSIGNMENT, LIGHTRAG_*×4, FEATURE_BOUNDARY, GRAPH_OPTIMIZATION,
+  DISCUSSION-001, DOGFOODING_EPIC010, debt-analysis-2026-03-06, CLAUDE_INTEGRATION,
+  issues/×2, INDEX). All v0.1–v0.5 LightRAG/three-repo-era content, fully
+  recoverable via `git log` (git is the better archive). No inbound links
+  anywhere in the repo; the directory was already excluded from the sdist.
+  Its INDEX.md was a v0.1.0 (2025-02-04) dead index with broken relative paths
+  (pointing at `architecture/`/`adr/` as if inside archive/) — actively
+  misleading. Removed the now-dead `/docs/archive` line from the sdist exclude
+  list. Continues the "docs/ 不留完成态" cleanup started with ROADMAP (#137).
+
 ### Docs — README documents the multi-language extras; ROADMAP removed
 - README's Install section now documents the opt-in grammar extras
   (`[typescript]`/`[javascript]`/`[swift]`/`[java]`/`[objc]`). A pure TS/JS/Swift/
