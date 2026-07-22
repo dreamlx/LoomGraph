@@ -113,6 +113,12 @@ loomgraph_index/
 .loomgraph.yaml
 .loomgraph.yml
 
+# Local MCP config (per-machine Claude Code wiring, not project config)
+.mcp.json
+
+# Spike run artifacts (large, regenerable, no reuse value)
+docs/spikes/**/harness/results/
+
 # Customer configs (contain internal URLs)
 customers/customers.yaml
 customers/*/config.yaml
