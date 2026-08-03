@@ -19,8 +19,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The post-commit hook needs no change — it checks `$EXIT_CODE`, so update
   exiting 1 now auto-prints the warning (commit still completes).
 - New `ErrorCode.GRAPH_EXPORT_EMPTY` + `GraphExportEmptyError`.
-- The `index` command's sister case (writes empty graph + success:true) is
-  filed as #142 (different path, not in this fix's scope).
+- The `index` command's sister case is now fixed in #142 (same fail-loud treatment).
+
+### Fixed — `index` command also fails loud on 0-entity export (#142)
+- Sister case to #141: `index` (cold build) took a different path — on 0
+  entities it warned + **still wrote** an empty graph + `success:true`. Now
+  consistent with `update`/`refresh`: `output_error(GRAPH_EXPORT_EMPTY)` +
+  exit 1, never writes the empty graph. An empty repo also exits 1 (safe —
+  the user checks why there's nothing to index).
 
 ### Docs — removed `docs/archive/` (15 v0.1–0.5 LightRAG-era dead files)
 - Deleted the entire `docs/archive/` directory (PRD, TOOLBOX_OVERVIEW,

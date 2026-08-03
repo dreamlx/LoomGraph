@@ -79,15 +79,20 @@ def index(repo_path: str, clear: bool, workspace: str | None) -> None:
     for line in warnings:
         click.echo(f"⚠️  {line}", err=True)
 
-    # 0 entities is almost always a languages/grammar mismatch (#93) — warn
-    # loudly instead of letting it sail through as a silent success. Kept as a
-    # warning (exit 0): an empty repo legitimately indexes to 0.
-    # warning (exit 0): an empty repo legitimately indexes to 0.
+    # 0 entities is almost always a languages/grammar mismatch (#93, #142) —
+    # fail loud (exit 1) so a misconfigured repo (missing grammar / languages
+    # mismatch) doesn't silently build an empty graph. Consistent with
+    # `update`/`refresh`. An empty repo also exits 1: safe — the user checks
+    # why there's nothing to index, rather than a silent success.
     zero_warning = (
         _zero_entities_warning(repo, warnings) if summary.entity_count == 0 else None
     )
     if zero_warning is not None:
         click.echo(f"⚠️  WARNING: {zero_warning}", err=True)
+        output_error(
+            code=ErrorCode.GRAPH_EXPORT_EMPTY,
+            message=zero_warning,
+        )
 
     # Step 3: Embed + inject asynchronously
     click.echo("[3/3] Injecting into knowledge graph...", err=True)
@@ -105,9 +110,7 @@ def index(repo_path: str, clear: bool, workspace: str | None) -> None:
     result["repo_path"] = str(repo)
     click.echo(f"       Done in {result['duration_seconds']}s.", err=True)
 
-    if zero_warning is not None:
-        result["warning"] = zero_warning
-    elif warnings:
+    if warnings:
         result["warning"] = "; ".join(warnings)
 
     output_success(result)
