@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — 0-entity graph-export now fails loud instead of silent success (#141)
+- `loomgraph update` and MCP `refresh` returned `success:true` + exit 0 when
+  graph-export produced 0 entities (parser grammar missing / languages
+  mismatch) — the gate (`assess_export`) correctly blocked the empty-graph
+  write (no data-loss), but the signal layer lied, so agents/hooks saw
+  success while the graph stayed empty (dogfood 2026-08-03).
+- CLI `update`: `output_success` → `output_error(GRAPH_EXPORT_EMPTY)` → exit 1.
+- MCP `_async_refresh`: `return dict` → `raise GraphExportEmptyError` →
+  `safe_call` wraps it as an error envelope (`success:false`).
+- The post-commit hook needs no change — it checks `$EXIT_CODE`, so update
+  exiting 1 now auto-prints the warning (commit still completes).
+- New `ErrorCode.GRAPH_EXPORT_EMPTY` + `GraphExportEmptyError`.
+- The `index` command's sister case (writes empty graph + success:true) is
+  filed as #142 (different path, not in this fix's scope).
+
 ### Docs — removed `docs/archive/` (15 v0.1–0.5 LightRAG-era dead files)
 - Deleted the entire `docs/archive/` directory (PRD, TOOLBOX_OVERVIEW,
   WORKSTREAM_ASSIGNMENT, LIGHTRAG_*×4, FEATURE_BOUNDARY, GRAPH_OPTIMIZATION,
