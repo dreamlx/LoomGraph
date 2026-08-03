@@ -477,6 +477,41 @@ class TestIndexCommand:
         # run_graph_export must be invoked with the resolved repo path
         mock_export.assert_called_once()
 
+    @patch("loomgraph.cli._indexing._async_index", new_callable=AsyncMock)
+    @patch("loomgraph.cli._indexing.run_graph_export")
+    @patch("loomgraph.cli._indexing.check_codeindex")
+    def test_index_zero_entities_fails_loud(
+        self,
+        mock_check: MagicMock,
+        mock_export: MagicMock,
+        mock_async_index: AsyncMock,
+        runner: CliRunner,
+        tmp_path: Path,
+    ) -> None:
+        """#142: a 0-entity export is a grammar/languages mismatch, not a silent
+        success. index must fail loud (exit 1 + GRAPH_EXPORT_EMPTY) and never
+        write an empty graph — consistent with update/refresh."""
+        mock_check.return_value = {"installed": True, "version": "0.28.0"}
+        mock_export.return_value = (
+            [],
+            [],
+            ImportSummary(entity_count=0),
+            [
+                "Parser library not installed for swift: tree-sitter-swift is "
+                "not installed. Install it with: pip install tree-sitter-swift "
+                "(Sources/App/AppState.swift)"
+            ],
+        )
+
+        result = runner.invoke(main, ["index", str(tmp_path)])
+        assert result.exit_code != 0, result.output
+
+        mock_async_index.assert_not_awaited()  # never writes the empty graph
+        data = json.loads(result.stdout)
+        assert data["success"] is False
+        assert data["error"]["code"] == "GRAPH_EXPORT_EMPTY"
+        assert "tree-sitter-swift" in data["error"]["message"]
+
     @patch("loomgraph.storage.factory.create_graph_store")
     @patch("loomgraph.cli._indexing.run_graph_export")
     @patch("loomgraph.cli._indexing.check_codeindex")
@@ -564,14 +599,14 @@ class TestIndexCommand:
 
         result = runner.invoke(main, ["index", str(tmp_path)])
 
-        # warning, not hard error — empty repo is still a legal (if useless) state
-        assert result.exit_code == 0
+        # #142: fail loud — a 0-entity export is a mismatch, not a silent success
+        assert result.exit_code != 0, result.output
         assert "0 entities" in result.stderr
         assert ".codeindex.yaml" in result.stderr  # general hint
         data = json.loads(result.stdout)
-        assert data["success"] is True
-        assert "warning" in data["data"], "agent-visible warning field missing"
-        assert "0 entities" in data["data"]["warning"]
+        assert data["success"] is False
+        assert data["error"]["code"] == "GRAPH_EXPORT_EMPTY"
+        assert "0 entities" in data["error"]["message"]
 
     @patch("loomgraph.cli._indexing._async_index", new_callable=AsyncMock)
     @patch("loomgraph.cli._indexing.run_graph_export")
@@ -616,15 +651,16 @@ class TestIndexCommand:
 
         result = runner.invoke(main, ["index", str(tmp_path)])
 
-        assert result.exit_code == 0
+        assert result.exit_code != 0, result.output
         # codeindex's diagnostic (config vs file-extensions gap) is surfaced…
         assert "no indexable directories" in result.stderr
         assert ".php" in result.stderr
         # …and the actionable install/languages hint is present.
         assert ".codeindex.yaml" in result.stderr
         data = json.loads(result.stdout)
-        assert data["success"] is True
-        assert "no indexable directories" in data["data"]["warning"]
+        assert data["success"] is False
+        assert data["error"]["code"] == "GRAPH_EXPORT_EMPTY"
+        assert "no indexable directories" in data["error"]["message"]
 
 
     @patch("loomgraph.cli._indexing._async_index", new_callable=AsyncMock)
@@ -659,12 +695,13 @@ class TestIndexCommand:
 
         result = runner.invoke(main, ["index", str(tmp_path)])
 
-        assert result.exit_code == 0
+        assert result.exit_code != 0, result.output
         assert "loomgraph[java]" in result.stderr
         assert ".codeindex.yaml" in result.stderr
         data = json.loads(result.stdout)
-        assert data["success"] is True
-        assert "loomgraph[java]" in data["data"]["warning"]
+        assert data["success"] is False
+        assert data["error"]["code"] == "GRAPH_EXPORT_EMPTY"
+        assert "loomgraph[java]" in data["error"]["message"]
 
     @patch("loomgraph.cli._indexing._async_index", new_callable=AsyncMock)
     @patch("loomgraph.cli._indexing.run_graph_export")
@@ -698,12 +735,13 @@ class TestIndexCommand:
 
         result = runner.invoke(main, ["index", str(tmp_path)])
 
-        assert result.exit_code == 0
+        assert result.exit_code != 0, result.output
         assert "loomgraph[typescript]" in result.stderr
         assert ".codeindex.yaml" in result.stderr
         data = json.loads(result.stdout)
-        assert data["success"] is True
-        assert "loomgraph[typescript]" in data["data"]["warning"]
+        assert data["success"] is False
+        assert data["error"]["code"] == "GRAPH_EXPORT_EMPTY"
+        assert "loomgraph[typescript]" in data["error"]["message"]
 
     @patch("loomgraph.cli._indexing._async_index", new_callable=AsyncMock)
     @patch("loomgraph.cli._indexing.run_graph_export")
@@ -742,12 +780,13 @@ class TestIndexCommand:
 
         result = runner.invoke(main, ["index", str(tmp_path)])
 
-        assert result.exit_code == 0
+        assert result.exit_code != 0, result.output
         assert "loomgraph[swift]" in result.stderr
         assert ".codeindex.yaml" in result.stderr
         data = json.loads(result.stdout)
-        assert data["success"] is True
-        assert "loomgraph[swift]" in data["data"]["warning"]
+        assert data["success"] is False
+        assert data["error"]["code"] == "GRAPH_EXPORT_EMPTY"
+        assert "loomgraph[swift]" in data["error"]["message"]
 
 
 class TestUpdateCommand:
@@ -1483,24 +1522,21 @@ class TestIndexProgressFeedback:
     """Tests that index command outputs progress to stderr."""
 
     @patch("loomgraph.cli._indexing.asyncio.run")
-    @patch("subprocess.run")
+    @patch("loomgraph.cli._indexing.run_graph_export")
     @patch("loomgraph.cli._indexing.check_codeindex")
     def test_index_progress_messages(
         self,
         mock_check: MagicMock,
-        mock_subprocess: MagicMock,
+        mock_export: MagicMock,
         mock_asyncio: MagicMock,
         runner: CliRunner,
         tmp_path: Path,
-        sample_parse_results: dict[str, Any],
     ) -> None:
         """Index command should emit progress messages to stderr."""
         mock_check.return_value = {"installed": True, "version": "1.0.0"}
-        mock_subprocess.return_value = MagicMock(
-            returncode=0,
-            stdout=json.dumps(sample_parse_results),
-            stderr="",
-        )
+        # Non-empty export so the 0-entity gate (#142) doesn't short-circuit
+        # before the progress messages are emitted.
+        mock_export.return_value = ([], [], ImportSummary(entity_count=2, relation_count=2), [])
         mock_asyncio.return_value = {
             "files_scanned": 1,
             "files_indexed": 1,
