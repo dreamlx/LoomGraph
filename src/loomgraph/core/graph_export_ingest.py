@@ -35,6 +35,15 @@ class GraphExportError(RuntimeError):
     """`codeindex graph-export` failed, timed out, or produced no readable output."""
 
 
+class GraphExportEmptyError(RuntimeError):
+    """graph-export returned 0 entities; a gate hard-stops before any write (#120/#141).
+
+    Raised by callers after :func:`assess_export` reports an unsafe 0-entity
+    result, so the CLI surfaces it via ``output_error`` (exit 1) and MCP via
+    ``safe_call`` (error envelope) — never a silent ``success:true``.
+    """
+
+
 def assess_export(
     summary: ImportSummary, warnings: list[str]
 ) -> tuple[bool, str | None]:

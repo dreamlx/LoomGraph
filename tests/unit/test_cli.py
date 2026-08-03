@@ -907,11 +907,13 @@ class TestUpdateCommand:
         )
 
         result = runner.invoke(main, ["update"])
-        assert result.exit_code == 0, result.output
+        assert result.exit_code != 0, result.output  # fail-loud, not silent success
 
         mock_async_update.assert_not_awaited()  # the critical assertion: no GC
-        assert "zero_entity_skipped" in result.output
-        assert "tree-sitter-swift" in result.output
+        data = json.loads(result.stdout)
+        assert data["success"] is False
+        assert data["error"]["code"] == "GRAPH_EXPORT_EMPTY"
+        assert "tree-sitter-swift" in data["error"]["message"]
 
     @patch("loomgraph.cli._indexing._async_update", new_callable=AsyncMock)
     @patch("loomgraph.cli._indexing.run_graph_export")
@@ -925,7 +927,7 @@ class TestUpdateCommand:
     ) -> None:
         """--use-affected / --embedding-url are inert (compat); --since is ACTIVE."""
         mock_check.return_value = {"installed": True, "version": "0.29.0"}
-        mock_export.return_value = ([], [], ImportSummary(), [])
+        mock_export.return_value = ([], [], ImportSummary(entity_count=3), [])
         mock_async_update.return_value = {
             "mode": "warm_incremental",
             "entities_created": 0,
