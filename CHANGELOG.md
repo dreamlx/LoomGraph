@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-08-03
+
 ### Fixed — MCP server adapted to mcp 2.0 API; `mcp<2` pin lifted (#144)
 - mcp 2.0.0 dropped with breaking API changes; `mcp>=1.0` (no upper bound)
   resolved to 2.0 in CI and broke the server (PR #143 pinned `<2` as a
