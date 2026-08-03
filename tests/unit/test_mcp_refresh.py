@@ -18,6 +18,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from loomgraph.cli._indexing import _async_refresh
+from loomgraph.core.graph_export_ingest import GraphExportEmptyError
 
 
 @pytest.fixture
@@ -160,15 +161,39 @@ async def test_refresh_force_full_zero_entities_does_not_clear(
         ],
     )
 
-    result = await _async_refresh(
-        workspace="ws", repo=tmp_path, path=None, force_full=True
+    with pytest.raises(GraphExportEmptyError, match="tree-sitter-swift"):
+        await _async_refresh(
+            workspace="ws", repo=tmp_path, path=None, force_full=True
+        )
+    fakes.ingest.assert_not_called()  # raise before ingest (no delete_all)
+    fakes.incr.assert_not_called()
+
+
+async def test_refresh_incremental_zero_entities_raises(
+    fakes: types.SimpleNamespace, tmp_path: Path
+) -> None:
+    """#120/#141: incremental path with a 0-entity export → GraphExportEmptyError
+    (never reaches ingest_incremental, whose symbol GC would delete real symbols)."""
+    from loomgraph.io.export_reader import ImportSummary
+
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "auth.py").write_text("x = 1\n")
+    fakes.export.return_value = (
+        [],
+        [],
+        ImportSummary(entity_count=0),
+        [
+            "Parser library not installed for swift: tree-sitter-swift is not "
+            "installed. Install it with: pip install tree-sitter-swift "
+            "(Sources/App/AppState.swift)"
+        ],
     )
 
-    assert result["mode"] == "zero_entity_skipped"
-    assert "warning" in result
-    assert "tree-sitter-swift" in result["warning"]
-    fakes.ingest.assert_not_called()  # the critical assertion: no delete_all
-    fakes.incr.assert_not_called()
+    with pytest.raises(GraphExportEmptyError, match="tree-sitter-swift"):
+        await _async_refresh(
+            workspace="ws", repo=tmp_path, path="src/auth.py", force_full=False
+        )
+    fakes.incr.assert_not_called()  # raise before incremental GC
 
 
 async def test_refresh_path_file_scoped(
@@ -282,6 +307,28 @@ async def test_refresh_mcp_envelope_error(monkeypatch: pytest.MonkeyPatch) -> No
     assert body["success"] is False
     assert body["error"]["code"] == "REFRESH_FAILED"
     assert "codeindex" in body["error"]["suggestion"]
+
+
+async def test_refresh_mcp_envelope_zero_entity(monkeypatch: pytest.MonkeyPatch) -> None:
+    """zero-entity export → GraphExportEmptyError → {success: False, REFRESH_FAILED}
+    with the grammar hint in the message (agent sees the root cause, #141)."""
+    from loomgraph.mcp.tools import refresh
+
+    monkeypatch.setattr(
+        "loomgraph.mcp.tools.refresh._async_refresh",
+        AsyncMock(
+            side_effect=GraphExportEmptyError(
+                "graph-export returned 0 entities; tree-sitter-swift not installed"
+            )
+        ),
+    )
+
+    result = await refresh.handle({})
+
+    body = json.loads(result[0].text)
+    assert body["success"] is False
+    assert body["error"]["code"] == "REFRESH_FAILED"
+    assert "tree-sitter-swift" in body["error"]["message"]
 
 
 def test_refresh_tool_spec_registered() -> None:

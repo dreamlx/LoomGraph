@@ -55,7 +55,7 @@ dependencies = [
     "tree-sitter-php>=0.23",
 
     # MCP server (v0.12.0+)
-    "mcp>=1.0",
+    "mcp>=1.0,<2",  # pin: 2.0 breaking (Tool.inputSchema/list_tools renamed) — #144
 ]
 
 [project.optional-dependencies]

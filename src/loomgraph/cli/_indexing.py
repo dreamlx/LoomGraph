@@ -17,6 +17,7 @@ from loomgraph.core.git import (
     is_git_repository,
 )
 from loomgraph.core.graph_export_ingest import (
+    GraphExportEmptyError,
     GraphExportError,
     assess_export,
     ingest,
@@ -292,14 +293,13 @@ def update(
     safe, zero_warning = assess_export(summary, warnings)
     if not safe:
         click.echo(f"⚠️  WARNING: {zero_warning}", err=True)
-        output_success(
-            {
-                "mode": "zero_entity_skipped",
-                "repo_path": str(repo),
-                "warning": zero_warning,
-            }
+        # #141: a 0-entity export is a config/grammar mismatch, not a success —
+        # fail loud (exit 1) so the post-commit hook / CI detect the graph was
+        # never updated, instead of a silent success:true.
+        output_error(
+            code=ErrorCode.GRAPH_EXPORT_EMPTY,
+            message=zero_warning or "graph-export returned 0 entities",
         )
-        return
 
     # Step 3: Incremental (git) or whole-tree upsert (non-git / --files)
     click.echo("[3/3] Updating knowledge graph...", err=True)
@@ -429,11 +429,9 @@ async def _async_refresh(
         # Hard-stop before ingest(clear=True); surface the diagnosis instead.
         safe, warning = assess_export(summary, warnings)
         if not safe:
-            return {
-                "mode": "zero_entity_skipped",
-                "workspace": ws,
-                "warning": warning,
-            }
+            # #141: surface as an error (CLI exit 1 / MCP error envelope), not
+            # a silent success. assess_export's warning carries the root cause.
+            raise GraphExportEmptyError(warning or "graph-export returned 0 entities")
         result = await ingest(entities, relations, store, clear=True)
         result["mode"] = "cold_rebuild"
         result["workspace"] = ws
@@ -461,11 +459,9 @@ async def _async_refresh(
     # delete them. Hard-stop before any write.
     safe, warning = assess_export(summary, warnings)
     if not safe:
-        return {
-            "mode": "zero_entity_skipped",
-            "workspace": ws,
-            "warning": warning,
-        }
+        # #141: surface as an error (CLI exit 1 / MCP error envelope), not a
+        # silent success. assess_export's warning carries the root cause.
+        raise GraphExportEmptyError(warning or "graph-export returned 0 entities")
     if strategy == "incremental":
         result = await ingest_incremental(
             entities, relations, store, changed_files=changed_files
