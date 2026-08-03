@@ -66,11 +66,11 @@ def test_tool_specs_have_required_fields():
     """Schema sanity — every tool must have a description + inputSchema."""
     for spec in _TOOL_SPECS:
         assert spec.description, f"tool {spec.name} missing description"
-        assert spec.inputSchema, f"tool {spec.name} missing inputSchema"
-        assert spec.inputSchema.get("type") == "object"
+        assert spec.input_schema, f"tool {spec.name} missing inputSchema"
+        assert spec.input_schema.get("type") == "object"
         # `properties` must define at least the required ones
-        props = spec.inputSchema.get("properties", {})
-        for req in spec.inputSchema.get("required", []):
+        props = spec.input_schema.get("properties", {})
+        for req in spec.input_schema.get("required", []):
             assert req in props, f"{spec.name}: required '{req}' missing from properties"
 
 
