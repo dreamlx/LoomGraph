@@ -21,7 +21,7 @@ from typing import Any
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
-from mcp.types import TextContent, Tool
+from mcp.types import CallToolResult, ListToolsResult, TextContent, Tool
 
 from loomgraph import __version__
 from loomgraph.mcp.tools import check as t_check
@@ -85,34 +85,42 @@ def build_server() -> Server:
     Factored out so tests can introspect the server without starting
     stdio I/O.
     """
-    server: Server = Server(SERVER_NAME, version=__version__)
 
-    @server.list_tools()
-    async def list_tools() -> list[Tool]:
-        return list(_TOOL_SPECS)
+    async def list_tools(ctx: Any, params: Any) -> ListToolsResult:
+        return ListToolsResult(tools=list(_TOOL_SPECS))
 
-    @server.call_tool()
-    async def call_tool(name: str, arguments: dict[str, Any] | None) -> list[TextContent]:
+    async def call_tool(ctx: Any, params: Any) -> CallToolResult:
+        name = params.name
+        arguments = params.arguments or {}
         handler = _TOOL_HANDLERS.get(name)
         if handler is None:
-            return [
-                TextContent(
-                    type="text",
-                    text=json.dumps(
-                        {
-                            "success": False,
-                            "error": {
-                                "code": "UNKNOWN_TOOL",
-                                "message": f"No tool registered as {name!r}.",
-                                "known_tools": sorted(_TOOL_HANDLERS),
-                            },
-                        }
-                    ),
-                )
-            ]
-        return await handler(arguments or {})
+            return CallToolResult(
+                content=[
+                    TextContent(
+                        type="text",
+                        text=json.dumps(
+                            {
+                                "success": False,
+                                "error": {
+                                    "code": "UNKNOWN_TOOL",
+                                    "message": f"No tool registered as {name!r}.",
+                                    "known_tools": sorted(_TOOL_HANDLERS),
+                                },
+                            }
+                        ),
+                    )
+                ]
+            )
+        content = await handler(arguments)
+        return CallToolResult(content=content)
 
-    return server
+    # mcp 2.0: handlers are constructor params (on_*), not decorators.
+    return Server(
+        SERVER_NAME,
+        version=__version__,
+        on_list_tools=list_tools,
+        on_call_tool=call_tool,
+    )
 
 
 async def serve_stdio() -> None:

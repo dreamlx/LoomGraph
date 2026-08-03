@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — MCP server adapted to mcp 2.0 API; `mcp<2` pin lifted (#144)
+- mcp 2.0.0 dropped with breaking API changes; `mcp>=1.0` (no upper bound)
+  resolved to 2.0 in CI and broke the server (PR #143 pinned `<2` as a
+  stopgap). Adapted the low-level `Server` to the 2.0 API and lifted the pin
+  to `mcp>=2.0`. v1.x is in maintenance mode (security fixes only).
+- `build_server()`: `@server.list_tools()`/`@server.call_tool()` decorators →
+  `Server(..., on_list_tools=, on_call_tool=)` constructor params.
+- `list_tools` returns `ListToolsResult` (not `list[Tool]`); `call_tool` takes
+  `(ctx, params)` reading `params.name`/`params.arguments` and returns
+  `CallToolResult(content=...)` (not bare `list[TextContent]`).
+- `Tool.input_schema` is the v2 field name (alias `inputSchema=` still accepted
+  as a constructor kwarg via pydantic's `populate_by_name`); tests now access
+  `spec.input_schema`.
+- Side benefit: 4 pre-existing mypy errors on `server.py` (untyped-decorator /
+  no-any-return) are gone — the typed constructor params replaced the untyped
+  decorators.
+
 ### Fixed — 0-entity graph-export now fails loud instead of silent success (#141)
 - `loomgraph update` and MCP `refresh` returned `success:true` + exit 0 when
   graph-export produced 0 entities (parser grammar missing / languages
