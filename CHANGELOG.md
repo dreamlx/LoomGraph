@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.1] - 2026-08-12
+
+### Changed — codeindex lower bound 0.34.0 → 0.35.0
+- `ai-codeindex>=0.35.0` to pick up codeindex#154 (de-double Java entity ids
+  + edge srcs): Java graph CALLS orphan rate 60%→41% (Spring PetClinic).
+  loomgraph needs no code change — #154 is in codeindex's graph-export output
+  layer, which loomgraph consumes as NDJSON.
+
 ## [0.17.0] - 2026-08-03
 
 ### Fixed — MCP server adapted to mcp 2.0 API; `mcp<2` pin lifted (#144)
