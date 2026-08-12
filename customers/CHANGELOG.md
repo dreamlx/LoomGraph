@@ -6,17 +6,14 @@
 
 ## [Unreleased]
 
-### 文档 — README 补多语言 extras 说明；移除过时 ROADMAP
-- README 的 Install 段新增「多语言仓库需装对应 grammar extra」小节。纯
-  TypeScript/JavaScript/Swift/Java/Objective-C 项目若不装对应 extra，会索引出
-  0（或零星）实体——README 作为首要入口之前从未提及。补了安装命令（引号必要，
-  `[extra]` 是 zsh/bash glob）+ 指向 `/loomgraph-setup` 配 `languages:`。
-- 移除 `docs/ROADMAP.md`。它是 v0.9.0 时代（2026-03-07）的 Phase 1–4 sprint log，
-  仍讲已退役的 LightRAG/Jina/H200 架构——约 4.5 个月未维护（最后提交停在 v0.9.0，
-  现 0.16.3），且 ADR-013（2026-06-24）退役该架构后从未更新。典型的
-  "docs/ 不留完成态"反例。方向/规划由 GitHub issue + CHANGELOG 承担。已清理 4 处入链，
-  AGILE_GUIDE §6 三仓协作段同步去 LightRAG（三仓→两仓：codeindex graph-export →
-  loomgraph SQLite）。
+## [0.17.1] - 2026-08-12
+
+### 改进 — Java 代码图谱质量提升（依赖 codeindex 0.35.0）
+- 升级 `ai-codeindex` 下限至 0.35.0，带上 codeindex#154：Java 实体 id 与调用边
+  源此前因类名重复拼接而翻倍（`Owner.Owner.addPet`），致约 60% Java 实体成孤儿、
+  调用边几乎全断。修复后（Spring PetClinic 实测）孤儿率 60%→41%、可解析调用边
+  22→76。loomgraph 本身无代码改动——修复在 codeindex 的 graph-export 输出层，
+  loomgraph 以 NDJSON 消费即生效。装了 `loomgraph[java]` 的用户升级后自动受益。
 
 ## [0.16.3] - 2026-07-19
 
