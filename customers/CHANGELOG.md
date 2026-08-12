@@ -15,6 +15,19 @@
   22→76。loomgraph 本身无代码改动——修复在 codeindex 的 graph-export 输出层，
   loomgraph 以 NDJSON 消费即生效。装了 `loomgraph[java]` 的用户升级后自动受益。
 
+## [0.17.0] - 2026-08-03
+
+### 行为变更 — 0 实体导出不再静默成功，改为明确报错 (#141/#142)
+- 此前 `loomgraph index` / `update` / MCP `refresh` 在 codeindex 导出 0 实体时
+  （parser grammar 缺失 / `.codeindex.yaml` 的 `languages` 配错）返回
+  `success:true` 并退出 0——底层门控正确阻止了空图写入（无数据丢失），但信号
+  层撒谎，agent 与 post-commit hook 看到「成功」而图谱实为空。
+- 现三者统一为 `output_error(GRAPH_EXPORT_EMPTY)` + 退出 1：`index`/`update`
+  不再写入空图，MCP `refresh` 返回 `success:false` 错误封套。agent 与 hook 不
+  再被误导。
+- 对 post-commit hook 透明：hook 检查 `$EXIT_CODE`，`update` 现在 exit 1 会
+  自动触发告警（commit 仍正常完成）。
+
 ## [0.16.3] - 2026-07-19
 
 ### 新增 — `loomgraph[javascript]` / `loomgraph[objc]` 安装 extras，JS 与 Objective-C 成为一等支持 (#134)
