@@ -131,6 +131,11 @@ class FakeGraphStore(GraphStore):
         in_deg: dict[str, int] = defaultdict(int)
         out_deg: dict[str, int] = defaultdict(int)
         for r in self._relations:
+            # #149: only fully-resolvable edges count as connectivity
+            if r.get("src_id") not in self._entities:
+                continue
+            if r.get("tgt_id") not in self._entities:
+                continue
             out_deg[r.get("src_id", "")] += 1
             in_deg[r.get("tgt_id", "")] += 1
         result: list[dict[str, Any]] = []
@@ -155,6 +160,9 @@ class FakeGraphStore(GraphStore):
         counts: dict[str, int] = defaultdict(int)
         key_field = "tgt_id" if direction == "in" else "src_id"
         for r in self._relations:
+            # #149: degree counts only fully-resolvable edges
+            if r.get("src_id") not in self._entities or r.get("tgt_id") not in self._entities:
+                continue
             key = r.get(key_field, "")
             if key:
                 counts[key] += 1
@@ -436,6 +444,29 @@ class TestAnalyticsContract:
         assert len(result) == 1
         assert result[0]["entity_name"] == "Caller"
         assert result[0]["degree"] == 2
+
+    async def test_orphans_edge_to_nonexistent_target(self, store: GraphStore) -> None:
+        """#149: an edge whose far endpoint never joined an entity is not
+        connectivity — A is still effectively orphaned (graph traversal
+        joins on entities, so this edge is untraversable)."""
+        await store.create_entity("A", {"entity_type": "function"})
+        await store.create_relation("A", "Ghost.B", {"keywords": "CALLS"})
+        orphans = await store.get_orphan_entities()
+        assert [e["entity_name"] for e in orphans] == ["A"]
+
+    async def test_orphans_edge_from_nonexistent_source(self, store: GraphStore) -> None:
+        await store.create_entity("B", {"entity_type": "function"})
+        await store.create_relation("Ghost.A", "B", {"keywords": "CALLS"})
+        orphans = await store.get_orphan_entities()
+        assert [e["entity_name"] for e in orphans] == ["B"]
+
+    async def test_degree_ignores_dangling_edges(self, store: GraphStore) -> None:
+        """#149: degree must only count fully-resolvable edges."""
+        await store.create_entity("Hub", {})
+        await store.create_relation("Ghost", "Hub", {"keywords": "CALLS"})
+        await store.create_relation("Hub", "Ghost2", {"keywords": "CALLS"})
+        assert await store.get_degree_distribution(direction="in", min_degree=1) == []
+        assert await store.get_degree_distribution(direction="out", min_degree=1) == []
 
     async def test_graph_stats_counts_and_coupling(
         self, store: GraphStore

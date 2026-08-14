@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — topology orphan/hub/god metrics now computed on the resolvable graph (#149)
+- `get_orphan_entities` / `get_degree_distribution` (storage layer) and the
+  client-side degree build in `TopologyAnalyzer` previously counted any stored
+  relation row as connectivity, even when the far endpoint never joined an
+  entity (dangling edge). An entity could be reported non-orphan while
+  `loomgraph graph` returned empty callers/callees for it.
+- Now only fully-resolvable edges (both endpoints in the entity set) count —
+  same semantics as `graph` traversal. On Spring PetClinic the reported orphan
+  rate moves 40.6%→79.9%, matching the effective-orphan rate measured in the
+  #147 horizontal eval; hub/god counts drop as dangling edges no longer
+  inflate degrees (loomgraph self: hubs 15→7, god functions 44→3).
+
 ## [0.17.1] - 2026-08-12
 
 ### Changed — codeindex lower bound 0.34.0 → 0.35.0
