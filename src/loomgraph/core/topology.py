@@ -512,13 +512,15 @@ class TopologyAnalyzer:
             if not src or not tgt:
                 continue
 
-            # Only count relations where at least one endpoint is in our entity set
             src_in = src in entity_map
             tgt_in = tgt in entity_map
 
-            if src_in and not _is_noise(tgt):
+            # #149: degree (and thus orphan/hub/god detection) counts only
+            # fully-resolvable edges — both endpoints must be in the entity
+            # set. An edge to an unresolved/external name is untraversable
+            # (`graph` joins on entities) and must not mask an orphan.
+            if src_in and tgt_in:
                 out_degree.setdefault(src, []).append(tgt)
-            if tgt_in and not _is_noise(src):
                 in_degree.setdefault(tgt, []).append(src)
 
             # Coupling: count cross-module vs intra-module
