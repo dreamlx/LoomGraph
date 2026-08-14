@@ -609,10 +609,17 @@ class SqliteGraphStore(GraphStore):
         source_prefix: str | None = None,
     ) -> list[dict[str, Any]]:
         def _query(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+            # #149: only fully-resolvable edges (both endpoints joined to
+            # entities) count as connectivity — matches `graph` traversal,
+            # which joins on entities and can't follow dangling edges.
             sql = """
                 SELECT e.* FROM entities e
-                WHERE e.entity_name NOT IN (SELECT src_id FROM relations)
-                  AND e.entity_name NOT IN (SELECT tgt_id FROM relations)
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM relations r
+                    WHERE (r.src_id = e.entity_name OR r.tgt_id = e.entity_name)
+                      AND r.src_id IN (SELECT entity_name FROM entities)
+                      AND r.tgt_id IN (SELECT entity_name FROM entities)
+                )
             """
             params: list[Any] = []
             if exclude_types:
@@ -636,10 +643,14 @@ class SqliteGraphStore(GraphStore):
         key_field = "tgt_id" if direction == "in" else "src_id"
 
         def _query(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+            # #149: degree counts only fully-resolvable edges, same rule as
+            # get_orphan_entities.
             sql = f"""
                 SELECT e.*, c.degree FROM (
                     SELECT {key_field} AS name, COUNT(*) AS degree
-                    FROM relations
+                    FROM relations r
+                    WHERE r.src_id IN (SELECT entity_name FROM entities)
+                      AND r.tgt_id IN (SELECT entity_name FROM entities)
                     GROUP BY {key_field}
                     HAVING degree >= ?
                 ) c
