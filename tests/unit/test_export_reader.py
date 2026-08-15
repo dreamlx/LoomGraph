@@ -491,3 +491,39 @@ def test_reader_supports_sv1_without_warning(tmp_path: Path):
     assert summary.schema_warnings == [], summary.schema_warnings
     assert summary.meta["schema_version"] == 1
     assert entities[0].entity_data["content_hash"] == "abc123def456"
+
+
+class TestPollutionHints:
+    """#156 提案 3: test-file pollution must be visible in the import summary."""
+
+    def _write(self, tmp_path, records):
+        p = tmp_path / "ex.ndjson"
+        p.write_text("\n".join(json.dumps(r) for r in records))
+        return p
+
+    META = {"type": "meta", "schema_version": 1, "generator": "t"}
+
+    def test_test_file_ratio_and_warning(self, tmp_path):
+        recs = [self.META]
+        for i in range(2):
+            recs.append({"type": "entity", "id": f"src/a{i}.py:{i}",
+                         "entity_type": "function", "source_id": f"src/a{i}.py:{i}",
+                         "provenance": "ast"})
+        for i in range(6):
+            recs.append({"type": "entity", "id": f"src/__tests__/t{i}.test.ts:{i}",
+                         "entity_type": "function",
+                         "source_id": f"src/__tests__/t{i}.test.ts:{i}",
+                         "provenance": "ast"})
+        entities, relations, summary = GraphExportReader(self._write(tmp_path, recs)).read()
+        d = summary.to_dict()
+        assert d["test_entity_ratio"] > 0.7
+        assert any("test" in w.lower() for w in d["schema_warnings"])
+
+    def test_no_warning_when_clean(self, tmp_path):
+        recs = [self.META,
+                {"type": "entity", "id": "src/a.py:1", "entity_type": "function",
+                 "source_id": "src/a.py:1", "provenance": "ast"}]
+        entities, relations, summary = GraphExportReader(self._write(tmp_path, recs)).read()
+        d = summary.to_dict()
+        assert d["test_entity_ratio"] == 0.0
+        assert not any("test" in w.lower() for w in d["schema_warnings"])

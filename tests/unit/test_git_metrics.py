@@ -315,3 +315,38 @@ class TestGitMetricsAnalyzer:
 
         assert len(hotspots) == 0
         assert len(bus_factors) == 0
+
+
+class TestSingleAuthorSuppression:
+    """#156 提案 5: single-author repos get trivial bus_factor everywhere —
+    suppress from risk counts, downgrade to informational."""
+
+    def test_single_author_bus_factor_informational(self):
+        analyzer = GitMetricsAnalyzer(Path("."), since="3 months")
+        file_metrics = {
+            "src/a.py": FileMetrics(
+                source_id="src/a.py", change_frequency=10,
+                last_modified=datetime.now(), last_modified_days=1,
+                authors=["alice"], primary_author="alice",
+                bug_fix_count=0, total_commits=10, bug_fix_ratio=0.0,
+                lines_added=100, lines_deleted=10, churn=110,
+                created_at=datetime(2023, 1, 1), age_days=400,
+            ),
+        }
+        bfs = analyzer._detect_bus_factor(file_metrics, repo_is_single_author=True)
+        assert all(bf.risk_level == "informational" for bf in bfs)
+
+    def test_multi_author_unchanged(self):
+        analyzer = GitMetricsAnalyzer(Path("."), since="3 months")
+        file_metrics = {
+            "src/a.py": FileMetrics(
+                source_id="src/a.py", change_frequency=10,
+                last_modified=datetime.now(), last_modified_days=1,
+                authors=["alice"], primary_author="alice",
+                bug_fix_count=0, total_commits=10, bug_fix_ratio=0.0,
+                lines_added=100, lines_deleted=10, churn=110,
+                created_at=datetime(2023, 1, 1), age_days=400,
+            ),
+        }
+        bfs = analyzer._detect_bus_factor(file_metrics, repo_is_single_author=False)
+        assert bfs[0].risk_level == "critical"

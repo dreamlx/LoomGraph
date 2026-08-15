@@ -348,22 +348,29 @@ async def _async_check(
 
 @main.command("git-metrics")
 @click.argument("path", type=click.Path(exists=True), default=".")
+@click.option("--repo", "-r", type=click.Path(exists=True), default=None,
+              help="Named alternative to PATH (mutual recognition with other "
+                   "commands' flag style; git-metrics operates on the git "
+                   "repo, not on an indexed workspace).")
 @click.option("--since", default="3 months", help="Time window (e.g., '3 months', '6 months', '1 year')")
 @click.option("--output", "-o", type=click.Path(), help="Save results to JSON file")
-def git_metrics(path: str, since: str, output: str | None) -> None:
+def git_metrics(path: str, repo: str | None, since: str, output: str | None) -> None:
     """Analyze git history metrics for technical debt.
 
-    PATH: Repository root path (default: current directory)
+    PATH: Repository root path (default: current directory). --repo/-r is a
+    named alternative (same target); git-metrics reads the git repo directly,
+    not an indexed workspace.
 
     Examples:
         loomgraph git-metrics ./src               # Analyze src directory
+        loomgraph git-metrics --repo ~/code/app   # Named-flag style
         loomgraph git-metrics --since "6 months"  # 6-month window
         loomgraph git-metrics --output metrics.json  # Save to file
     """
     try:
         from loomgraph.core.git_metrics import GitMetricsAnalyzer
 
-        analyzer = GitMetricsAnalyzer(Path(path), since=since)
+        analyzer = GitMetricsAnalyzer(Path(repo or path), since=since)
         result = analyzer.analyze()
 
         # Convert to dict for JSON serialization
