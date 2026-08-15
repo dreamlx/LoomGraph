@@ -441,8 +441,8 @@ class TestMaintainabilityScoreCalculation:
         """Test maintainability score with no codeindex data."""
         score = analyzer._calculate_maintainability_score(None)
 
-        # No data = perfect score (no penalty)
-        assert score == 100.0
+        # #153 提案 2: no data = None (vacuous perfection removed)
+        assert score is None
 
     def test_calculate_maintainability_empty_scores(self, analyzer: DebtAnalyzer):
         """Test maintainability score with empty scores array."""
@@ -455,8 +455,8 @@ class TestMaintainabilityScoreCalculation:
 
         score = analyzer._calculate_maintainability_score(data)
 
-        # Empty = perfect score
-        assert score == 100.0
+        # #153 提案 2: empty = no data = None
+        assert score is None
 
 
 class TestCalculateOverallHealth:
@@ -678,3 +678,29 @@ class TestIssueToDict:
         assert result["location"]["file"] == "user.py"
         assert result["metrics"]["lines"] == 2500
         assert result["suggestion"] == "Split into smaller classes"
+
+
+class TestResolutionTrustCalculus:
+    """#154 提案 1+2: no vacuous-perfect scores; orphan severity split."""
+
+    def test_overall_health_reweights_when_maintainability_missing(self) -> None:
+        a = DebtAnalyzer()
+        health = a._calculate_overall_health(
+            topology_score=70,
+            git_score=None,
+            maintainability_score=None,
+        )
+        breakdown = health["breakdown"]
+        assert breakdown["maintainability"] is None
+        # quality default 100 (no issues), topology 70, renormalized weights
+        # over present dims: (100*0.4 + 70*0.3) / 0.7 = 87
+        assert health["total_score"] == 87
+
+    def test_overall_health_keeps_weights_when_maintainability_present(self) -> None:
+        a = DebtAnalyzer()
+        health = a._calculate_overall_health(
+            topology_score=70,
+            git_score=None,
+            maintainability_score=80.0,
+        )
+        assert health["total_score"] == int(100 * 0.4 + 80 * 0.3 + 70 * 0.3)

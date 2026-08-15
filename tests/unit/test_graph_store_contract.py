@@ -24,6 +24,7 @@ class FakeGraphStore(GraphStore):
         self._entities: dict[str, dict[str, Any]] = {}
         self._relations: list[dict[str, Any]] = []
         self._workspaces: list[str] = []
+        self._meta: dict[str, str] = {}
 
     async def create_entity(
         self, entity_name: str, entity_data: dict[str, Any]
@@ -123,6 +124,12 @@ class FakeGraphStore(GraphStore):
     async def list_workspaces(self) -> list[str]:
         return list(self._workspaces)
 
+    async def set_meta(self, key: str, value: str) -> None:
+        self._meta[key] = value
+
+    async def get_meta(self, key: str) -> str | None:
+        return self._meta.get(key)
+
     async def get_orphan_entities(
         self,
         exclude_types: list[str] | None = None,
@@ -130,7 +137,11 @@ class FakeGraphStore(GraphStore):
     ) -> list[dict[str, Any]]:
         in_deg: dict[str, int] = defaultdict(int)
         out_deg: dict[str, int] = defaultdict(int)
+        names_with_relations: set[str] = set()
         for r in self._relations:
+            # #154: any relation row touching an entity marks has_relations
+            names_with_relations.add(r.get("src_id", ""))
+            names_with_relations.add(r.get("tgt_id", ""))
             # #149: only fully-resolvable edges count as connectivity
             if r.get("src_id") not in self._entities:
                 continue
@@ -142,6 +153,8 @@ class FakeGraphStore(GraphStore):
         for name, e in self._entities.items():
             if in_deg[name] != 0 or out_deg[name] != 0:
                 continue
+            e = dict(e)
+            e["has_relations"] = 1 if name in names_with_relations else 0
             if exclude_types and e.get("entity_type") in exclude_types:
                 continue
             if source_prefix and not (e.get("source_id", "") or "").startswith(
@@ -467,6 +480,33 @@ class TestAnalyticsContract:
         await store.create_relation("Hub", "Ghost2", {"keywords": "CALLS"})
         assert await store.get_degree_distribution(direction="in", min_degree=1) == []
         assert await store.get_degree_distribution(direction="out", min_degree=1) == []
+
+    async def test_orphans_carry_has_relations_flag(self, store: GraphStore) -> None:
+        """#154: orphans must distinguish 'edges exist but unresolved' from
+        'no edges at all' — the trust-calculus reason field depends on it."""
+        await store.create_entity("UnresolvedNeighbor", {"entity_type": "function"})
+        await store.create_entity("TrulyIsolated", {"entity_type": "function"})
+        await store.create_relation("UnresolvedNeighbor", "Ghost", {"keywords": "CALLS"})
+        orphans = {e["entity_name"]: e for e in await store.get_orphan_entities()}
+        assert orphans["UnresolvedNeighbor"]["has_relations"] == 1
+        assert orphans["TrulyIsolated"]["has_relations"] == 0
+
+
+# ---------- Workspace meta (#154) ----------
+
+
+class TestMetaContract:
+    async def test_meta_roundtrip(self, store: GraphStore) -> None:
+        await store.set_meta("resolved_ratio", "0.0532")
+        assert await store.get_meta("resolved_ratio") == "0.0532"
+
+    async def test_meta_get_missing_returns_none(self, store: GraphStore) -> None:
+        assert await store.get_meta("nope") is None
+
+    async def test_meta_overwrites(self, store: GraphStore) -> None:
+        await store.set_meta("k", "1")
+        await store.set_meta("k", "2")
+        assert await store.get_meta("k") == "2"
 
     async def test_graph_stats_counts_and_coupling(
         self, store: GraphStore

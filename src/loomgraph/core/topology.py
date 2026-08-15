@@ -282,10 +282,12 @@ class TopologyResult:
     placeholder_modules: list[dict[str, Any]] = field(default_factory=list)
     coupling: CouplingMetrics = field(default_factory=CouplingMetrics)
     topology_score: int = 100
+    # #154 trust calculus: join-based edge resolution ratio + caveat when low.
+    resolution: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to dictionary."""
-        return {
+        d = {
             "summary": {
                 "total_entities": self.total_entities,
                 "total_relations": self.total_relations,
@@ -302,6 +304,28 @@ class TopologyResult:
             "placeholder_modules": self.placeholder_modules,
             "coupling": self.coupling.to_dict(),
         }
+        if self.resolution is not None:
+            d["resolution"] = self.resolution
+        return d
+
+
+# #154: below this join-based resolved ratio, orphan counts and
+# topology_score are likely dominated by unresolved edges, not dead code.
+RESOLUTION_CAUTION_THRESHOLD = 0.5
+
+
+def resolution_caveat(resolved_ratio: float | None) -> str | None:
+    """Human-readable caveat when edge resolution is too low to trust
+    orphan/score readings. None when resolution is fine or unknown."""
+    if resolved_ratio is None:
+        return None
+    if resolved_ratio >= RESOLUTION_CAUTION_THRESHOLD:
+        return None
+    return (
+        f"edge resolution ratio {resolved_ratio:.1%} is below "
+        f"{RESOLUTION_CAUTION_THRESHOLD:.0%} — orphan counts and "
+        "topology_score may reflect unresolved edges, not dead code"
+    )
 
 
 @dataclass
@@ -413,6 +437,12 @@ class TopologyAnalyzer:
             return name not in WHITELIST_HUBS
 
         orphans = [o for o in orphans if _keep_orphan(o)]
+        # #154: reason classification from the has_relations flag the store
+        # computes alongside the #149 resolvable-graph orphan filter.
+        for o in orphans:
+            o["reason"] = (
+                "neighbors_unresolved" if o.get("has_relations") else "truly_isolated"
+            )
         hubs = [h for h in hubs if _keep_hub(h)]
         gods = [
             g for g in gods
@@ -455,6 +485,18 @@ class TopologyAnalyzer:
             ),
         )
         result.topology_score = _compute_score(result)
+        # #154: surface persisted resolution quality (written at ingest) so
+        # consumers can distrust orphan/score readings on low-resolution
+        # graphs (Java DI / TS alias blind spots).
+        get_meta = getattr(self.client, "get_meta", None)
+        if get_meta is not None:
+            raw = await get_meta("resolved_ratio")
+            if raw is not None:
+                ratio = float(raw)
+                result.resolution = {
+                    "resolved_ratio": ratio,
+                    "caveat": resolution_caveat(ratio),
+                }
         return result
 
     def analyze_from_data(
@@ -504,6 +546,8 @@ class TopologyAnalyzer:
         cross_module = 0
         intra_module = 0
         module_pair_count: dict[tuple[str, str], int] = {}
+        names_with_any_relation: set[str] = set()
+        resolvable_edges = 0
 
         for rel in relations:
             src = rel.get("src_id", "") or rel.get("source", "")
@@ -511,6 +555,12 @@ class TopologyAnalyzer:
 
             if not src or not tgt:
                 continue
+
+            # #154: any relation row touching a name marks it "has relations"
+            # (for orphan reason classification — distinct from resolvable
+            # degree, which requires both endpoints below).
+            names_with_any_relation.add(src)
+            names_with_any_relation.add(tgt)
 
             src_in = src in entity_map
             tgt_in = tgt in entity_map
@@ -522,6 +572,7 @@ class TopologyAnalyzer:
             if src_in and tgt_in:
                 out_degree.setdefault(src, []).append(tgt)
                 in_degree.setdefault(tgt, []).append(src)
+                resolvable_edges += 1
 
             # Coupling: count cross-module vs intra-module
             if src_in and tgt_in:
@@ -582,10 +633,18 @@ class TopologyAnalyzer:
                 # Exclude whitelisted orphans (data classes, DTOs, test fixtures, etc.)
                 if _is_whitelisted_orphan(name, source_id):
                     continue
+                # #154: distinguish "edges exist but unresolved" (likely a
+                # resolution blind spot, not dead code) from "truly isolated".
+                reason = (
+                    "neighbors_unresolved"
+                    if name in names_with_any_relation
+                    else "truly_isolated"
+                )
                 orphans.append({
                     "entity": name,
                     "type": entity.get("entity_type", "unknown"),
                     "source_id": source_id,
+                    "reason": reason,
                 })
 
         # Detect hubs (high in-degree)
@@ -653,6 +712,15 @@ class TopologyAnalyzer:
             placeholder_modules=placeholder_modules,
             coupling=coupling,
         )
+        # #154: join-based resolution ratio (denominator = all relation rows
+        # seen, numerator = edges with both endpoints in the entity map).
+        if relations:
+            result.resolution = {
+                "resolved_ratio": round(resolvable_edges / len(relations), 4),
+                "caveat": resolution_caveat(
+                    resolvable_edges / len(relations)
+                ),
+            }
         result.topology_score = _compute_score(result)
         return result
 

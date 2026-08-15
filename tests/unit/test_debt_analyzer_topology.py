@@ -369,14 +369,14 @@ class TestTopologyIntegration:
         # they are already captured (graduated) by topology_score. The 5
         # topology issues leave quality untouched.
         # Quality = 100 (no static issues; no codeindex data)
-        # Maintainability = 100 (default)
+        # Maintainability = None (#153 提案 2 — no vacuous perfection)
         # Topology = 75 (from mock — where the topology issues DO count)
-        # Total = int(100 * 0.4 + 100 * 0.3 + 75 * 0.3) = int(92.5) = 92
+        # Total = int((100*0.4 + 75*0.3) / 0.7) = int(89.28) = 89
         assert health["breakdown"]["quality"] == 100
-        assert health["breakdown"]["maintainability"] == 100
+        assert health["breakdown"]["maintainability"] is None  # #153 提案 2
         assert health["breakdown"]["topology"] == 75
-        assert health["total_score"] == 92
-        assert health["grade"] == "A"
+        assert health["total_score"] == 89
+        assert health["grade"] == "B"
         # Summary still lists ALL issues (topology ones aren't hidden, just
         # not double-counted into quality):
         assert health["summary"]["p0_issues"] >= 1

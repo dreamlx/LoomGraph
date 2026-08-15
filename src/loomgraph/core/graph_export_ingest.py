@@ -191,11 +191,27 @@ async def ingest(
     _emit(on_progress, "insert", len(entity_dicts), len(relation_dicts))
     await store.insert_custom_kg(entity_dicts, relation_dicts, [])
 
+    # #154: persist join-based edge resolution quality so analytics outputs
+    # can caveat their readings (Java DI / TS alias blind spots).
+    resolved_ratio: float | None = None
+    if relation_dicts:
+        names = {d["entity_name"] for d in entity_dicts}
+        resolved = sum(
+            1
+            for r in relation_dicts
+            if r.get("src_id") in names and r.get("tgt_id") in names
+        )
+        resolved_ratio = round(resolved / len(relation_dicts), 4)
+        set_meta = getattr(store, "set_meta", None)
+        if set_meta is not None:
+            await set_meta("resolved_ratio", str(resolved_ratio))
+
     stats = await store.get_graph_stats()
     return {
         "cleared": clear,
         "entities_created": len(entity_dicts),
         "relations_created": len(relation_dicts),
+        "resolved_ratio": resolved_ratio,
         "embedded": embedded,
         "store_stats": stats,
     }
