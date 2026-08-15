@@ -136,3 +136,4 @@ uv.lock
 # Test artifacts
 test_output/
 test_index/
+graphify-out/
