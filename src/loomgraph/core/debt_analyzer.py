@@ -485,12 +485,16 @@ class DebtAnalyzer:
 
         issue_id_counter = len(self.issues) + 1
 
-        # Convert orphan entities to issues (P1)
+        # Convert orphan entities to issues. #154: only truly-isolated
+        # orphans are P1; "neighbors_unresolved" means edges exist but
+        # resolution failed (Java DI / TS alias blind spots) — that is a
+        # resolution-quality signal, not dead-code evidence, so P2.
         for orphan in result.orphans:
+            unresolved = orphan.get("reason") == "neighbors_unresolved"
             self.issues.append(
                 DebtIssue(
                     id=f"debt-{issue_id_counter:03d}",
-                    severity="P1",
+                    severity="P2" if unresolved else "P1",
                     category="orphan_entity",
                     source="topology",
                     entity=orphan.get("entity", orphan.get("entity_name", "unknown")),
@@ -502,7 +506,14 @@ class DebtAnalyzer:
                         "in_degree": orphan.get("in_degree", 0),
                         "out_degree": orphan.get("out_degree", 0),
                     },
-                    suggestion="Connect to other entities or consider removal if unused",
+                    confidence="low" if unresolved else "medium",
+                    suggestion=(
+                        "Edges exist but none resolved — likely an edge-resolution "
+                        "blind spot (dynamic dispatch / DI receiver), not dead code; "
+                        "check resolved_ratio before acting"
+                        if unresolved
+                        else "Connect to other entities or consider removal if unused"
+                    ),
                 )
             )
             issue_id_counter += 1
@@ -622,17 +633,20 @@ class DebtAnalyzer:
 
     def _calculate_maintainability_score(
         self, data: CodeindexData | None
-    ) -> float:
+    ) -> float | None:
         """Calculate aggregated maintainability score from codeindex data.
 
         Args:
             data: Imported codeindex data (None if not provided)
 
         Returns:
-            Maintainability score (0-100), default 100 if no data
+            Maintainability score (0-100), or None when no data flowed in —
+            vacuous perfection is misleading (#153 提案 2): a missing
+            dimension is reported as null and excluded from the weighted
+            total, never as a perfect 100.
         """
         if not data or not data.maintainability_scores:
-            return 100.0  # No data = perfect score (no penalty)
+            return None
 
         # Aggregate: average of all file maintainability scores
         scores = [item["score"] for item in data.maintainability_scores]
@@ -645,19 +659,21 @@ class DebtAnalyzer:
         self,
         topology_score: int = 100,
         git_score: int | None = None,
-        maintainability_score: float = 100.0,
+        maintainability_score: float | None = None,
     ) -> dict[str, Any]:
         """Calculate overall health score from issues.
 
         Args:
             topology_score: Topology health score from TopologyAnalyzer (0-100)
             git_score: Git metrics health score (0-100), None if --with-git not enabled
-            maintainability_score: Aggregated maintainability from codeindex (0-100)
+            maintainability_score: Aggregated maintainability from codeindex
+                (0-100), None when no codeindex data flowed in
 
         Returns:
-            Overall health dict with breakdown by dimension
+            Overall health dict with breakdown by dimension. Missing
+            dimensions are reported as null and their weight is
+            redistributed (#153 提案 2 — no vacuous perfection).
         """
-        # Summary counts reflect ALL issues (what the user sees listed).
         p0_issues = sum(1 for i in self.issues if i.severity == "P0")
         p1_issues = sum(1 for i in self.issues if i.severity == "P1")
         p2_issues = sum(1 for i in self.issues if i.severity == "P2")
@@ -673,23 +689,19 @@ class DebtAnalyzer:
 
         # Overall score: Multi-dimensional weighted formula (v0.9.2 fix)
         # - quality_score (40%): Issue penalties
-        # - maintainability_score (30%): Codeindex static analysis
+        # - maintainability_score (30%): Codeindex static analysis (None =
+        #   no data; weight redistributes over present dimensions)
         # - topology_score (30%): Graph topology OR
         # - git_score replaces topology if enabled
-        if git_score is not None:
-            # Three-dimensional scoring (EPIC-010)
-            total_score = int(
-                quality_score * 0.4
-                + maintainability_score * 0.3
-                + git_score * 0.3
-            )
-        else:
-            # Two-dimensional scoring (default)
-            total_score = int(
-                quality_score * 0.4
-                + maintainability_score * 0.3
-                + topology_score * 0.3
-            )
+        structural_score = git_score if git_score is not None else topology_score
+        dimensions: list[tuple[str, float, float | None]] = [
+            ("quality", 0.4, quality_score),
+            ("maintainability", 0.3, maintainability_score),
+            ("topology" if git_score is None else "git", 0.3, float(structural_score)),
+        ]
+        present = [(name, w, s) for name, w, s in dimensions if s is not None]
+        weight_sum = sum(w for _, w, _ in present) or 1.0
+        total_score = int(sum(s * w for _, w, s in present) / weight_sum)
 
         # Grade calculation
         if total_score >= 90:
@@ -706,10 +718,13 @@ class DebtAnalyzer:
         # NOTE: test_coverage is intentionally NOT emitted — it was a
         # hardcoded 0 that reads as "0% coverage" and isn't part of the
         # score formula (#60). Add it back only when coverage is wired.
-        breakdown: dict[str, int] = {
+        breakdown: dict[str, Any] = {
             "topology": topology_score,
             "quality": quality_score,
-            "maintainability": int(maintainability_score),
+            # None = no codeindex data flowed in (#153 提案 2)
+            "maintainability": (
+                int(maintainability_score) if maintainability_score is not None else None
+            ),
         }
 
         # Add git dimension if enabled
