@@ -113,6 +113,14 @@ class GraphStore(ABC):
         symbol-level incremental ingest can diff old vs new per symbol.
         """
 
+    async def set_meta(self, key: str, value: str) -> None:
+        """Persist a workspace metadata value (#154 resolved_ratio etc.).
+        Concrete default raises — backends without a meta table keep working."""
+        raise NotImplementedError
+
+    async def get_meta(self, key: str) -> str | None:
+        raise NotImplementedError
+
     @abstractmethod
     async def list_workspaces(self) -> list[str]:
         """List all known workspace names (backend-level discovery)."""

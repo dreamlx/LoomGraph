@@ -239,6 +239,10 @@ class SqliteGraphStore(GraphStore):
             "source_id": row["source_id"],
         }
         result.update(extras)
+        # #154: computed columns (has_relations on orphan queries) pass through
+        # (row.keys() — sqlite3.Row has no __contains__ on key names)
+        if "has_relations" in row.keys():  # noqa: SIM118
+            result["has_relations"] = row["has_relations"]
         return result
 
     @staticmethod
@@ -586,6 +590,25 @@ class SqliteGraphStore(GraphStore):
 
         return await self._run(_query)
 
+    async def set_meta(self, key: str, value: str) -> None:
+        def _write(conn: sqlite3.Connection) -> None:
+            conn.execute(
+                "INSERT OR REPLACE INTO meta(key, value) VALUES(?, ?)",
+                (key, value),
+            )
+            conn.commit()  # uncommitted writes hold the db lock (#154 e2e)
+
+        return await self._run(_write)
+
+    async def get_meta(self, key: str) -> str | None:
+        def _query(conn: sqlite3.Connection) -> str | None:
+            row = conn.execute(
+                "SELECT value FROM meta WHERE key = ?", (key,)
+            ).fetchone()
+            return row["value"] if row else None
+
+        return await self._run(_query)
+
     async def list_workspaces(self) -> list[str]:
         # Workspace discovery is filesystem-based: each `<name>.db` under
         # workspace_root is a workspace. Without a root configured, return [].
@@ -612,8 +635,16 @@ class SqliteGraphStore(GraphStore):
             # #149: only fully-resolvable edges (both endpoints joined to
             # entities) count as connectivity — matches `graph` traversal,
             # which joins on entities and can't follow dangling edges.
+            # #154: has_relations distinguishes "edges exist but unresolved"
+            # from "no edges at all" — the orphan reason classification.
             sql = """
-                SELECT e.* FROM entities e
+                SELECT e.*,
+                       EXISTS (
+                           SELECT 1 FROM relations r
+                           WHERE r.src_id = e.entity_name
+                              OR r.tgt_id = e.entity_name
+                       ) AS has_relations
+                FROM entities e
                 WHERE NOT EXISTS (
                     SELECT 1 FROM relations r
                     WHERE (r.src_id = e.entity_name OR r.tgt_id = e.entity_name)

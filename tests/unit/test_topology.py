@@ -833,3 +833,45 @@ class TestCouplingMetrics:
         assert d["intra_module_relations"] == 90
         assert d["density"] == 0.1
         assert len(d["most_coupled_pairs"]) == 1
+
+
+class TestResolutionTrustCalculus:
+    """#154: orphan reason classification + resolved-ratio caveat."""
+
+    def _make_entity(self, name, source_id, entity_type="function"):
+        return {"entity_name": name, "source_id": source_id, "entity_type": entity_type}
+
+    def _make_relation(self, src, tgt, keywords="CALLS"):
+        return {"src_id": src, "tgt_id": tgt, "keywords": keywords}
+
+    def test_orphan_reason_neighbors_unresolved(self) -> None:
+        """Orphan whose only edges dangle must be classified as such —
+        it is not evidence of dead code, only of unresolved resolution."""
+        entities = [
+            self._make_entity("Dangling", "src/a.py"),
+        ]
+        relations = [self._make_relation("Dangling", "Ghost")]
+        result = TopologyAnalyzer(client=None).analyze_from_data(entities, relations)
+        assert result.orphans[0]["reason"] == "neighbors_unresolved"
+
+    def test_orphan_reason_truly_isolated(self) -> None:
+        entities = [self._make_entity("Alone", "src/a.py")]
+        result = TopologyAnalyzer(client=None).analyze_from_data(entities, [])
+        assert result.orphans[0]["reason"] == "truly_isolated"
+
+    def test_resolution_caveat_below_threshold(self) -> None:
+        from loomgraph.core.topology import resolution_caveat
+        c = resolution_caveat(0.053)
+        assert c is not None and "5.3%" in c
+        assert resolution_caveat(0.99) is None
+
+    def test_result_carries_resolution_block(self) -> None:
+        entities = [
+            self._make_entity("A", "src/a.py"),
+            self._make_entity("B", "src/b.py"),
+        ]
+        relations = [self._make_relation("A", "Ghost"), self._make_relation("A", "B")]
+        result = TopologyAnalyzer(client=None).analyze_from_data(entities, relations)
+        d = result.to_dict()
+        assert d["resolution"]["resolved_ratio"] == 0.5
+        assert "caveat" in d["resolution"]

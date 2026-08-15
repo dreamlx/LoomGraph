@@ -144,15 +144,14 @@ class TestDebtAnalyzerGitIntegration:
             assert "breakdown" in result["overall_health"]
             assert "git" in result["overall_health"]["breakdown"]
 
-            # Verify three-dimensional scoring against the ACTUAL formula
-            # (when git enabled): quality*0.4 + maintainability*0.3 + git*0.3
-            # (topology is displayed in breakdown but git replaces it in the
-            # weighted total per _calculate_overall_health).
+            # Verify reweighted scoring against the ACTUAL formula
+            # (#153 提案 2): maintainability is None when no codeindex data
+            # flowed in, so the weighted total renormalizes over the present
+            # dimensions: quality*0.4 + git*0.3, over 0.7.
             breakdown = result["overall_health"]["breakdown"]
+            assert breakdown["maintainability"] is None
             expected_total = int(
-                breakdown["quality"] * 0.4
-                + breakdown["maintainability"] * 0.3
-                + breakdown["git"] * 0.3
+                (breakdown["quality"] * 0.4 + breakdown["git"] * 0.3) / 0.7
             )
             assert result["overall_health"]["total_score"] == expected_total
 

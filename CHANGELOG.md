@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — trust-calculus propagation: resolution quality surfaces in analytics (#154, from #153 audit)
+- Ingest persists a join-based `resolved_ratio` (share of stored edges whose
+  both endpoints join entities) into workspace metadata; `index` /
+  `import-export` outputs carry it.
+- `topology` emits a `resolution` block (`resolved_ratio` + human-readable
+  `caveat` when below 50%) so orphan counts and `topology_score` are not read
+  as dead-code evidence on low-resolution graphs (Java DI / TS path-alias
+  blind spots: Spring PetClinic resolves 4.9%).
+- Orphans are now classified `truly_isolated` (no relation rows — real
+  dead-code signal, P1) vs `neighbors_unresolved` (edges exist but none
+  resolved — resolution blind spot, P2 with low confidence).
+- `debt`: `maintainability` is `null` when no codeindex data flowed in, and
+  its weight redistributes over the present dimensions — vacuous
+  perfect-100 scores removed (#153 提案 2). Total scores shift accordingly
+  (e.g. quality 100 / topology 75: 92 → 89).
+
 ### Fixed — topology orphan/hub/god metrics now computed on the resolvable graph (#149)
 - `get_orphan_entities` / `get_degree_distribution` (storage layer) and the
   client-side degree build in `TopologyAnalyzer` previously counted any stored
