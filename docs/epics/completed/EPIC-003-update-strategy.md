@@ -9,7 +9,7 @@
 >
 > **下方正文保留作历史参考**。注意:正文中的 LightRAG 时代实现细节(`lightrag_client`、
 > `insert_custom_kg`、11 层写入、`DELETE /graph/clear` 等)已于 v0.10-0.11 退役,
-> 被 [ADR-013](../adr/ADR-013-sqlite-vec-replace-lightrag.md)(SQLite + sqlite-vec)supersede。
+> 被 [ADR-013](../../adr/ADR-013-sqlite-vec-replace-lightrag.md)(SQLite + sqlite-vec)supersede。
 > 正文不再逐字维护,权威实现以 `src/loomgraph/cli/_indexing.py` + `src/loomgraph/core/graph_export_ingest.py` 为准。
 
 **状态**: ✅ 已完成 (核心目标达成,2026-07-15 归档)
@@ -377,8 +377,8 @@ for file in affected["files"]:
 
 ## 相关文档
 
-- [UPDATE_STRATEGY.md](../architecture/UPDATE_STRATEGY.md) - 更新策略设计
-- [CLI_DESIGN.md](../api/CLI_DESIGN.md) - CLI 规范
+- [UPDATE_STRATEGY.md](../../architecture/UPDATE_STRATEGY.md) - 更新策略设计
+- [CLI_DESIGN.md](../../api/CLI_DESIGN.md) - CLI 规范
 
 ---
 

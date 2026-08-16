@@ -3,7 +3,7 @@
 **状态**: ✅ 已完成
 **优先级**: P1
 **版本**: v0.7.0
-**ADR**: [ADR-010](../adr/ADR-010-search-architecture-redesign.md)
+**ADR**: [ADR-010](../../adr/ADR-010-search-architecture-redesign.md)
 **前置依赖**:
 - v0.6.1 `insert_custom_kg` 已写入全层（graph + vdb + chunks）✅
 - LightRAG `/query` endpoint 可用 ✅

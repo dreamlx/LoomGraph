@@ -3,7 +3,7 @@
 **状态**: ✅ 已完成（Skill A/B/C SKILL.md 全部交付）
 **优先级**: P1
 **预估**: 8-12 天
-**ADR**: [ADR-009](../adr/ADR-009-workspace-as-knowledge-snapshot.md)
+**ADR**: [ADR-009](../../adr/ADR-009-workspace-as-knowledge-snapshot.md)
 **前置依赖**:
 - EPIC-004 (deps/overview) → Skill A 基础
 - EPIC-005 (workspace 管理) → Skill A 增强 + Skill B/C 前提

@@ -3,7 +3,7 @@
 **状态**: ✅ 已完成 (Phase 1)
 **优先级**: P2
 **预估**: 5-8 天（实际 ~4.5 天）
-**ADR**: [ADR-009](../adr/ADR-009-workspace-as-knowledge-snapshot.md)
+**ADR**: [ADR-009](../../adr/ADR-009-workspace-as-knowledge-snapshot.md)
 **依赖**: EPIC-005 (workspace 管理)
 **支撑**: Skill B (智能同步), Skill C (演化观察)
 

@@ -3,7 +3,7 @@
 **状态**: ✅ 已完成 (v0.2.5, 2026-02-19)
 **优先级**: P1
 **预估**: 5-8 天
-**ADR**: [ADR-008](../adr/ADR-008-bidirectional-orchestrator.md)
+**ADR**: [ADR-008](../../adr/ADR-008-bidirectional-orchestrator.md)
 
 ---
 

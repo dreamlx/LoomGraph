@@ -239,7 +239,7 @@ summary mode) calls the LLM; `--no-summary` skips it entirely.
 | `loomgraph import-export <file>` | Ingest a codeindex graph-export NDJSON | none |
 | `loomgraph mcp / install-skills / status` | Integration & diagnostics | none |
 
-`setup-config` is deprecated (v0.16+) — zero-config defaults made it redundant.
+`loomgraph setup-config` is deprecated (v0.16+) — zero-config defaults made it redundant.
 
 ## Claude Code integration
 

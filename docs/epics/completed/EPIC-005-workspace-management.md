@@ -3,7 +3,7 @@
 **状态**: ✅ 已完成
 **优先级**: P1
 **预估**: 2-3 天
-**ADR**: [ADR-009](../adr/ADR-009-workspace-as-knowledge-snapshot.md)
+**ADR**: [ADR-009](../../adr/ADR-009-workspace-as-knowledge-snapshot.md)
 **依赖**: 无（可与 EPIC-004 并行）
 
 ---

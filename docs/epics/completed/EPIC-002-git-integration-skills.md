@@ -393,9 +393,8 @@ tests/
 
 ## 9. 相关文档
 
-- [研发熵减解决方案](../../../redacted org]/30_Products/解决方案/研发熵减解决方案-mini草案.md)
-- [CLI_DESIGN.md](../api/CLI_DESIGN.md)
-- [SYSTEM_DESIGN.md](../architecture/SYSTEM_DESIGN.md)
+- [CLI_DESIGN.md](../../api/CLI_DESIGN.md)
+- [SYSTEM_DESIGN.md](../../architecture/SYSTEM_DESIGN.md)
 
 ---
 

@@ -255,7 +255,7 @@ def get_git_changed_files(since: str = "HEAD~1") -> list[str]:
 
 ## 相关文档
 
-- [EPIC-003: 更新策略实现](../epics/EPIC-003-update-strategy.md) - 实现计划
+- [EPIC-003: 更新策略实现](../epics/completed/EPIC-003-update-strategy.md) - 实现计划
 - [ADR-013: SQLite + sqlite-vec 替换 LightRAG](../adr/ADR-013-sqlite-vec-replace-lightrag.md) - 存储后端决策
 - [ADR-006: MVP 简化策略](../adr/ADR-006-mvp-simplification.md) - 全量重建决策
 - [CLI_DESIGN.md](../api/CLI_DESIGN.md) - CLI 命令设计

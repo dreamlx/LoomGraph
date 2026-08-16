@@ -434,7 +434,7 @@ ollama pull gemma3:12b-it-qat
 - [DATA_CONTRACT.md](../api/DATA_CONTRACT.md) — codeindex ↔ LoomGraph 数据映射
 - [CLI_DESIGN.md](../api/CLI_DESIGN.md) — CLI 命令详细设计
 - [ADR-013](../adr/ADR-013-sqlite-vec-replace-lightrag.md) — SQLite + sqlite-vec 替换 LightRAG
-- [EPIC-004](../epics/EPIC-004-bidirectional-orchestrator.md) — deps / overview
-- [EPIC-005](../epics/EPIC-005-workspace-management.md) — workspace 管理
-- [EPIC-006](../epics/EPIC-006-cross-workspace-comparison.md) — compare / similar
-- [EPIC-007](../epics/EPIC-007-entropy-reduction-skills.md) — 研发熵减 Skills
+- [EPIC-004](../epics/completed/EPIC-004-bidirectional-orchestrator.md) — deps / overview
+- [EPIC-005](../epics/completed/EPIC-005-workspace-management.md) — workspace 管理
+- [EPIC-006](../epics/completed/EPIC-006-cross-workspace-comparison.md) — compare / similar
+- [EPIC-007](../epics/completed/EPIC-007-entropy-reduction-skills.md) — 研发熵减 Skills

@@ -514,8 +514,7 @@ loomgraph debt --codeindex-data /tmp/codeindex-debt.json --format markdown
 
 ### A3: 示例报告
 
-- **JSON 示例**: [`examples/debt-report-example.json`](../../tests/fixtures/debt-report-example.json)
-- **Markdown 示例**: [`examples/debt-report-example.md`](../../tests/fixtures/debt-report-example.md)
+- **JSON Schema**: [`debt-report-v1.schema.json`](../schemas/debt-report-v1.schema.json)
 
 ### A4: 相关文档
 

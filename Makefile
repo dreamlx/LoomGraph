@@ -1,7 +1,7 @@
 # LoomGraph Makefile
 # Unified command interface for development, testing, and release workflows
 
-.PHONY: help install test lint format clean
+.PHONY: help install test lint docs-check format clean
 .PHONY: release bump
 .PHONY: run-index run-status run-find run-graph
 
@@ -73,6 +73,9 @@ lint: ## Run linting checks (ruff + mypy)
 	$(RUFF) check src/ tests/
 	$(MYPY) src/
 	@echo "$(GREEN)✓ Lint checks passed$(RESET)"
+
+docs-check: ## Docs consistency gate (command tables, links, artifacts, versions)
+	@$(PYTHON) $(SCRIPTS)/docs_check.py
 
 lint-fix: ## Auto-fix linting issues
 	@echo "$(BOLD)Fixing lint issues...$(RESET)"
