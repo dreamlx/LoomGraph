@@ -186,25 +186,14 @@ async def ingest(
     ]
 
     _emit(on_progress, "embed", len(entity_dicts), len(relation_dicts))
-    embedded = await maybe_embed_entities(entity_dicts)
+    embedded = await maybe_embed_entities(entity_dicts, store)
 
     _emit(on_progress, "insert", len(entity_dicts), len(relation_dicts))
     await store.insert_custom_kg(entity_dicts, relation_dicts, [])
 
     # #154: persist join-based edge resolution quality so analytics outputs
     # can caveat their readings (Java DI / TS alias blind spots).
-    resolved_ratio: float | None = None
-    if relation_dicts:
-        names = {d["entity_name"] for d in entity_dicts}
-        resolved = sum(
-            1
-            for r in relation_dicts
-            if r.get("src_id") in names and r.get("tgt_id") in names
-        )
-        resolved_ratio = round(resolved / len(relation_dicts), 4)
-        set_meta = getattr(store, "set_meta", None)
-        if set_meta is not None:
-            await set_meta("resolved_ratio", str(resolved_ratio))
+    resolved_ratio = await persist_resolved_ratio(store, entity_dicts, relation_dicts)
 
     stats = await store.get_graph_stats()
     return {
@@ -215,6 +204,40 @@ async def ingest(
         "embedded": embedded,
         "store_stats": stats,
     }
+
+
+def compute_resolved_ratio(
+    entity_dicts: list[dict[str, Any]],
+    relation_dicts: list[dict[str, Any]],
+) -> float | None:
+    """Join-based resolvable-edge share (#154/#158 review C1-2).
+
+    Shared by cold ingest, incremental update and import-export so the
+    persisted ``resolved_ratio`` never goes stale on the default path.
+    None when there are no relations (ratio undefined — topology omits
+    the resolution block)."""
+    if not relation_dicts:
+        return None
+    names = {d["entity_name"] for d in entity_dicts}
+    resolved = sum(
+        1
+        for r in relation_dicts
+        if r.get("src_id") in names and r.get("tgt_id") in names
+    )
+    return round(resolved / len(relation_dicts), 4)
+
+
+async def persist_resolved_ratio(
+    store: Any,
+    entity_dicts: list[dict[str, Any]],
+    relation_dicts: list[dict[str, Any]],
+) -> float | None:
+    """Compute + persist the ratio; empty '' clears it (empty graph)."""
+    ratio = compute_resolved_ratio(entity_dicts, relation_dicts)
+    set_meta = getattr(store, "set_meta", None)
+    if set_meta is not None:
+        await set_meta("resolved_ratio", "" if ratio is None else str(ratio))
+    return ratio
 
 
 def _file_of(source_id: str) -> str:
@@ -302,10 +325,19 @@ async def ingest_incremental(
     ]
 
     _emit(on_progress, "embed", len(entity_dicts), len(relation_dicts))
-    embedded = await maybe_embed_entities(entity_dicts)
+    embedded = await maybe_embed_entities(entity_dicts, store)
 
     _emit(on_progress, "insert", len(entity_dicts), len(relation_dicts))
     await store.insert_custom_kg(entity_dicts, relation_dicts, [])
+
+    # #154/#158 review C1-2: recompute the ratio over the NEW FULL EXPORT
+    # (not the changed subset — a zero-change update must not wipe the
+    # ratio, and a small change must not recompute over its subset).
+    resolved_ratio = await persist_resolved_ratio(
+        store,
+        [{"entity_name": e.entity_name} for e in entities],
+        [{"src_id": r.src_id, "tgt_id": r.tgt_id} for r in relations],
+    )
 
     stats = await store.get_graph_stats()
     return {
@@ -316,6 +348,7 @@ async def ingest_incremental(
         "gc_source_ids": len(to_delete),  # legacy alias (= symbols GC'd)
         "entities_created": len(entity_dicts),
         "relations_created": len(relation_dicts),
+        "resolved_ratio": resolved_ratio,
         "embedded": embedded,
         "store_stats": stats,
     }

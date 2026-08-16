@@ -143,3 +143,22 @@ class TestFailureMode:
             n = await maybe_embed_entities(entities)
         assert n == 0
         assert "embedding" not in entities[0]
+
+
+class TestFailLoudOnBuiltinErrors:
+    async def test_builtin_config_error_raises(self, monkeypatch):
+        """#158 review C1-3: deterministic builtin/download errors must not
+        be swallowed into a green zero-vector index."""
+        from loomgraph.core.embedding_pipeline import maybe_embed_entities
+        from loomgraph.embedding.builtin import BuiltinEmbeddingError
+
+        monkeypatch.setenv("LOOMGRAPH_EMBEDDING__ENABLED", "true")
+
+        monkeypatch.setattr(
+            "loomgraph.storage.factory.create_embedding_client",
+            lambda: (_ for _ in ()).throw(
+                BuiltinEmbeddingError("needs [embed] extra")))
+
+        with pytest.raises(BuiltinEmbeddingError):
+            await maybe_embed_entities(
+                [{"entity_name": "A", "description": "x"}])

@@ -120,6 +120,13 @@ def test_backfill_embeds_and_writes_vectors(
     runner: CliRunner, tmp_path: Path, monkeypatch
 ) -> None:
     """Happy path: entities with descriptions → embed → write → success."""
+    # Pin the explicit provider ON THE SETTINGS SINGLETON: get_settings()
+    # caches, so an env var set here is too late when earlier tests already
+    # materialized the instance with provider=auto (CI has no local
+    # .loomgraph.yaml pinning it) — auto resolves to builtin and re-raises
+    # the missing-[embed] error out of backfill.
+    from loomgraph.core.config import get_settings
+    monkeypatch.setattr(get_settings().embedding, "provider", "ollama")
     from loomgraph.storage.sqlite_store import DEFAULT_VECTOR_DIM
 
     ws = "test-bf:imported"
@@ -168,8 +175,11 @@ def test_backfill_embeds_and_writes_vectors(
     def fake_create_client():
         return FakeClient()
 
+    # The unified construction entry (resolve.client_for_store) builds
+    # explicit-path clients via resolve._make_direct_client — patch THAT
+    # seam; storage.factory is no longer on the backfill path.
     monkeypatch.setattr(
-        "loomgraph.storage.factory.create_embedding_client",
+        "loomgraph.embedding.resolve._make_direct_client",
         fake_create_client,
     )
 

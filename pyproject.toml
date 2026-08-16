@@ -62,6 +62,10 @@ dependencies = [
 # Java support is opt-in — tree-sitter-java is heavy and pure-Python repos
 # don't need it. Install with: `pipx install loomgraph[java]` (#93).
 java = ["tree-sitter-java>=0.23.0"]
+# Built-in zero-config embedding (#158): CodeRankEmbed-137M int8 ONNX runs
+# locally via onnxruntime — no Ollama, no API key. Without the extra, the
+# builtin provider fails loud with this install hint.
+embed = ["onnxruntime>=1.17", "tokenizers>=0.15"]
 # TypeScript support is opt-in too — tree-sitter-typescript is heavy and
 # pure-Python repos don't need it. Install with: `pipx install loomgraph[typescript]` (#96).
 typescript = ["tree-sitter-typescript>=0.23"]

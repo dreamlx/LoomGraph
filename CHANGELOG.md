@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — built-in zero-config embedding: CodeRankEmbed-137M int8 ONNX (#158)
+- New `loomgraph[embed]` extra (onnxruntime + tokenizers, no torch) powers a
+  `builtin` embedding provider: local CPU inference, 768-d (existing vec0
+  dimension — no migration), MIT model, ~139 MB downloaded on first use.
+- New default provider `auto` resolves once per workspace and persists the
+  choice (explicit config > ollama probe > builtin); embedding spaces are
+  provider-specific and never silently mix. `LOOMGRAPH_EMBED_MODEL_URL`
+  overrides the model source (default chain: GitHub release asset →
+  ModelScope → HuggingFace, sha256-pinned).
+- Model selection note: HF `nomic-embed-code` is a 7B Qwen2.5-Coder model —
+  unusable on CPU; CodeRankEmbed-137M is the small sibling (CoRNStack).
+- Fixes found during real-model bring-up: the community ONNX export is NOT
+  pre-normalized (measured norm ~24.7) — client L2-normalizes; semantic
+  search score now reports cosine similarity (vec0 L2 distance converted),
+  which stops lower-cos models from flooring every score at 0.000.
+
+### Fixed — codex release review (NO-SHIP → SHIP): 4 blockers + C2 batch
+- auto-provider coverage: import-export / embed-backfill now resolve
+  sticky like index/search; workspaces with vectors but no recorded
+  provider (pre-v0.18) refuse auto-resolution instead of guessing the
+  space (EmbeddingSpaceUnknownError with re-index remedy)
+- resolved_ratio recomputed on incremental update and import-export
+  (was cold-index only — the daily `update` path served stale trust data)
+- deterministic builtin errors (missing [embed] extra, download failures,
+  sha mismatch, unknown space) fail the index instead of being swallowed
+  into a green zero-vector result
+- debt-report-v1 schema: maintainability nullable (matches #154); fixed
+  pre-existing drift found by validating a real report (metrics/location
+  optionality, open entity_type/category sets)
+- scoped topology: client fallback now joins edges against the whole
+  graph like the server SQL (in-scope entities reachable only via
+  out-of-scope callers are connected, not orphaned)
+- model cache: tokenizer sha256-pinned; cached ONNX re-verified on load;
+  per-pid tmp files (concurrent-download safe)
+- test-pollution markers cover Python conventions (tests/, test_*.py);
+  index output carries the test-pollution warning
+
 ### Added — usage frictions from #153 audit (proposals 3/4/5, #156)
 - `import-export` / `index` summaries carry `test_entity_ratio` /
   `test_relation_ratio`; above 50% test-file entities a warning explains

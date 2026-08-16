@@ -62,6 +62,9 @@ class EmbeddingConfig(BaseSettings):
     pointing `api_url` at any OpenAI-compatible `/v1/embeddings` endpoint.
 
     Built-in provider conventions (just defaults for api_url + model):
+    - `auto`    — sticky resolution (#158): probe ollama → else builtin
+    - `builtin` — zero-config local CodeRankEmbed-137M int8 ONNX, 768d,
+                  needs `loomgraph[embed]`; model auto-downloads on first use
     - `ollama`  — local Ollama on `http://localhost:11434/v1`, `nomic-embed-text`
     - `openai`  — `https://api.openai.com/v1`, `text-embedding-3-small`
     - `voyage`  — `https://api.voyageai.com/v1`, `voyage-code-2`
@@ -76,7 +79,10 @@ class EmbeddingConfig(BaseSettings):
     model_config = _IGNORE_EXTRA
 
     enabled: bool = False
-    provider: Literal["ollama", "openai", "voyage", "glm", "custom"] = "ollama"
+    # `auto` resolves once per workspace (config > ollama-probe > builtin)
+    # and persists the choice — embedding spaces are provider-specific and
+    # must never silently mix (#158).
+    provider: Literal["auto", "builtin", "ollama", "openai", "voyage", "glm", "custom"] = "auto"
     api_url: str = "http://localhost:11434/v1"
     api_key: str = ""
     model: str = "nomic-embed-text"

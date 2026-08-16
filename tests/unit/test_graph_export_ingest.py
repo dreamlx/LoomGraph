@@ -611,3 +611,57 @@ def test_assess_export_warnings_present_but_entities_nonempty_is_safe() -> None:
     )
     assert safe is True
     assert warning is None  # caller still echoes warnings separately; gate passes
+
+
+class TestIncrementalRatioOverFullGraph:
+    """#158 review C1-2 regression: incremental must persist the FULL-graph
+    ratio — a no-change update must not wipe it to ''."""
+
+    @staticmethod
+    def _mk(name, source_id, content_hash="h1"):
+        from loomgraph.core.models import EntityData
+        return EntityData(entity_name=name,
+                          entity_data={"source_id": source_id,
+                                       "content_hash": content_hash})
+
+    @staticmethod
+    def _rel(s, t):
+        from loomgraph.core.models import RelationData
+        return RelationData(src_id=s, tgt_id=t, edge_data={})
+
+    async def test_zero_change_update_keeps_ratio(self, tmp_path):
+        from loomgraph.storage.sqlite_store import SqliteGraphStore
+
+        store = SqliteGraphStore(db_path=tmp_path / "t.db")
+        await store.initialize()
+        from loomgraph.core.graph_export_ingest import ingest, ingest_incremental
+
+        ents = [self._mk("A", "a.py"), self._mk("B", "b.py")]
+        rels = [self._rel("A", "B")]
+        await ingest(ents, rels, store, clear=True)
+        assert await store.get_meta("resolved_ratio") == "1.0"
+
+        # same hashes → zero changes; ratio must survive, not become ''
+        result = await ingest_incremental(ents, rels, store, changed_files=set())
+        assert result["resolved_ratio"] == 1.0
+        assert await store.get_meta("resolved_ratio") == "1.0"
+        await store.close()
+
+    async def test_ratio_is_full_graph_not_subset(self, tmp_path):
+        from loomgraph.storage.sqlite_store import SqliteGraphStore
+
+        store = SqliteGraphStore(db_path=tmp_path / "t2.db")
+        await store.initialize()
+        from loomgraph.core.graph_export_ingest import ingest, ingest_incremental
+
+        ents = [self._mk("A", "a.py"), self._mk("B", "b.py")]
+        rels = [self._rel("A", "B"), self._rel("A", "Ghost")]
+        await ingest(ents, rels, store, clear=True)
+        assert await store.get_meta("resolved_ratio") == "0.5"
+
+        # change one symbol; subset contains only its edge, full graph is 0.5
+        ents2 = [self._mk("A", "a.py", "h2"), self._mk("B", "b.py")]
+        result = await ingest_incremental(ents2, rels, store,
+                                          changed_files={"a.py"})
+        assert result["resolved_ratio"] == 0.5
+        await store.close()

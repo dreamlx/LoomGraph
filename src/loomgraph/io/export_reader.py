@@ -112,12 +112,16 @@ class ImportSummary:
         }
 
 
-_TEST_FILE_MARKERS = (".test.", ".spec.", "__tests__")
+_TEST_FILE_MARKERS = (".test.", ".spec.", "__tests__", "/tests/", "\\tests\\")
 
 
 def _is_test_source(source_id: str) -> bool:
     s = (source_id or "").lower()
-    return any(marker in s for marker in _TEST_FILE_MARKERS)
+    if any(marker in s for marker in _TEST_FILE_MARKERS):
+        return True
+    # Python convention: tests/test_*.py (basename prefix) / *_test.py
+    basename = s.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+    return basename.startswith("test_") or basename.endswith("_test.py")
 
 
 # ============================================

@@ -6,6 +6,13 @@
 
 ## [Unreleased]
 
+### 新增 — 内建零配置语义搜索 (#158)
+
+- `pipx install loomgraph[embed]` 后,`loomgraph search` 无需 Ollama、无需 API key:本地 CPU 推理(CodeRankEmbed-137M int8,MIT,768 维与现有库兼容),模型首次使用时自动下载(~139MB)
+- embedding provider 新默认 `auto`:显式配置 > 探测 Ollama > 内建,首次解析后**固化到 workspace**——不同模型的向量空间不兼容,绝不静默切换
+- 高级覆盖:`LOOMGRAPH_EMBED_MODEL_URL` 指定自托管模型源(默认链:GitHub Release → ModelScope → HuggingFace,sha256 校验)
+- 语义搜索分数改为余弦相似度口径(此前部分模型会显示 0.000)
+
 ### 改进 — 三项使用摩擦修复 (#156)
 
 - **测试污染可见**:导入摘要显示来自测试文件(`.test.`/`.spec.`/`__tests__`)的实体/边占比,超过 50% 时提示——mock 调用边基本不解析,会扭曲 topology/debt 解读

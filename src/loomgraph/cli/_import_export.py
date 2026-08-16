@@ -149,12 +149,17 @@ async def _async_import_export(
     relation_dicts = [
         {"src_id": r.src_id, "tgt_id": r.tgt_id, **r.edge_data} for r in relations
     ]
-    embedded_count = await maybe_embed_entities(entity_dicts)
+    embedded_count = await maybe_embed_entities(entity_dicts, store)
 
     # insert_custom_kg signature is (entities, relations, chunks); we have no
     # chunks (codeindex export carries no vector data — sqlite-vec embedding
     # is loomgraph's own concern, applied above).
     await store.insert_custom_kg(entity_dicts, relation_dicts, [])
+
+    # #154/#158 review C1-2: persist the trust ratio on this write path too.
+    from loomgraph.core.graph_export_ingest import persist_resolved_ratio
+
+    resolved_ratio = await persist_resolved_ratio(store, entity_dicts, relation_dicts)
 
     stats = await store.get_graph_stats()
 
@@ -163,6 +168,7 @@ async def _async_import_export(
         "artifact": str(artifact),
         "cleared": clear,
         "embedded": embedded_count,
+        "resolved_ratio": resolved_ratio,
         "summary": summary.to_dict(),
         "store_stats": stats,
     }

@@ -130,11 +130,14 @@ async def _async_embed_backfill(
         }
 
     # ---- Embed ----
-    from loomgraph.storage.factory import create_embedding_client
+    # #158: sticky resolution (same space as index) via the single
+    # construction entry (pruner) — explicit or auto both route here.
+    from loomgraph.embedding.resolve import client_for_store
 
     texts = [t[2] for t in targets]
     try:
-        async with create_embedding_client() as client:
+        cm = await client_for_store(store)
+        async with cm as (client, _provider):
             result = await client.embed(texts)
     except Exception:
         logger.warning(

@@ -11,13 +11,20 @@ from __future__ import annotations
 from typing import Any
 
 
-async def maybe_embed_entities(entities: list[dict[str, Any]]) -> int:
-    """Attach OpenAI-compatible embeddings to entity dicts in place.
+async def maybe_embed_entities(
+    entities: list[dict[str, Any]], store: Any = None
+) -> int:
+    """Attach embeddings to entity dicts in place.
 
     Gated on `settings.embedding.enabled` (default False) — pipx install
     yields a fully usable LoomGraph with no embedding service running.
     When enabled, embedding failure logs a warning and returns 0 —
     entity rows still write, the vec0 column just stays empty.
+
+    #158: when a ``store`` is passed and the provider is ``auto`` (default),
+    resolution is sticky per workspace (config > ollama-probe > builtin)
+    and persists the choice into workspace meta — embedding spaces are
+    provider-specific and must never silently mix.
     Returns count of embeddings attached.
     """
     import logging
@@ -43,9 +50,28 @@ async def maybe_embed_entities(entities: list[dict[str, Any]]) -> int:
 
     texts = [e["description"] for _, e in targets]
 
+    # Deterministic config/asset errors fail loud (#158 review C1-3):
+    # missing [embed] extra, unreachable model sources, sha mismatch,
+    # unknown-space workspaces. Swallowing these would report a green
+    # index with zero vectors.
+    from loomgraph.embedding.builtin import BuiltinEmbeddingError
+    from loomgraph.embedding.model_source import ModelDownloadError
+    from loomgraph.embedding.resolve import EmbeddingSpaceUnknownError
+
     try:
-        async with create_embedding_client() as client:
-            result = await client.embed(texts)
+        if store is not None:
+            # Single construction entry (pruner): sticky-auto or explicit,
+            # one place to evolve provider rules.
+            from loomgraph.embedding.resolve import client_for_store
+
+            cm = await client_for_store(store)
+            async with cm as (client, _provider):
+                result = await client.embed(texts)
+        else:
+            async with create_embedding_client() as client:
+                result = await client.embed(texts)
+    except (BuiltinEmbeddingError, ModelDownloadError, EmbeddingSpaceUnknownError):
+        raise
     except Exception as ex:
         logging.getLogger(__name__).warning(
             "Embedding skipped (%s entities): %s", len(targets), ex

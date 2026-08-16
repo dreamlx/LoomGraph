@@ -217,9 +217,15 @@ async def _async_search(
         raise VectorsNotIndexedError(ws)
 
     # Embed the query into the same vector space as the entity descriptions.
-    from loomgraph.storage.factory import create_embedding_client
+    # #158: sticky provider resolution (auto → config > ollama-probe >
+    # builtin) and the query-side task prefix for CodeRankEmbed. Single
+    # construction entry (pruner) — deterministic errors propagate to the
+    # CLI's typed-error translation.
+    from loomgraph.embedding.resolve import client_for_store
 
-    emb = await create_embedding_client().embed_single(query)
+    cm = await client_for_store(store)
+    async with cm as (client, _provider):
+        emb = await client.embed_query(query)
 
     # Over-fetch when filtering by type so a sparse type doesn't get starved
     # by the KNN cut (same heuristic search_similar uses for source_prefix).
@@ -247,7 +253,14 @@ async def _async_search(
             "type": etype,
             "source_id": hit.get("source_id") or meta.get("source_id", ""),
             "description": (meta.get("description") or "")[:200],
-            "score": round(max(0.0, 1.0 - distance), 3),
+            # vec0 returns L2 distance over unit vectors (range [0,2]);
+            # convert to cosine similarity — scale-free across embedding
+            # models (#158: CodeRankEmbed's absolute cos is lower than
+            # nomic-text's, so `1 - distance` floored everything at 0).
+            # Note (#158 review C2-4): exact only for unit vectors — builtin
+            # normalizes; Direct providers that return unnormalized vectors
+            # keep ranking but the absolute score is approximate.
+            "score": round(max(0.0, 1.0 - (distance ** 2) / 2.0), 3),
         })
         if len(matches) >= limit:
             break

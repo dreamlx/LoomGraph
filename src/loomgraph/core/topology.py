@@ -491,7 +491,8 @@ class TopologyAnalyzer:
         get_meta = getattr(self.client, "get_meta", None)
         if get_meta is not None:
             raw = await get_meta("resolved_ratio")
-            if raw is not None:
+            # '' = cleared ratio (empty graph, #158 review C1-2) — skip.
+            if raw:
                 ratio = float(raw)
                 result.resolution = {
                     "resolved_ratio": ratio,
@@ -508,7 +509,17 @@ class TopologyAnalyzer:
 
         Pure function — no I/O, easy to unit test.
         """
-        # Apply path filter at entry: scope (absolute prefix) wins over module (#61)
+        # Apply path filter at entry: scope (absolute prefix) wins over module (#61).
+        # all_names keeps the scope-UNFILTERED (but noise/external-filtered,
+        # same as entity_map) name set: edge resolvability joins against the
+        # whole graph (matching the server-side SQL, #158 review C2-2) — an
+        # in-scope entity reachable only via out-of-scope callers is
+        # connected, not orphaned.
+        all_names: set[str] = set()
+        for e in entities:
+            n = _entity_name(e)
+            if n and not _is_noise(n) and not _is_external(e):
+                all_names.add(n)
         if self.scope:
             entities = [
                 e for e in entities
@@ -562,20 +573,24 @@ class TopologyAnalyzer:
             names_with_any_relation.add(src)
             names_with_any_relation.add(tgt)
 
-            src_in = src in entity_map
-            tgt_in = tgt in entity_map
+            src_in = src in all_names
+            tgt_in = tgt in all_names
 
-            # #149: degree (and thus orphan/hub/god detection) counts only
-            # fully-resolvable edges — both endpoints must be in the entity
-            # set. An edge to an unresolved/external name is untraversable
-            # (`graph` joins on entities) and must not mask an orphan.
+            # #149/#158 review C2-2: resolvability joins against the WHOLE
+            # graph (both endpoints are real entities, wherever they live —
+            # same as the server-side SQL); degree accrues only to entities
+            # inside the analyzed scope (entity_map). An edge to an
+            # unresolved/external name is untraversable and must not mask
+            # an orphan.
             if src_in and tgt_in:
-                out_degree.setdefault(src, []).append(tgt)
-                in_degree.setdefault(tgt, []).append(src)
+                if src in entity_map:
+                    out_degree.setdefault(src, []).append(tgt)
+                if tgt in entity_map:
+                    in_degree.setdefault(tgt, []).append(src)
                 resolvable_edges += 1
 
             # Coupling: count cross-module vs intra-module
-            if src_in and tgt_in:
+            if src_in and tgt_in and src in entity_map and tgt in entity_map:
                 src_sid = entity_map[src].get("source_id", "")
                 tgt_sid = entity_map[tgt].get("source_id", "")
                 src_mod = extract_module(src_sid, depth=2)
