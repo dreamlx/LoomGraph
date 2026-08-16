@@ -4,7 +4,7 @@
 # LightRAG API connection
 lightrag:
   # H200 server
-  api_url: "http://internal.example.invalid:3001"
+  api_url: "http://internal.example.invalid"
   api_timeout: 30.0
   default_query_mode: "hybrid"  # local, global, hybrid, naive
 
@@ -12,7 +12,7 @@ lightrag:
 embedding:
   provider: "jina"
   model: "jinaai/jina-embeddings-v2-base-code"
-  base_url: "http://internal.example.invalid:3002"
+  base_url: "http://internal.example.invalid"
   batch_size: 32
   dimension: 768
 

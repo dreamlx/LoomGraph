@@ -14,7 +14,7 @@ import time
 
 import httpx
 
-BASE_URL = "http://internal.example.invalid:3001"
+BASE_URL = "http://internal.example.invalid"
 WORKSPACE = "test-insert-kg-verify"
 HEADERS = {
     "LIGHTRAG-WORKSPACE": WORKSPACE,

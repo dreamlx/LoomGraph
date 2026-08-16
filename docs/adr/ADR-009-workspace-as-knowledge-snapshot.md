@@ -57,11 +57,11 @@ LightRAG 通过 `LIGHTRAG-WORKSPACE` HTTP header 实现 workspace 隔离，works
 
 | workspace 名 | 含义 |
 |--------------|------|
-| `customer-backend` | customer-backend 项目，当前工作状态 |
-| `customer-backend:main` | customer-backend 的 main 分支快照 |
-| `customer-backend:feature-auth` | feature 分支快照 |
-| `customer-backend:v2.0` | v2.0 版本快照 |
-| `customer-all` | gateway + backend + common 联合索引 |
+| `[customer]-backend` | [customer]-backend 项目，当前工作状态 |
+| `[customer]-backend:main` | [customer]-backend 的 main 分支快照 |
+| `[customer]-backend:feature-auth` | feature 分支快照 |
+| `[customer]-backend:v2.0` | v2.0 版本快照 |
+| `[customer]-all` | gateway + backend + common 联合索引 |
 
 ### 行为规则
 
@@ -120,7 +120,7 @@ loomgraph workspace delete <name>           # 清理
 
 ```bash
 # 实体/关系 diff
-loomgraph compare --ws1 customer-backend:main --ws2 customer-backend:feature-auth
+loomgraph compare --ws1 [customer]-backend:main --ws2 [customer]-backend:feature-auth
 
 # 跨 workspace 相似实体检测
 loomgraph similar --entity "AuthService" --across-workspaces

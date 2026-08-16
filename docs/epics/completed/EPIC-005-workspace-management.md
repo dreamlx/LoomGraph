@@ -36,9 +36,9 @@ loomgraph workspace list
   "success": true,
   "data": {
     "workspaces": [
-      {"name": "customer-backend", "entities": 245, "relations": 1024},
-      {"name": "customer-gateway", "entities": 89, "relations": 312},
-      {"name": "customer-all", "entities": 380, "relations": 1520}
+      {"name": "[customer]-backend", "entities": 245, "relations": 1024},
+      {"name": "[customer]-gateway", "entities": 89, "relations": 312},
+      {"name": "[customer]-all", "entities": 380, "relations": 1520}
     ],
     "count": 3
   }
@@ -67,7 +67,7 @@ loomgraph workspace list
 
 ```bash
 loomgraph workspace info                  # 当前 workspace (auto-detect)
-loomgraph workspace info customer-backend     # 指定 workspace
+loomgraph workspace info [customer]-backend     # 指定 workspace
 ```
 
 ### 输出
@@ -76,7 +76,7 @@ loomgraph workspace info customer-backend     # 指定 workspace
 {
   "success": true,
   "data": {
-    "name": "customer-backend",
+    "name": "[customer]-backend",
     "entities": 245,
     "relations": 1024,
     "entity_types": {"CLASS": 45, "FUNCTION": 120, "METHOD": 80},
@@ -99,7 +99,7 @@ loomgraph workspace info customer-backend     # 指定 workspace
 ### 需求
 
 ```bash
-loomgraph workspace delete customer-backend:old-branch
+loomgraph workspace delete [customer]-backend:old-branch
 ```
 
 ### 实现

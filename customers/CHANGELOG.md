@@ -843,10 +843,10 @@ loomgraph version  # 应显示 0.6.1
 ```bash
 # Workspace 管理
 loomgraph workspace list
-loomgraph workspace info customer-backend
+loomgraph workspace info [customer]-backend
 
 # 跨分支对比（需先为不同分支建立 workspace）
-loomgraph compare --ws1 customer-backend-main --ws2 customer-backend-feature
+loomgraph compare --ws1 [customer]-backend-main --ws2 [customer]-backend-feature
 
 # 查找相似实体
 loomgraph similar -e "AuthService"
@@ -966,7 +966,7 @@ pip install .
 - `/loomgraph-init` - 初始化项目 CLAUDE.md
 
 ### 依赖
-- LightRAG API: http://internal.example.invalid:3001 (customer) / :3020 (customer)
+- LightRAG API: http://internal.example.invalid ([customer]) / :3020 ([customer])
 - codeindex v0.9.0+
 
 ---

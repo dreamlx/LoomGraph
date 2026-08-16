@@ -275,9 +275,9 @@ Step 3: LLM 演化分析
 ## 分布概况
 | Workspace | 实体 | 匹配类型 | 关系数 |
 |-----------|------|----------|--------|
-| customer-backend:v1.0 | AuthService | exact | 12 |
-| customer-backend:v2.0 | AuthService | exact | 18 |
-| customer-backend:v3.0 | AuthValidator | fuzzy (0.85) | 22 |
+| cust-backend:v1.0 | AuthService | exact | 12 |
+| cust-backend:v2.0 | AuthService | exact | 18 |
+| cust-backend:v3.0 | AuthValidator | fuzzy (0.85) | 22 |
 
 ## 演化轨迹
 - v1.0 → v2.0: 新增 6 个 CALLS 关系 (功能扩展)

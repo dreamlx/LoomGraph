@@ -47,10 +47,10 @@ LightRAG workspace 是隔离的，需要 LoomGraph 在上层实现跨 workspace 
 
 ```bash
 # 对比两个分支
-loomgraph compare --ws1 customer-backend:main --ws2 customer-backend:feature-auth
+loomgraph compare --ws1 [customer]-backend:main --ws2 [customer]-backend:feature-auth
 
 # 对比两个项目
-loomgraph compare --ws1 customer-gateway --ws2 customer-backend
+loomgraph compare --ws1 [customer]-gateway --ws2 [customer]-backend
 ```
 
 ### 输出
@@ -59,8 +59,8 @@ loomgraph compare --ws1 customer-gateway --ws2 customer-backend
 {
   "success": true,
   "data": {
-    "ws1": "customer-backend:main",
-    "ws2": "customer-backend:feature-auth",
+    "ws1": "[customer]-backend:main",
+    "ws2": "[customer]-backend:feature-auth",
     "summary": {
       "only_in_ws1": 12,
       "only_in_ws2": 8,
@@ -113,7 +113,7 @@ loomgraph compare --ws1 customer-gateway --ws2 customer-backend
 loomgraph similar --entity "AuthService"
 
 # 指定范围
-loomgraph similar --entity "AuthService" --workspaces "customer-backend:main,customer-backend:v2,customer-backend:v3"
+loomgraph similar --entity "AuthService" --workspaces "[customer]-backend:main,[customer]-backend:v2,[customer]-backend:v3"
 ```
 
 ### 输出
@@ -125,20 +125,20 @@ loomgraph similar --entity "AuthService" --workspaces "customer-backend:main,cus
     "query_entity": "AuthService",
     "matches": [
       {
-        "workspace": "customer-backend:main",
+        "workspace": "[customer]-backend:main",
         "entity": "AuthService",
         "match_type": "exact",
         "relations": 12
       },
       {
-        "workspace": "customer-backend:feature-auth",
+        "workspace": "[customer]-backend:feature-auth",
         "entity": "AuthService",
         "match_type": "exact",
         "relations": 15,
         "diff_note": "3 new CALLS relations"
       },
       {
-        "workspace": "customer-backend:v2",
+        "workspace": "[customer]-backend:v2",
         "entity": "AuthValidator",
         "match_type": "fuzzy",
         "similarity": 0.85,
@@ -171,11 +171,11 @@ loomgraph similar --entity "AuthService" --workspaces "customer-backend:main,cus
 
 ```bash
 # Step 1: 索引上游和下游到命名 workspace
-loomgraph index /path/to/upstream -w customer-backend:main
-loomgraph index /path/to/downstream -w customer-backend:customer-a
+loomgraph index /path/to/upstream -w [customer]-backend:main
+loomgraph index /path/to/downstream -w [customer]-backend:customer-a
 
 # Step 2: 对比
-loomgraph compare --ws1 customer-backend:main --ws2 customer-backend:customer-a
+loomgraph compare --ws1 [customer]-backend:main --ws2 [customer]-backend:customer-a
 
 # Step 3: Skill B 拿到 diff 结果，结合 git diff + LLM 生成合并建议
 ```
@@ -184,12 +184,12 @@ loomgraph compare --ws1 customer-backend:main --ws2 customer-backend:customer-a
 
 ```bash
 # Step 1: 索引多个版本
-loomgraph index /path/to/repo -w customer-backend:v1.0   # git checkout v1.0
-loomgraph index /path/to/repo -w customer-backend:v2.0   # git checkout v2.0
-loomgraph index /path/to/repo -w customer-backend:v3.0   # git checkout v3.0
+loomgraph index /path/to/repo -w [customer]-backend:v1.0   # git checkout v1.0
+loomgraph index /path/to/repo -w [customer]-backend:v2.0   # git checkout v2.0
+loomgraph index /path/to/repo -w [customer]-backend:v3.0   # git checkout v3.0
 
 # Step 2: 跨版本查找相似实体
-loomgraph similar --entity "PaymentService" --workspaces "customer-backend:v1.0,customer-backend:v2.0,customer-backend:v3.0"
+loomgraph similar --entity "PaymentService" --workspaces "[customer]-backend:v1.0,[customer]-backend:v2.0,[customer]-backend:v3.0"
 
 # Step 3: Skill C 拿到演化数据，LLM 生成趋势分析
 ```
@@ -200,7 +200,7 @@ loomgraph similar --entity "PaymentService" --workspaces "customer-backend:v1.0,
 
 - [x] `loomgraph compare` 能输出两个 workspace 的实体/关系 diff
 - [x] `loomgraph similar` 能跨 workspace 查找相似实体
-- [ ] 用 customer-backend 的 main 和 feature 分支验证对比准确性
+- [ ] 用 [customer]-backend 的 main 和 feature 分支验证对比准确性
 - [x] 单元测试覆盖 diff 和匹配逻辑 (11 compare + 10 similar = 21 tests)
 - [ ] Skill B 能基于 compare 输出生成合并建议（集成验证）
 

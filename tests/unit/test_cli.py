@@ -1222,7 +1222,7 @@ class TestWorkspaceListCommand:
     def test_workspace_list_basic(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test basic workspace list command."""
         mock_run.return_value = {
-            "workspaces": ["customer-backend", "customer-gateway"],
+            "workspaces": ["cust-backend", "cust-gateway"],
             "count": 2,
         }
 
@@ -1231,7 +1231,7 @@ class TestWorkspaceListCommand:
 
         data = json.loads(result.stdout)
         assert data["success"] is True
-        assert data["data"]["workspaces"] == ["customer-backend", "customer-gateway"]
+        assert data["data"]["workspaces"] == ["cust-backend", "cust-gateway"]
         assert data["data"]["count"] == 2
 
     @patch("loomgraph.cli._workspace.asyncio.run")
@@ -1269,19 +1269,19 @@ class TestWorkspaceInfoCommand:
     def test_workspace_info_basic(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test workspace info with explicit name."""
         mock_run.return_value = {
-            "name": "customer-backend",
+            "name": "cust-backend",
             "entities": 245,
             "relations": 1024,
             "entity_types": {"class": 45, "function": 120, "method": 80},
             "relation_types": {"CALLS": 600, "IMPORTS": 300, "INHERITS": 124},
         }
 
-        result = runner.invoke(main, ["workspace", "info", "customer-backend"])
+        result = runner.invoke(main, ["workspace", "info", "cust-backend"])
         assert result.exit_code == 0
 
         data = json.loads(result.stdout)
         assert data["success"] is True
-        assert data["data"]["name"] == "customer-backend"
+        assert data["data"]["name"] == "cust-backend"
         assert data["data"]["entities"] == 245
         assert data["data"]["relations"] == 1024
         assert "entity_types" in data["data"]

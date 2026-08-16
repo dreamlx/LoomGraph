@@ -81,7 +81,7 @@ docker compose down postgres
 ```yaml
 # v0.9.x
 lightrag:
-  api_url: http://internal.example.invalid:3001
+  api_url: http://internal.example.invalid
   api_timeout: 30.0
 
 # v0.10.0 — replace with
@@ -137,7 +137,7 @@ Edit your `.loomgraph.yaml`:
 # Replace this (v0.10.0)
 embedding:
   provider: jina
-  base_url: http://internal.example.invalid:3002
+  base_url: http://internal.example.invalid
   model: jinaai/jina-embeddings-v2-base-code
 
 # With this (v0.11.0)

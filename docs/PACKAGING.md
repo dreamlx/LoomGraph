@@ -114,6 +114,6 @@ loomgraph version             # 预期 x.y.z
 - **PyPI 发布**走 Trusted Publisher（OIDC），无需在 GitHub 存 PyPI token。配置在
   https://pypi.org/manage/project/loomgraph/settings/publishing/ 。
 - **历史遗留**：v0.9.x 时代曾用 GitHub PAT 做私有分发，3 个 PAT 明文入了 git 历史
-  （ba9feea 等，customer/customer/demo）。这些 token created 2026-02-24、90 天应已过期，
+  （ba9feea 等，[customer]/[customer]/demo）。这些 token created 2026-02-24、90 天应已过期，
   但请到 https://github.com/settings/tokens 确认已 revoke 并 rotate。`git filter-repo`
   擦历史是破坏性操作，单独决策。

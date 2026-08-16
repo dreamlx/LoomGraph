@@ -106,7 +106,7 @@ loomgraph overview --depth 1
 {
   "success": true,
   "data": {
-    "project": "customer-backend",
+    "project": "cust-backend",
     "modules": [
       {
         "path": "src/gateway",
@@ -151,7 +151,7 @@ loomgraph overview --depth 1
 
 - [ ] `loomgraph deps` 能输出模块级依赖图（JSON）
 - [ ] `loomgraph overview` 能输出带功能摘要的模块概览
-- [ ] 用 customer-backend 项目验证：正确识别 gateway→common 依赖关系
+- [ ] 用 cust-backend 项目验证：正确识别 gateway→common 依赖关系
 - [ ] 单元测试覆盖聚合逻辑
 - [ ] 集成测试覆盖 LightRAG 查询
 

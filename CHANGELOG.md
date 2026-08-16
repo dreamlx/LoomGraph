@@ -448,8 +448,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `customers/customers.yaml.example` simplified (drops `lightrag_url` /
   `github_token_*` / `language_parser` / `exclude_dirs` — public PyPI needs
   none of them).
-- `customers/DELIVERY_GUIDE.md` redacted: 6 plaintext GitHub PATs (customer /
-  customer / demo) replaced with placeholders. **git history still contains
+- `customers/DELIVERY_GUIDE.md` redacted: 6 plaintext GitHub PATs ([customer] /
+  [customer] / demo) replaced with placeholders. **git history still contains
   the plaintext tokens — revoke them at github.com/settings/tokens.**
 
 ## [0.15.4] - 2026-07-11
@@ -1189,7 +1189,7 @@ infrastructure was added.
   - `docs/guides/TOKEN_MANAGEMENT.md` (26KB): Complete guide covering Fine-grained PAT creation, storage solutions (password managers/GPG), secure delivery methods, lifecycle management, and security best practices
   - `docs/guides/TOKEN_QUICKSTART.md`: 5-minute quick start guide with 4 common scenarios and customer installation templates
   - `scripts/manage_tokens.py`: CLI management tool with 4 core features: `--check-expiry` (30-day advance warning), `--list` (customer token status), `--generate-install` (pip/pipx commands), `--verify` (GitHub API validation)
-  - Customer delivery packages: `customers/{customer,customer,demo}/` with `INSTALL.md` (installation guide with token) and `config.yaml` (service configuration)
+  - Customer delivery packages: `customers/{[customer],[customer],demo}/` with `INSTALL.md` (installation guide with token) and `config.yaml` (service configuration)
   - Token metadata tracking in `customers.yaml` (github_token_name, created/expires dates, last_4 digits, contact info)
   - `customers/DELIVERY_GUIDE.md`: Complete delivery workflow and security checklist
 
