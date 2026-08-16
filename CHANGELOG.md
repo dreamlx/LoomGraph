@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-08-16
+
 ### Added — built-in zero-config embedding: CodeRankEmbed-137M int8 ONNX (#158)
 - New `loomgraph[embed]` extra (onnxruntime + tokenizers, no torch) powers a
   `builtin` embedding provider: local CPU inference, 768-d (existing vec0
