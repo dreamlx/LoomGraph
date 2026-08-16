@@ -330,9 +330,14 @@ async def ingest_incremental(
     _emit(on_progress, "insert", len(entity_dicts), len(relation_dicts))
     await store.insert_custom_kg(entity_dicts, relation_dicts, [])
 
-    # #154/#158 review C1-2: recompute the ratio over the new full export so
-    # `update` (the default daily path) never serves a stale trust signal.
-    resolved_ratio = await persist_resolved_ratio(store, entity_dicts, relation_dicts)
+    # #154/#158 review C1-2: recompute the ratio over the NEW FULL EXPORT
+    # (not the changed subset — a zero-change update must not wipe the
+    # ratio, and a small change must not recompute over its subset).
+    resolved_ratio = await persist_resolved_ratio(
+        store,
+        [{"entity_name": e.entity_name} for e in entities],
+        [{"src_id": r.src_id, "tgt_id": r.tgt_id} for r in relations],
+    )
 
     stats = await store.get_graph_stats()
     return {
