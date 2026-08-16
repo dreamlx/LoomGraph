@@ -80,6 +80,19 @@ class TestDownload:
         assert not called
 
 
+
+class _FakeNP:
+    """Minimal numpy shim (array + dtypes) so the mocked-inference tests run
+    in CI without the [embed] extra — normalization is pure-python now."""
+
+    float32 = "float32"
+    int64 = "int64"
+
+    @staticmethod
+    def array(x, dtype=None):
+        return x
+
+
 class TestBuiltinClient:
     def test_missing_extra_fails_loud_with_hint(self, monkeypatch):
         from loomgraph.embedding import builtin
@@ -114,6 +127,8 @@ class TestBuiltinClient:
                 return [None, [[0.1, 0.2, 0.3]] * n]
 
         c = builtin.BuiltinEmbeddingClient.__new__(builtin.BuiltinEmbeddingClient)
+        monkeypatch.setattr(builtin, "_import_deps",
+                            lambda: (None, None, _FakeNP))
         c._tok = FakeTok()
         c._sess = FakeSess()
         import asyncio
@@ -124,7 +139,7 @@ class TestBuiltinClient:
         assert res.embeddings[0] == pytest.approx(
             [0.1 / n, 0.2 / n, 0.3 / n])
 
-    def test_embed_query_adds_prefix(self, tmp_path):
+    def test_embed_query_adds_prefix(self, tmp_path, monkeypatch):
         from loomgraph.embedding import builtin
 
         captured = {}
@@ -144,6 +159,8 @@ class TestBuiltinClient:
                 return [None, [[0.3, 0.2, 0.1]] * n]
 
         c = builtin.BuiltinEmbeddingClient.__new__(builtin.BuiltinEmbeddingClient)
+        monkeypatch.setattr(builtin, "_import_deps",
+                            lambda: (None, None, _FakeNP))
         c._tok = FakeTok()
         c._sess = FakeSess()
         import asyncio

@@ -97,8 +97,12 @@ class BuiltinEmbeddingClient(EmbeddingClient):
         # is NOT pre-normalized (measured norm ~24.7; the community README's
         # "L2-normalized" claim doesn't hold), so normalize here: vec0 KNN
         # uses L2 distance, where unnormalized inputs wreck ranking scores.
-        sent = np.asarray(outputs[1], dtype=np.float32)
-        norms = np.linalg.norm(sent, axis=1, keepdims=True)
-        norms[norms == 0] = 1.0
-        sent = sent / norms
-        return [[float(x) for x in row] for row in sent]
+        # Pure-python normalize (no numpy ops) — keeps the mock surface tiny.
+        import math
+
+        result: list[list[float]] = []
+        for row in outputs[1]:
+            vals = [float(x) for x in row]
+            norm = math.sqrt(sum(v * v for v in vals)) or 1.0
+            result.append([v / norm for v in vals])
+        return result
