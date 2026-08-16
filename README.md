@@ -9,8 +9,9 @@
 no RAG framework needed. Designed as a [Claude Code](https://claude.com/claude-code)
 plugin and a CLI for any agent that needs precise structural code queries.
 
-> v0.11.0 ships fully local by default. `pipx install loomgraph` and go — no
-> remote services, no API keys, no Docker. Semantic vector search is opt-in.
+> v0.18.0 ships fully local by default, including optional built-in semantic
+> search (`pipx install "loomgraph[embed]"` — local CPU model, zero services).
+> `pipx install loomgraph` and go — no remote services, no API keys, no Docker.
 
 ---
 
@@ -18,16 +19,23 @@ plugin and a CLI for any agent that needs precise structural code queries.
 
 LLM agents are good at fuzzy natural-language code Q&A. They are bad at deterministic
 structural queries — "every caller of `authenticate()` across this 200k-LoC codebase,
-including indirect callers two hops deep." LoomGraph fills exactly that gap.
+including indirect callers two hops deep." LoomGraph serves that class of queries
+from a local graph.
 
 - **Deterministic graph queries** — `find` / `graph` / `topology` / `impact` walk
-  SQLite, not an LLM. Same input, same output, every time.
+  SQLite, not an LLM. Same input, same output — and the outputs **tell you how
+  much to trust them**: every analysis carries a `resolved_ratio` (share of edges
+  that actually resolved) and orphans are classified as truly-isolated vs
+  unresolved-neighbor, so a resolution blind spot (dynamic dispatch, DI
+  frameworks, path aliases) is visible instead of silently read as dead code.
 - **AST is the source of truth** — call/inherit/import edges come from tree-sitter
   via [codeindex](https://github.com/dreamlx/codeindex), not LLM inference.
 - **Single-file storage** — `~/.loomgraph/<workspace>.db`. No Postgres, no Docker,
   no fork of someone else's RAG framework.
-- **Vector KNN where it matters** — sqlite-vec virtual tables, caller-provided
-  embeddings, OpenAI-compatible provider config (Ollama default).
+- **Semantic search, zero or your-way** — built-in local CodeRankEmbed (int8 ONNX,
+  MIT, auto-downloaded once) via the `[embed]` extra, or bring Ollama / any
+  OpenAI-compatible embeddings endpoint. The provider choice is sticky per
+  workspace so embedding spaces never silently mix.
 - **AI-Agent-shaped CLI** — every command emits JSON; designed to be called by
   Claude Code or any agent harness.
 
@@ -38,6 +46,19 @@ pipx install loomgraph
 ```
 
 That's it. [codeindex](https://github.com/dreamlx/codeindex) is pulled in automatically as the parser engine — no separate install, no direct operation. No additional services required for the structural commands.
+
+Want zero-config semantic search too? Add the `[embed]` extra — a 137M code-specialized
+embedding model (CodeRankEmbed, MIT, int8 ONNX, ~139MB) runs locally on CPU and
+auto-downloads on first use:
+
+```bash
+pipx install "loomgraph[embed]"
+```
+
+The embedding provider is **sticky per workspace**: `auto` (default) probes a local
+Ollama first and falls back to the built-in model; whichever wins is recorded in the
+workspace, and later commands reuse the recorded choice — different models produce
+incompatible vector spaces, and loomgraph refuses to mix them silently.
 
 ### Multi-language repos — install the matching grammar extra
 
@@ -79,10 +100,13 @@ loomgraph index .
 # Structural search — fuzzy match on entity names
 loomgraph find "UserService"
 
+# Semantic search — by meaning, not name ([embed] extra or an embedding provider)
+loomgraph search "where is authentication handled"
+
 # Walk the call graph
 loomgraph graph "UserService.login" --depth 2
 
-# Topology smells (orphans, hubs, god functions)
+# Topology smells (orphans, hubs, god functions) + resolution trust signal
 loomgraph topology
 
 # Change-impact analysis from a git diff
@@ -136,7 +160,21 @@ embedding:
   enabled: false   # turn on later for vec0 semantic search
 ```
 
-### Semantic search with local Ollama
+### Semantic search
+
+Default `provider: auto` (v0.18+): a local Ollama is probed first; if absent, the
+built-in model is used (and downloaded once). The choice is recorded per workspace
+and reused — flipping providers mid-life would mix incompatible vector spaces, so
+switching requires `loomgraph index --clear .`.
+
+**Built-in (zero-config, `[embed]` extra)** — no config at all:
+
+```yaml
+embedding:
+  enabled: true      # provider: auto → builtin when Ollama is absent
+```
+
+**Local Ollama**:
 
 ```bash
 # Install once: https://ollama.com
@@ -182,16 +220,26 @@ summary mode) calls the LLM; `--no-summary` skips it entirely.
 |---|---|---|
 | `loomgraph index <path>` | Index a repo | codeindex (local) + optional embedding |
 | `loomgraph update` | Incremental from git diff | same |
+| `loomgraph check` | Index freshness vs source files | none |
 | `loomgraph find "<query>"` | Fuzzy entity search | none |
+| `loomgraph search "<query>"` | Semantic search (by meaning) | embedding provider (or built-in) |
 | `loomgraph graph "<entity>"` | Walk callers/callees | none |
-| `loomgraph topology` | Orphans / hubs / god functions | none |
-| `loomgraph debt --with-git` | Tech debt scoring | none (reads `git log`) |
+| `loomgraph topology` | Orphans / hubs / god functions + `resolved_ratio` trust signal | none |
+| `loomgraph debt --with-git` | Multi-dimensional debt scoring | none (reads `git log`) |
 | `loomgraph deps` | Module dependency graph | none |
 | `loomgraph impact <ref>` | Deterministic change-impact | none |
+| `loomgraph git-metrics` | Hotspots / bus-factor / churn | none (reads `git log`) |
 | `loomgraph trends --entity X` | Code-rot trend prediction | none |
 | `loomgraph overview` | Module summaries | LLM (or `--no-summary`) |
 | `loomgraph workspace ...` | Multi-workspace management | none |
-| `loomgraph compare / similar` | Cross-workspace diff | none |
+| `loomgraph compare / similar` | Cross-workspace diff / near-duplicates | none |
+| `loomgraph embed-backfill` | Vectors for an un-embedded workspace | embedding provider |
+| `loomgraph hooks` | Git hooks for auto-update on commit | none |
+| `loomgraph codeindex <cmd>` | Run any codeindex command in loomgraph's pinned env | local |
+| `loomgraph import-export <file>` | Ingest a codeindex graph-export NDJSON | none |
+| `loomgraph mcp / install-skills / status` | Integration & diagnostics | none |
+
+`setup-config` is deprecated (v0.16+) — zero-config defaults made it redundant.
 
 ## Claude Code integration
 
@@ -223,18 +271,22 @@ loomgraph (map + persist)
     ├── entities       (functions / classes / modules)
     ├── relations      (CALLS / INHERITS / IMPORTS / ...)
     ├── vec_node_descriptions  (vec0, optional)
-    └── vec_code_snippets      (vec0, optional)
+    └── meta           (workspace facts: embedding_provider, resolved_ratio)
          ↑
-Claude Code / Codex / Cursor — read via CLI (JSON) or upcoming MCP
+Claude Code / Codex / Cursor — read via CLI (JSON) or native MCP server
 ```
 
 The full architecture rationale is in
-[ADR-013](docs/adr/ADR-013-sqlite-vec-replace-lightrag.md).
+[ADR-013](docs/adr/ADR-013-sqlite-vec-replace-lightrag.md). Chinese-language
+user-facing release notes live in [customers/CHANGELOG.md](customers/CHANGELOG.md).
 
 ## Status
 
-- v0.10.0 — LightRAG and PostgreSQL removed; local SQLite backend
-- v0.11.0 — Embedding provider decoupled; OpenAI-compatible by default, off by default
+- v0.18.0 — Built-in zero-config embedding (`[embed]` extra); trust-calculus
+  propagation (`resolved_ratio`, orphan classification); single-author bus-factor
+  suppression; test-pollution warnings
+- v0.17.x — MCP on mcp 2.0; graph-export fail-loud; codeindex 0.35 (Java fixes)
+- v0.11.0 — Local-first rewrite: LightRAG / PostgreSQL removed, SQLite + sqlite-vec
 
 600+ unit tests passing, ruff clean. Dogfood-benchmarked on `loomgraph`
 (10.9k LoC, indexed in 0.88s) and `codeindex` (22.0k LoC, indexed in

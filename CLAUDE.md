@@ -266,6 +266,8 @@ llm:
 | `loomgraph import-export <artifact>` | 消费 codeindex graph-export NDJSON |
 | `loomgraph mcp install-config --path <p>` | 配置 MCP（Claude Code/Cursor） |
 | `loomgraph install-skills` | 安装 Claude Code Skills（setup/init） |
+| `loomgraph hooks` | 管理 git hooks（commit 后自动 update 图谱） |
+| `loomgraph codeindex <cmd>` | 在 loomgraph 固定环境中透传执行 codeindex 命令 |
 
 详细用法见 [docs/api/CLI_DESIGN.md](docs/api/CLI_DESIGN.md)。
 

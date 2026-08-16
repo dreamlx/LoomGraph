@@ -1,3 +1,7 @@
+> **Note (2026-08):** `completed/` is a **historical archive** of executed epic
+> designs — kept for auditability, not active guidance. Active design work lives
+> in GitHub issues; current architecture lives in `docs/adr/`.
+
 # LoomGraph Epic 文档索引
 
 本目录包含所有 Epic（史诗级功能）的详细设计文档。

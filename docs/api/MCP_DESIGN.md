@@ -40,7 +40,7 @@ The CLI already emits JSON. So what's MCP buying?
 | Conversation flow | one-shot | long-lived; state stays warm |
 
 For an agent that issues 30+ tool calls in a single conversation (which
-spike-30 measured — see `docs/spikes/spike-30/REPORT.md`), the
+measured in the #30 consumption spike), the
 subprocess overhead alone is ~7.5s. MCP makes that vanish.
 
 ## Tool reference
