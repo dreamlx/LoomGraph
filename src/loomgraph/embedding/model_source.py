@@ -26,6 +26,11 @@ MODEL_NAME = "coderankembed-int8"
 EXPECTED_SHA256 = (
     "4eae31d09b1843103a1ebd5e2b2e24b5a5cad441a33906b35b12b1e2ed91d1db"
 )
+# tokenizer.json from the same distribution (small, but integrity-checked
+# too — a truncated tokenizer fails at load with confusing errors).
+EXPECTED_TOKENIZER_SHA256 = (
+    "91f1def9b9391fdabe028cd3f3fcc4efd34e5d1f08c3bf2de513ebb5911a1854"
+)
 
 # GitHub asset is uploaded at release time (embed-v1); until then 404s fall
 # through to the next source — the resolver degrades naturally.
@@ -87,7 +92,7 @@ def download_model(cache_root: Path | None = None) -> Path:
     for url in source_urls():
         try:
             h = hashlib.sha256()
-            tmp = root / "model.onnx.tmp"
+            tmp = root / f"model.onnx.tmp-{os.getpid()}"
             with tmp.open("wb") as fh:
                 for chunk in _stream_url(url):
                     fh.write(chunk)
@@ -110,10 +115,15 @@ def download_model(cache_root: Path | None = None) -> Path:
     if not tok_path.exists():
         for url in tokenizer_urls():
             try:
-                tmp = root / "tokenizer.json.tmp"
+                h = hashlib.sha256()
+                tmp = root / f"tokenizer.json.tmp-{os.getpid()}"
                 with tmp.open("wb") as fh:
                     for chunk in _stream_url(url):
                         fh.write(chunk)
+                        h.update(chunk)
+                if h.hexdigest() != EXPECTED_TOKENIZER_SHA256:
+                    tmp.unlink(missing_ok=True)
+                    raise ModelDownloadError(f"tokenizer sha256 mismatch: {url}")
                 tmp.replace(tok_path)
                 break
             except Exception as ex:  # noqa: BLE001
@@ -126,9 +136,27 @@ def download_model(cache_root: Path | None = None) -> Path:
     return root
 
 
+def _sha256_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(_CHUNK), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
 def resolve_model_dir(cache_root: Path | None = None) -> Path:
-    """Return the cache dir with model+tokenizer present, downloading once."""
+    """Return the cache dir with verified model+tokenizer, downloading once.
+
+    A cached ONNX is re-verified against the pin (a tampered/truncated file
+    must not reach ONNX Runtime — #158 review C2-3); ~0.5s for 139MB."""
     root = cache_root or default_cache_root()
-    if (root / "model.onnx").exists() and (root / "tokenizer.json").exists():
-        return root
+    model = root / "model.onnx"
+    if model.exists() and (root / "tokenizer.json").exists():
+        if _sha256_file(model) == EXPECTED_SHA256:
+            return root
+        print(
+            "[loomgraph] cached model failed sha256 verification — "
+            "re-downloading", file=sys.stderr,
+        )
+        model.unlink(missing_ok=True)
     return download_model(cache_root=root)

@@ -3,6 +3,8 @@ resolved once per workspace and persisted — never silently re-resolved."""
 
 from __future__ import annotations
 
+import pytest
+
 from loomgraph.embedding.resolve import resolve_embedding_client
 
 
@@ -111,3 +113,42 @@ class TestStickyResolution:
             assert provider == "ollama"
         assert probed == []
         assert "embedding_provider" not in store.meta
+
+
+class TestOldWorkspaceGuard:
+    async def test_vectors_without_meta_refuses_auto(self, monkeypatch):
+        """Pre-#158 workspace (vectors, no recorded provider): auto must NOT
+        guess — that would mix spaces (codex review C1-1)."""
+        from loomgraph.embedding.resolve import EmbeddingSpaceUnknownError
+
+        class _OldStore(_Store):
+            async def vector_count(self):
+                return 42
+
+        store = _OldStore()
+        monkeypatch.setattr("loomgraph.embedding.resolve.explicit_provider",
+                            lambda: None)
+        monkeypatch.setattr("loomgraph.embedding.resolve.probe_ollama",
+                            lambda: _err("must not probe"))
+        async def _err(*a):
+            raise AssertionError("probe must not run")
+
+        with pytest.raises(EmbeddingSpaceUnknownError, match="re-index"):
+            await resolve_embedding_client(store)
+
+    async def test_no_vectors_no_meta_probes_normally(self, monkeypatch):
+        class _EmptyStore(_Store):
+            async def vector_count(self):
+                return 0
+
+        store = _EmptyStore()
+        monkeypatch.setattr("loomgraph.embedding.resolve.explicit_provider",
+                            lambda: None)
+
+        async def fake_probe():
+            return True
+
+        monkeypatch.setattr("loomgraph.embedding.resolve.probe_ollama", fake_probe)
+        cm = await resolve_embedding_client(store)
+        async with cm as (client, provider):
+            assert provider == "ollama"

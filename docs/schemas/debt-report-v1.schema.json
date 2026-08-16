@@ -4,7 +4,13 @@
   "title": "LoomGraph Technical Debt Report",
   "description": "Standard format for LoomGraph technical debt analysis reports",
   "type": "object",
-  "required": ["schema_version", "timestamp", "project", "overall_health", "issues"],
+  "required": [
+    "schema_version",
+    "timestamp",
+    "project",
+    "overall_health",
+    "issues"
+  ],
   "properties": {
     "schema_version": {
       "type": "string",
@@ -20,33 +26,52 @@
       "type": "string",
       "pattern": "^[a-zA-Z0-9_-]+(:[a-zA-Z0-9_-]+)?$",
       "description": "Project name or project:branch (workspace format)",
-      "examples": ["my-project", "my-project:main", "my-project:develop"]
+      "examples": [
+        "my-project",
+        "my-project:main",
+        "my-project:develop"
+      ]
     },
     "generator": {
       "type": "object",
-      "required": ["tool", "version"],
+      "required": [
+        "tool",
+        "version"
+      ],
       "properties": {
         "tool": {
           "type": "string",
           "description": "Tool name",
-          "examples": ["loomgraph"]
+          "examples": [
+            "loomgraph"
+          ]
         },
         "version": {
           "type": "string",
           "description": "Tool version",
           "pattern": "^\\d+\\.\\d+\\.\\d+(-[a-zA-Z0-9.]+)?$",
-          "examples": ["0.9.0", "0.9.0-beta.1"]
+          "examples": [
+            "0.9.0",
+            "0.9.0-beta.1"
+          ]
         },
         "command": {
           "type": "string",
           "description": "Exact command used to generate the report",
-          "examples": ["loomgraph debt --module src"]
+          "examples": [
+            "loomgraph debt --module src"
+          ]
         }
       }
     },
     "overall_health": {
       "type": "object",
-      "required": ["total_score", "grade", "breakdown", "summary"],
+      "required": [
+        "total_score",
+        "grade",
+        "breakdown",
+        "summary"
+      ],
       "properties": {
         "total_score": {
           "type": "integer",
@@ -56,7 +81,13 @@
         },
         "grade": {
           "type": "string",
-          "enum": ["A", "B", "C", "D", "F"],
+          "enum": [
+            "A",
+            "B",
+            "C",
+            "D",
+            "F"
+          ],
           "description": "Letter grade: A(≥90), B(80-89), C(70-79), D(60-69), F(<60)"
         },
         "breakdown": {
@@ -81,17 +112,25 @@
               "description": "Test coverage percentage (if available)"
             },
             "maintainability": {
-              "type": "integer",
+              "type": [
+                "integer",
+                "null"
+              ],
               "minimum": 0,
               "maximum": 100,
-              "description": "Maintainability score (from codeindex)"
+              "description": "null = no codeindex data flowed in (#153 提案 2)"
             }
           },
           "additionalProperties": false
         },
         "summary": {
           "type": "object",
-          "required": ["total_entities", "p0_issues", "p1_issues", "p2_issues"],
+          "required": [
+            "total_entities",
+            "p0_issues",
+            "p1_issues",
+            "p2_issues"
+          ],
           "properties": {
             "total_entities": {
               "type": "integer",
@@ -122,52 +161,60 @@
       "description": "List of detected technical debt issues",
       "items": {
         "type": "object",
-        "required": ["id", "severity", "category", "entity", "entity_type", "location", "metrics"],
+        "required": [
+          "id",
+          "severity",
+          "category",
+          "entity",
+          "entity_type",
+          "location",
+          "metrics"
+        ],
         "properties": {
           "id": {
             "type": "string",
             "pattern": "^debt-\\d{3,}$",
             "description": "Unique issue ID (e.g., debt-001)",
-            "examples": ["debt-001", "debt-042"]
+            "examples": [
+              "debt-001",
+              "debt-042"
+            ]
           },
           "severity": {
             "type": "string",
-            "enum": ["P0", "P1", "P2"],
+            "enum": [
+              "P0",
+              "P1",
+              "P2"
+            ],
             "description": "Issue severity: P0(critical), P1(moderate), P2(minor)"
           },
           "category": {
             "type": "string",
-            "enum": [
-              "god_class",
-              "god_function",
-              "orphan_entity",
-              "hub_fragility",
-              "circular_dependency",
-              "architecture_violation",
-              "test_smell",
-              "high_coupling",
-              "low_maintainability"
-            ],
-            "description": "Issue category/type"
+            "description": "Issue category (open set; topology/git/static analyzers add categories over time)"
           },
           "entity": {
             "type": "string",
             "description": "Entity name (class, function, module)",
-            "examples": ["UserService", "processOrder", "auth"]
+            "examples": [
+              "UserService",
+              "processOrder",
+              "auth"
+            ]
           },
           "entity_type": {
             "type": "string",
-            "enum": ["class", "function", "module", "file"],
-            "description": "Entity type"
+            "description": "Entity type (open set: class/function/method/module/file/variable/property/... depends on exporter)"
           },
           "location": {
             "type": "object",
-            "required": ["file"],
             "properties": {
               "file": {
                 "type": "string",
                 "description": "File path (relative to project root)",
-                "examples": ["src/services/UserService.ts"]
+                "examples": [
+                  "src/services/UserService.ts"
+                ]
               },
               "start_line": {
                 "type": "integer",
@@ -183,7 +230,6 @@
           },
           "metrics": {
             "type": "object",
-            "required": ["total_score"],
             "properties": {
               "lines": {
                 "type": "integer",
@@ -225,7 +271,8 @@
                 "maximum": 40,
                 "description": "Total quality score (sum of 4 dimensions, 0-40)"
               }
-            }
+            },
+            "description": "Metric payload varies by issue category (static/topology/git); union of the documented keys."
           },
           "details": {
             "type": "object",
@@ -260,7 +307,9 @@
           "suggestion": {
             "type": "string",
             "description": "Suggested remediation action",
-            "examples": ["拆分为 UserAuth + UserProfile + UserSettings"]
+            "examples": [
+              "拆分为 UserAuth + UserProfile + UserSettings"
+            ]
           },
           "estimated_effort": {
             "type": "object",
@@ -269,11 +318,19 @@
                 "type": "string",
                 "pattern": "^\\d+(-\\d+)?$",
                 "description": "Estimated effort in days (e.g., '3', '3-5')",
-                "examples": ["3", "3-5", "10-15"]
+                "examples": [
+                  "3",
+                  "3-5",
+                  "10-15"
+                ]
               },
               "complexity": {
                 "type": "string",
-                "enum": ["low", "medium", "high"],
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ],
                 "description": "Refactoring complexity"
               }
             }
@@ -294,32 +351,49 @@
       "properties": {
         "period": {
           "type": "string",
-          "enum": ["1_month", "3_months", "6_months", "1_year"],
+          "enum": [
+            "1_month",
+            "3_months",
+            "6_months",
+            "1_year"
+          ],
           "description": "Analysis period"
         },
         "debt_increase": {
           "type": "string",
           "pattern": "^[+-]\\d+%$",
           "description": "New debt percentage (e.g., '+15%')",
-          "examples": ["+15%", "-5%"]
+          "examples": [
+            "+15%",
+            "-5%"
+          ]
         },
         "debt_repayment": {
           "type": "string",
           "pattern": "^[+-]\\d+%$",
           "description": "Resolved debt percentage",
-          "examples": ["-8%", "+3%"]
+          "examples": [
+            "-8%",
+            "+3%"
+          ]
         },
         "net_change": {
           "type": "string",
           "pattern": "^[+-]\\d+%$",
           "description": "Net debt change",
-          "examples": ["+7%", "-10%"]
+          "examples": [
+            "+7%",
+            "-10%"
+          ]
         },
         "hotspots": {
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["module", "change"],
+            "required": [
+              "module",
+              "change"
+            ],
             "properties": {
               "module": {
                 "type": "string",
@@ -364,7 +438,12 @@
       "description": "Prioritized refactoring recommendations",
       "items": {
         "type": "object",
-        "required": ["priority", "action", "target", "description"],
+        "required": [
+          "priority",
+          "action",
+          "target",
+          "description"
+        ],
         "properties": {
           "priority": {
             "type": "integer",
@@ -373,7 +452,12 @@
           },
           "action": {
             "type": "string",
-            "enum": ["refactor", "rewrite", "delete", "isolate"],
+            "enum": [
+              "refactor",
+              "rewrite",
+              "delete",
+              "isolate"
+            ],
             "description": "Recommended action type"
           },
           "target": {
@@ -391,7 +475,11 @@
           },
           "expected_roi": {
             "type": "string",
-            "enum": ["high", "medium", "low"],
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ],
             "description": "Expected return on investment"
           },
           "blockers": {

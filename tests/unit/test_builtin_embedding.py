@@ -42,6 +42,8 @@ class TestDownload:
 
         monkeypatch.setattr(model_source, "EXPECTED_SHA256",
                             hashlib.sha256(self._fake_model_bytes()).hexdigest())
+        monkeypatch.setattr(model_source, "EXPECTED_TOKENIZER_SHA256",
+                            hashlib.sha256(b'{"tokenizer":"json"}').hexdigest())
         # tokenizer is small; serve both from one fake source
         def fake_stream(url, chunk=1 << 16):
             data = (self._fake_model_bytes() if url.endswith(".onnx")
@@ -72,9 +74,13 @@ class TestDownload:
         called = []
         monkeypatch.setattr(model_source, "download_model",
                             lambda cache_root: called.append(1) or tmp_path)
-        # pre-populate marker files
-        (tmp_path / "model.onnx").write_bytes(b"x")
+        # pre-populate marker files whose sha matches the patched pin
+        # (cached files are re-verified — #158 review C2-3)
+        data = b"cached-model"
+        (tmp_path / "model.onnx").write_bytes(data)
         (tmp_path / "tokenizer.json").write_bytes(b"x")
+        monkeypatch.setattr(model_source, "EXPECTED_SHA256",
+                            hashlib.sha256(data).hexdigest())
         d = resolve_model_dir(cache_root=tmp_path)
         assert d == tmp_path
         assert not called

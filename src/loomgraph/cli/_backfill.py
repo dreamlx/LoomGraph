@@ -130,12 +130,19 @@ async def _async_embed_backfill(
         }
 
     # ---- Embed ----
+    # #158: sticky resolution for the auto provider (same space as index).
+    from loomgraph.embedding.resolve import resolve_embedding_client
     from loomgraph.storage.factory import create_embedding_client
 
     texts = [t[2] for t in targets]
     try:
-        async with create_embedding_client() as client:
-            result = await client.embed(texts)
+        if settings.embedding.provider == "auto":
+            cm = await resolve_embedding_client(store)
+            async with cm as (client, _provider):
+                result = await client.embed(texts)
+        else:
+            async with create_embedding_client() as client:
+                result = await client.embed(texts)
     except Exception:
         logger.warning(
             "Embedding failed for %d entities in workspace '%s'",

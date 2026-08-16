@@ -187,7 +187,7 @@ def test_import_export_embeds_descriptions_when_enabled(
                 e["embedding"] = fake_vec
         return sum(1 for e in entities if "embedding" in e)
 
-    async def fake_maybe_embed_async(entities):
+    async def fake_maybe_embed_async(entities, store=None):
         return fake_maybe_embed(entities)
 
     monkeypatch.setattr(

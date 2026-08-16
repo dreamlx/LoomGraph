@@ -50,6 +50,14 @@ async def maybe_embed_entities(
 
     texts = [e["description"] for _, e in targets]
 
+    # Deterministic config/asset errors fail loud (#158 review C1-3):
+    # missing [embed] extra, unreachable model sources, sha mismatch,
+    # unknown-space workspaces. Swallowing these would report a green
+    # index with zero vectors.
+    from loomgraph.embedding.builtin import BuiltinEmbeddingError
+    from loomgraph.embedding.model_source import ModelDownloadError
+    from loomgraph.embedding.resolve import EmbeddingSpaceUnknownError
+
     try:
         if store is not None and settings.embedding.provider == "auto":
             from loomgraph.embedding.resolve import resolve_embedding_client
@@ -60,6 +68,8 @@ async def maybe_embed_entities(
         else:
             async with create_embedding_client() as client:
                 result = await client.embed(texts)
+    except (BuiltinEmbeddingError, ModelDownloadError, EmbeddingSpaceUnknownError):
+        raise
     except Exception as ex:
         logging.getLogger(__name__).warning(
             "Embedding skipped (%s entities): %s", len(targets), ex

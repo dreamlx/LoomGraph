@@ -21,6 +21,13 @@ from loomgraph.embedding.base import EmbeddingClient
 META_KEY = "embedding_provider"
 
 
+class EmbeddingSpaceUnknownError(RuntimeError):
+    """Workspace has vectors but no recorded provider (pre-#158 index).
+
+    Auto-resolution here would guess the space and can silently mix
+    incompatible embeddings — fail loud instead (codex review C1-1)."""
+
+
 def explicit_provider() -> str | None:
     """Return the explicitly configured provider, or None for ``auto``."""
     from loomgraph.core.config import get_settings
@@ -105,6 +112,19 @@ async def resolve_embedding_client(store: Any) -> _ClientPair:
             return _ClientPair(make_builtin_client(), "builtin")
         if recorded:
             return _ClientPair(_make_direct_client(), recorded)
+
+        # Pre-#158 workspace: vectors exist but no provider was ever
+        # recorded. Guessing the space here would let a builtin query
+        # search ollama vectors (and persist the wrong provider) —
+        # refuse and tell the user how to pin it (codex review C1-1).
+        vector_count = getattr(store, "vector_count", None)
+        if vector_count is not None and await vector_count() > 0:
+            raise EmbeddingSpaceUnknownError(
+                "workspace has embedded vectors but no recorded embedding "
+                "provider (indexed before v0.18). Set embedding.provider "
+                "explicitly (e.g. ollama) or re-index with "
+                "`loomgraph index --clear .` to record the space."
+            )
 
     chosen = "ollama" if await probe_ollama() else "builtin"
     if set_meta is not None:

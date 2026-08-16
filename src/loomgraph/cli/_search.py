@@ -263,6 +263,9 @@ async def _async_search(
             # convert to cosine similarity — scale-free across embedding
             # models (#158: CodeRankEmbed's absolute cos is lower than
             # nomic-text's, so `1 - distance` floored everything at 0).
+            # Note (#158 review C2-4): exact only for unit vectors — builtin
+            # normalizes; Direct providers that return unnormalized vectors
+            # keep ranking but the absolute score is approximate.
             "score": round(max(0.0, 1.0 - (distance ** 2) / 2.0), 3),
         })
         if len(matches) >= limit:
