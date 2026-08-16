@@ -84,6 +84,14 @@ class ImportSummary:
     edge_qualifiers: Counter = field(default_factory=Counter)
     schema_warnings: list[str] = field(default_factory=list)
     skipped_records: int = 0
+    # #156 提案 3: test-file pollution visibility (mock-heavy test corpora
+    # produce mostly-unresolved edges that skew downstream analytics).
+    test_entity_count: int = 0
+    test_relation_count: int = 0
+
+    # #156: above this share of entities from test files, warn — the graph
+    # will be dominated by mock-call edges that never resolve.
+    TEST_POLLUTION_THRESHOLD = 0.5
 
     def to_dict(self) -> dict:
         return {
@@ -95,7 +103,21 @@ class ImportSummary:
             "edge_qualifiers": dict(self.edge_qualifiers),
             "skipped_records": self.skipped_records,
             "schema_warnings": self.schema_warnings,
+            "test_entity_ratio": round(
+                self.test_entity_count / self.entity_count, 4
+            ) if self.entity_count else 0.0,
+            "test_relation_ratio": round(
+                self.test_relation_count / self.relation_count, 4
+            ) if self.relation_count else 0.0,
         }
+
+
+_TEST_FILE_MARKERS = (".test.", ".spec.", "__tests__")
+
+
+def _is_test_source(source_id: str) -> bool:
+    s = (source_id or "").lower()
+    return any(marker in s for marker in _TEST_FILE_MARKERS)
 
 
 # ============================================
@@ -273,6 +295,16 @@ class GraphExportReader:
                 "no meta record found — schema_version cannot be verified"
             )
 
+        # #156 提案 3: surface test-file pollution (mock edges flood analytics).
+        if summary.entity_count:
+            ratio = summary.test_entity_count / summary.entity_count
+            if ratio > ImportSummary.TEST_POLLUTION_THRESHOLD:
+                summary.schema_warnings.append(
+                    f"{ratio:.0%} of entities come from test files "
+                    f"(.test./.spec./__tests__) — mock-call edges rarely "
+                    "resolve and will skew topology/debt readings"
+                )
+
         return entities, relations, summary
 
     def _handle_meta(self, line_no: int, rec: dict, summary: ImportSummary) -> None:
@@ -315,6 +347,8 @@ class GraphExportReader:
             )
         summary.entity_types[rec["entity_type"]] += 1
         summary.entity_count += 1
+        if _is_test_source(rec.get("source_id", "")):
+            summary.test_entity_count += 1
         out.append(map_entity(rec))
 
     def _handle_edge(
@@ -357,6 +391,8 @@ class GraphExportReader:
             summary.skipped_records += 1
             return
         summary.relation_count += 1
+        if _is_test_source(rec.get("source_id", "")):
+            summary.test_relation_count += 1
         out.append(mapped)
 
     def iter_records(self) -> Iterator[dict]:

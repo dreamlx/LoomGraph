@@ -77,8 +77,17 @@ class GitMetricsAnalyzer:
         # Detect hotspots
         hotspots = self._detect_hotspots(file_metrics)
 
-        # Detect bus factor
-        bus_factor = self._detect_bus_factor(file_metrics)
+        # Detect bus factor (#156 提案 5: whole-repo single author → trivial
+        # signal, downgrade everything to informational). Author comparison
+        # is case-folded: one human with two git-config name variants
+        # (DreamLinx/dreamlx) is still one author.
+        repo_authors = {
+            a.strip().casefold() for m in file_metrics.values() for a in m.authors
+        }
+        repo_is_single_author = len(repo_authors) == 1
+        bus_factor = self._detect_bus_factor(
+            file_metrics, repo_is_single_author=repo_is_single_author
+        )
 
         # Generate summary
         summary = {
@@ -88,6 +97,11 @@ class GitMetricsAnalyzer:
             "bus_factor_critical": len([bf for bf in bus_factor if bf.risk_level == "critical"]),
             "bus_factor_high": len([bf for bf in bus_factor if bf.risk_level == "high"]),
         }
+        if repo_is_single_author:
+            summary["bus_factor_note"] = (
+                "single-author repository — bus factor is trivially 1 for "
+                "every file; all entries downgraded to informational"
+            )
 
         return GitMetricsResult(
             repo_path=self.repo_path,
@@ -175,6 +189,7 @@ class GitMetricsAnalyzer:
         self,
         file_metrics: dict[str, FileMetrics],
         ownership_threshold: float = 0.7,
+        repo_is_single_author: bool = False,
     ) -> list[BusFactor]:
         """Detect knowledge silo risks (single-contributor files).
 
@@ -182,6 +197,9 @@ class GitMetricsAnalyzer:
             - critical: contributors = 1
             - high: contributors = 2, ownership > 70%
             - medium: contributors >= 3, ownership > 50%
+            - informational: everything, when the whole repo has exactly one
+              author — bus factor is trivially 1 everywhere and counting
+              617 critical files dilutes the real signal (#156 提案 5).
 
         Args:
             file_metrics: FileMetrics indexed by file path
@@ -210,6 +228,11 @@ class GitMetricsAnalyzer:
                 # >= 3 contributors = healthy (not flagged)
                 continue
 
+            # #156 提案 5: single-author repo — every file trivially has
+            # bus factor 1; downgrade to informational, don't count as risk.
+            if repo_is_single_author:
+                risk_level = "informational"
+
             bus_factors.append(
                 BusFactor(
                     file=file_path,
@@ -221,8 +244,9 @@ class GitMetricsAnalyzer:
                 )
             )
 
-        # Sort by risk level (critical > high > medium) then by total commits
-        risk_order = {"critical": 0, "high": 1, "medium": 2}
+        # Sort by risk level (critical > high > medium > informational) then
+        # by total commits
+        risk_order = {"critical": 0, "high": 1, "medium": 2, "informational": 3}
         bus_factors.sort(key=lambda bf: (risk_order[bf.risk_level], -bf.total_commits))
 
         return bus_factors
