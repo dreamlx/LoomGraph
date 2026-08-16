@@ -132,3 +132,21 @@ async def resolve_embedding_client(store: Any) -> _ClientPair:
     if chosen == "builtin":
         return _ClientPair(make_builtin_client(), "builtin")
     return _ClientPair(_make_direct_client(), chosen)
+
+
+async def client_for_store(store: Any) -> _ClientPair:
+    """Single construction entry: sticky-auto or explicit provider.
+
+    Collapses the `provider == "auto" ? resolve : factory` branch that was
+    copy-pasted across embedding_pipeline / _search / _backfill (pruner
+    tension — three call sites had already diverged in failure semantics).
+    Returns an async context manager yielding ``(client, provider)`` —
+    use ``async with`` so the underlying client closes. Deterministic
+    errors (missing extra / download / unknown space) raise; callers
+    translate them into their own UX."""
+    explicit = explicit_provider()
+    if explicit == "builtin":
+        return _ClientPair(make_builtin_client(), "builtin")
+    if explicit is not None:
+        return _ClientPair(_make_direct_client(), explicit)
+    return await resolve_embedding_client(store)

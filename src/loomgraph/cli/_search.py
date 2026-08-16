@@ -218,19 +218,13 @@ async def _async_search(
 
     # Embed the query into the same vector space as the entity descriptions.
     # #158: sticky provider resolution (auto → config > ollama-probe >
-    # builtin) and the query-side task prefix for CodeRankEmbed.
-    from loomgraph.core.config import get_settings
-    from loomgraph.storage.factory import create_embedding_client
+    # builtin) and the query-side task prefix for CodeRankEmbed. Single
+    # construction entry (pruner) — deterministic errors propagate to the
+    # CLI's typed-error translation.
+    from loomgraph.embedding.resolve import client_for_store
 
-    settings = get_settings()
-    if settings.embedding.provider == "auto":
-        from loomgraph.embedding.resolve import resolve_embedding_client
-
-        cm = await resolve_embedding_client(store)
-        async with cm as (client, _provider):
-            emb = await client.embed_query(query)
-    else:
-        client = create_embedding_client()
+    cm = await client_for_store(store)
+    async with cm as (client, _provider):
         emb = await client.embed_query(query)
 
     # Over-fetch when filtering by type so a sparse type doesn't get starved

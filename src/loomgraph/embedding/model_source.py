@@ -147,16 +147,24 @@ def _sha256_file(path: Path) -> str:
 def resolve_model_dir(cache_root: Path | None = None) -> Path:
     """Return the cache dir with verified model+tokenizer, downloading once.
 
-    A cached ONNX is re-verified against the pin (a tampered/truncated file
-    must not reach ONNX Runtime — #158 review C2-3); ~0.5s for 139MB."""
+    Cached artifacts are re-verified against their pins (tampered/truncated
+    files must not reach ONNX Runtime / the tokenizer — #158 review C2-3 +
+    re-review C2-1); ~0.5s for the 139MB ONNX."""
     root = cache_root or default_cache_root()
     model = root / "model.onnx"
-    if model.exists() and (root / "tokenizer.json").exists():
-        if _sha256_file(model) == EXPECTED_SHA256:
+    tok = root / "tokenizer.json"
+    if model.exists() and tok.exists():
+        bad = []
+        if _sha256_file(model) != EXPECTED_SHA256:
+            bad.append("model")
+            model.unlink(missing_ok=True)
+        if _sha256_file(tok) != EXPECTED_TOKENIZER_SHA256:
+            bad.append("tokenizer")
+            tok.unlink(missing_ok=True)
+        if not bad:
             return root
         print(
-            "[loomgraph] cached model failed sha256 verification — "
-            "re-downloading", file=sys.stderr,
+            f"[loomgraph] cached {'+'.join(bad)} failed sha256 verification "
+            "— re-downloading", file=sys.stderr,
         )
-        model.unlink(missing_ok=True)
     return download_model(cache_root=root)

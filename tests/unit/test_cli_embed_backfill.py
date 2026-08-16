@@ -175,8 +175,11 @@ def test_backfill_embeds_and_writes_vectors(
     def fake_create_client():
         return FakeClient()
 
+    # The unified construction entry (resolve.client_for_store) builds
+    # explicit-path clients via resolve._make_direct_client — patch THAT
+    # seam; storage.factory is no longer on the backfill path.
     monkeypatch.setattr(
-        "loomgraph.storage.factory.create_embedding_client",
+        "loomgraph.embedding.resolve._make_direct_client",
         fake_create_client,
     )
 

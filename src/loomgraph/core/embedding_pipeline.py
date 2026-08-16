@@ -59,10 +59,12 @@ async def maybe_embed_entities(
     from loomgraph.embedding.resolve import EmbeddingSpaceUnknownError
 
     try:
-        if store is not None and settings.embedding.provider == "auto":
-            from loomgraph.embedding.resolve import resolve_embedding_client
+        if store is not None:
+            # Single construction entry (pruner): sticky-auto or explicit,
+            # one place to evolve provider rules.
+            from loomgraph.embedding.resolve import client_for_store
 
-            cm = await resolve_embedding_client(store)
+            cm = await client_for_store(store)
             async with cm as (client, _provider):
                 result = await client.embed(texts)
         else:
