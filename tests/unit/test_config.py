@@ -43,7 +43,7 @@ class TestEmbeddingConfig:
         config = EmbeddingConfig()
 
         assert config.enabled is False
-        assert config.provider == "ollama"
+        assert config.provider == "auto"  # #158 sticky auto resolution
         assert config.api_url == "http://localhost:11434/v1"
         assert config.model == "nomic-embed-text"
         assert config.dimension == 768

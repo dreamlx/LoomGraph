@@ -186,7 +186,7 @@ async def ingest(
     ]
 
     _emit(on_progress, "embed", len(entity_dicts), len(relation_dicts))
-    embedded = await maybe_embed_entities(entity_dicts)
+    embedded = await maybe_embed_entities(entity_dicts, store)
 
     _emit(on_progress, "insert", len(entity_dicts), len(relation_dicts))
     await store.insert_custom_kg(entity_dicts, relation_dicts, [])
@@ -302,7 +302,7 @@ async def ingest_incremental(
     ]
 
     _emit(on_progress, "embed", len(entity_dicts), len(relation_dicts))
-    embedded = await maybe_embed_entities(entity_dicts)
+    embedded = await maybe_embed_entities(entity_dicts, store)
 
     _emit(on_progress, "insert", len(entity_dicts), len(relation_dicts))
     await store.insert_custom_kg(entity_dicts, relation_dicts, [])

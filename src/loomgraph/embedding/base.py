@@ -34,6 +34,16 @@ class EmbeddingClient(ABC):
         """
         ...
 
+    async def embed_query(self, text: str) -> list[float]:
+        """Query-side embedding (#158).
+
+        Providers with query/document asymmetry override this — e.g.
+        CodeRankEmbed requires the task prefix
+        ``Represent this query for searching relevant code: `` on queries
+        and nothing on documents. Symmetric providers inherit this default.
+        """
+        return await self.embed_single(text)
+
     @abstractmethod
     async def embed_single(self, text: str) -> list[float]:
         """Generate embedding for a single text.

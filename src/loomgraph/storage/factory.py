@@ -64,6 +64,13 @@ def create_embedding_client() -> EmbeddingClient:
 
     settings = get_settings()
     e = settings.embedding
+    if e.provider == "builtin":
+        # #158: local CodeRankEmbed int8 ONNX (needs the [embed] extra);
+        # `auto` never reaches here — it resolves sticky in
+        # embedding.resolve (needs the store for meta).
+        from loomgraph.embedding.builtin import BuiltinEmbeddingClient
+
+        return BuiltinEmbeddingClient()
     return DirectEmbeddingClient(
         base_url=e.api_url,
         model=e.model,
