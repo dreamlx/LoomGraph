@@ -120,6 +120,9 @@ def test_backfill_embeds_and_writes_vectors(
     runner: CliRunner, tmp_path: Path, monkeypatch
 ) -> None:
     """Happy path: entities with descriptions → embed → write → success."""
+    # Pin the explicit provider: without this, environments lacking a local
+    # .loomgraph.yaml (CI) resolve  → builtin → missing-[embed] error.
+    monkeypatch.setenv("LOOMGRAPH_EMBEDDING__PROVIDER", "ollama")
     from loomgraph.storage.sqlite_store import DEFAULT_VECTOR_DIM
 
     ws = "test-bf:imported"
