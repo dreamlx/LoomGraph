@@ -6,6 +6,12 @@
 
 ## [Unreleased]
 
+### 改进 — 三项使用摩擦修复 (#156)
+
+- **测试污染可见**:导入摘要显示来自测试文件(`.test.`/`.spec.`/`__tests__`)的实体/边占比,超过 50% 时提示——mock 调用边基本不解析,会扭曲 topology/debt 解读
+- **git-metrics 旗标**:`--repo/-r` 命名旗标与位置参数 PATH 互认
+- **单人仓 bus_factor 抑制**:全仓单一作者(忽略大小写)时,所有 bus factor 降为 informational 并附说明,不再产生成百个无意义的 critical 计数;hotspots 不受影响
+
 ### 行为变更 — 图谱质量信号进入分析输出,坏数据不再冒充真相 (#154)
 
 - **resolved_ratio**:索引时计算并持久化「可解析边占比」;`topology` 输出携带该比率,低于 50% 时附 caveat 提示孤儿数/拓扑分可能反映的是边解析盲区(如 Java DI、TS 路径别名)而非死代码

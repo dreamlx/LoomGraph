@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — usage frictions from #153 audit (proposals 3/4/5, #156)
+- `import-export` / `index` summaries carry `test_entity_ratio` /
+  `test_relation_ratio`; above 50% test-file entities a warning explains
+  that mock-call edges rarely resolve and skew topology/debt readings
+  (a customer NestJS monorepo measured 77% of edges from test files).
+- `git-metrics` accepts `--repo/-r` as a named alternative to the PATH
+  positional (flag-style mutual recognition with the other commands).
+- Single-author repositories (author strings case-folded) downgrade every
+  bus-factor entry to `informational` and emit a summary note instead of
+  counting hundreds of trivial `critical` files. Known limitation: distinct
+  name strings for one human (e.g. `dreamlx` vs `DreamLinx`) need
+  email-level unification, out of scope.
+
 ### Added — trust-calculus propagation: resolution quality surfaces in analytics (#154, from #153 audit)
 - Ingest persists a join-based `resolved_ratio` (share of stored edges whose
   both endpoints join entities) into workspace metadata; `index` /
