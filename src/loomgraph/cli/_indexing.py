@@ -54,6 +54,27 @@ def _silence_warnings(warnings: list[str]) -> list[str]:
     return [w for w in warnings if not any(s in w.lower() for s in silence)]
 
 
+def _diff_names_with_deletions(since: str, repo: Path) -> list[str] | None:
+    """Diff names INCLUDING deletions (ACMRD), or None when git fails.
+
+    The shared ``get_changed_files`` filters ACMR — a deleted file never
+    appears, so a deleted ``.codeindex.yaml`` would read as an empty diff
+    and the update would skip, silently keeping a graph built under the
+    deleted config (codex re-review on #165).
+    """
+    import subprocess as _sp
+
+    try:
+        r = _sp.run(
+            ["git", "diff", "--name-only", "--diff-filter=ACMRD", since],
+            cwd=str(repo), capture_output=True, text=True, timeout=30,
+            check=True,
+        )
+    except Exception:
+        return None  # non-git / bad ref: caller falls through to export
+    return [line.strip() for line in r.stdout.splitlines() if line.strip()]
+
+
 @main.command()
 @click.argument("repo_path", type=click.Path(exists=True))
 @click.option("--clear/--no-clear", default=True, help="Clear old data before indexing")
@@ -305,30 +326,45 @@ def update(
     # no parsable source file — the export is the multi-second bulk of update,
     # and the post-commit hook pays it on every docs/config/CI-only commit.
     if not forced_whole_tree:
-        try:
-            all_changes = get_changed_files(since=since, repo_path=repo)
-        except Exception:
-            all_changes = None  # non-git / bad ref: fall through to export
-        # A diff is skippable only when NOTHING in it can affect the graph:
-        # no parsable source file AND no graph-affecting config (codex review
-        # BLOCKER on #165 — a `.codeindex.yaml`-only commit changes `languages:`
-        # and thus what the graph WOULD contain; skipping it serves a stale
-        # graph as success:true, the exact silent-partial fail-loud violation).
-        def _graph_relevant(p: Path) -> bool:
-            return p.suffix in SUPPORTED_SOURCE_EXTS or p.name in _GRAPH_AFFECTING_CONFIGS
-
-        if all_changes is not None and not any(_graph_relevant(p) for p in all_changes):
-            click.echo(
-                "       No supported-language files in diff — skipping update.",
-                err=True,
+        diff_names = _diff_names_with_deletions(since, repo)
+        # A diff is skippable only when NOTHING in it can affect the graph.
+        # Config changes (.codeindex.yaml languages:, .loomgraph.yaml, their
+        # deletions included) don't just prevent the skip — they demand a
+        # CLEAR REBUILD: re-export alone is a no-op, because the incremental
+        # ingest only touches entities whose source_id is in changed_files,
+        # and a config file is no entity's source. Without the rebuild the
+        # command would return success over a stale graph (codex re-review
+        # BLOCKER on #165).
+        config_rebuild = False
+        if diff_names is not None:
+            paths = [Path(n) for n in diff_names]
+            config_touched = any(
+                p.name in _GRAPH_AFFECTING_CONFIGS for p in paths
             )
-            output_success({
-                "skipped": True,
-                "reason": "no_supported_source_files_in_diff",
-                "since": since,
-                "workspace": get_auto_workspace(workspace),
-            })
-            return
+            source_touched = any(
+                p.suffix in SUPPORTED_SOURCE_EXTS for p in paths
+            )
+            if config_touched:
+                config_rebuild = True
+                click.echo(
+                    "       Graph-affecting config changed — full rebuild.",
+                    err=True,
+                )
+            elif not source_touched:
+                # Nothing in the diff can affect the graph (docs/shell/CI
+                # only — an empty diff is the degenerate case).
+                click.echo(
+                    "       No supported-language files in diff — skipping update.",
+                    err=True,
+                )
+                output_success({
+                    "skipped": True,
+                    "reason": "no_supported_source_files_in_diff",
+                    "since": since,
+                    "workspace": get_auto_workspace(workspace),
+                })
+                return
+            # else: source-only diff → normal incremental path below.
 
     # Step 2: Run codeindex graph-export (whole tree)
     click.echo("[2/3] Exporting whole tree with codeindex graph-export...", err=True)
@@ -373,7 +409,10 @@ def update(
     click.echo("[3/3] Updating knowledge graph...", err=True)
     try:
         result = asyncio.run(
-            _async_update(entities, relations, workspace, repo, since, forced_whole_tree)
+            _async_update(
+                entities, relations, workspace, repo, since,
+                forced_whole_tree, config_rebuild=config_rebuild,
+            )
         )
     except Exception as e:
         output_error(
@@ -400,9 +439,14 @@ async def _async_update(
     repo: Path,
     since: str,
     forced_whole_tree: bool,
+    config_rebuild: bool = False,
 ) -> dict[str, Any]:
     """Branch update into per-file incremental (git) or whole-tree upsert.
 
+    - ``config_rebuild`` (graph-affecting config in the diff, #165): a CLEAR
+      rebuild — languages changes reshape the whole graph, and the
+      incremental path would ingest nothing (a config file is no entity's
+      source_id).
     - git repo and not ``forced_whole_tree``: ``ingest_incremental`` over the
       ``get_changed_files(since)`` subset (路 B).
     - otherwise: ``ingest(clear=False)`` whole-tree upsert (non-git fallback,
@@ -419,8 +463,12 @@ async def _async_update(
             err=True,
         )
 
-    use_incremental = (not forced_whole_tree) and is_git_repository(repo)
-    if use_incremental:
+    if config_rebuild:
+        result = await ingest(
+            entities, relations, store, clear=True, on_progress=_progress
+        )
+        result["mode"] = "config_rebuild"
+    elif (not forced_whole_tree) and is_git_repository(repo):
         changed_paths = get_changed_files(since=since, repo_path=repo)
         changed_files = {p.as_posix() for p in changed_paths}
         result = await ingest_incremental(

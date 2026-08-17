@@ -233,3 +233,136 @@ def test_silence_warnings_ignores_blank_patterns(
     assert _silence_warnings(["partial-graph: x", "another"]) == [
         "partial-graph: x", "another"
     ]
+
+
+# ─── codex re-review: config diff must REBUILD, not just re-export ───────
+
+
+def _repo_with_commits(repo: Path, second_commit_files: dict[str, str]) -> None:
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "t@t.com"],
+                   cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "t"],
+                   cwd=repo, check=True, capture_output=True)
+    (repo / "a.py").write_text("def foo():\n    pass\n")
+    subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-qm", "base"],
+                   cwd=repo, check=True, capture_output=True)
+    for name, content in second_commit_files.items():
+        p = repo / name
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(content)
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-qm", "second"],
+                   cwd=repo, check=True, capture_output=True)
+
+
+def _patch_update_env(monkeypatch, repo: Path) -> dict:
+    """Wire update's collaborators: healthy export, real git, fake store/ingest."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    from loomgraph.cli import _indexing
+    from loomgraph.core.graph_export_ingest import ImportSummary
+
+    monkeypatch.chdir(repo)
+    monkeypatch.setattr(
+        _indexing, "check_codeindex", lambda: {"installed": True},
+    )
+    monkeypatch.setattr(
+        _indexing, "run_graph_export",
+        lambda r: ([], [], ImportSummary(entity_count=2), []),
+    )
+    store = MagicMock()
+    monkeypatch.setattr(
+        "loomgraph.storage.factory.create_graph_store",
+        AsyncMock(return_value=store),
+    )
+    ingest = AsyncMock(return_value={
+        "cleared": True, "entities_created": 2, "relations_created": 0,
+        "embedded": 0, "store_stats": {},
+    })
+    monkeypatch.setattr(_indexing, "ingest", ingest)
+    incr = AsyncMock(return_value={
+        "entities_created": 0, "relations_created": 0, "embedded": 0,
+        "store_stats": {},
+    })
+    monkeypatch.setattr(_indexing, "ingest_incremental", incr)
+    return {"ingest": ingest, "incr": incr}
+
+
+def test_config_only_diff_rebuilds_graph(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Config-only diff must trigger a CLEAR REBUILD, not a no-op incremental.
+
+    Re-export alone is not enough (codex re-review BLOCKER): the incremental
+    ingest only touches entities whose source_id is in changed_files — a
+    .codeindex.yaml is no entity's source, so the export ran, nothing was
+    ingested, and update returned success over a stale graph."""
+    import json
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _repo_with_commits(repo, {".codeindex.yaml": "languages: [typescript]\n"})
+    m = _patch_update_env(monkeypatch, repo)
+
+    res = CliRunner().invoke(main, ["update"])
+    assert res.exit_code == 0, res.output
+    m["ingest"].assert_awaited_once()
+    assert m["ingest"].call_args.kwargs.get("clear") is True, (
+        "config change must clear-rebuild (languages: reshapes the whole graph)"
+    )
+    m["incr"].assert_not_awaited()
+    data = json.loads(res.stdout)["data"]
+    assert data["mode"] == "config_rebuild"
+
+
+def test_mixed_source_and_config_diff_also_rebuilds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A diff mixing source + config still rebuilds — the config may re-shape
+    files the source diff alone wouldn't touch."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _repo_with_commits(repo, {
+        "a.py": "def foo():\n    return 1\n",
+        ".codeindex.yaml": "languages: [typescript]\n",
+    })
+    m = _patch_update_env(monkeypatch, repo)
+
+    res = CliRunner().invoke(main, ["update"])
+    assert res.exit_code == 0, res.output
+    m["ingest"].assert_awaited_once()
+    assert m["ingest"].call_args.kwargs.get("clear") is True
+    m["incr"].assert_not_awaited()
+
+
+def test_deleted_config_diff_rebuilds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Deleting .codeindex.yaml is a graph-affecting event too — but git
+    --diff-filter=ACMR drops deletions, which made it read as an EMPTY diff
+    and skip (codex re-review). The gate must see deletions (ACMRD)."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    # Base commit carries the config so the second commit can delete it.
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "t@t.com"],
+                   cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "t"],
+                   cwd=repo, check=True, capture_output=True)
+    (repo / "a.py").write_text("def foo():\n    pass\n")
+    (repo / ".codeindex.yaml").write_text("languages: [typescript]\n")
+    subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-qm", "base"],
+                   cwd=repo, check=True, capture_output=True)
+    (repo / ".codeindex.yaml").unlink()
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-qm", "drop config"],
+                   cwd=repo, check=True, capture_output=True)
+    m = _patch_update_env(monkeypatch, repo)
+
+    res = CliRunner().invoke(main, ["update"])
+    assert res.exit_code == 0, res.output
+    m["ingest"].assert_awaited_once()
+    assert m["ingest"].call_args.kwargs.get("clear") is True
