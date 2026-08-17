@@ -79,6 +79,16 @@ _register(t_evolution_track.TOOL_SPEC, t_evolution_track.handle)
 _register(t_sync_advice.TOOL_SPEC, t_sync_advice.handle)
 
 
+# Tools that overlap codegraph's `codegraph_explore` (single-tool structural
+# queries, fresh per-call). On a codegraph-backed workspace these are unlisted
+# so an agent picks the narrower, fresher codegraph tool instead of diluting
+# its salience across two near-identical query surfaces (#152 adaptive surface).
+# Unlisted ≠ removed: call_tool still serves them, and LOOMGRAPH_MCP_TOOLS=all
+# forces the full list (parity with codegraph's CODEGRAPH_MCP_TOOLS philosophy).
+_CODEGRAPH_OVERLAP_TOOLS = {"loomgraph_find", "loomgraph_graph"}
+ALL_TOOLS_ENV = "LOOMGRAPH_MCP_TOOLS"
+
+
 def build_server() -> Server:
     """Construct the MCP Server instance with all tools registered.
 
@@ -87,7 +97,7 @@ def build_server() -> Server:
     """
 
     async def list_tools(ctx: Any, params: Any) -> ListToolsResult:
-        return ListToolsResult(tools=list(_TOOL_SPECS))
+        return ListToolsResult(tools=_visible_tool_specs())
 
     async def call_tool(ctx: Any, params: Any) -> CallToolResult:
         name = params.name
@@ -121,6 +131,67 @@ def build_server() -> Server:
         on_list_tools=list_tools,
         on_call_tool=call_tool,
     )
+
+
+def _visible_tool_specs() -> list[Tool]:
+    """The tool list an agent sees, minus codegraph-overlap tools when the
+    active workspace is codegraph-backed (#152).
+
+    Detection reads the workspace's ``extraction_backend`` meta (the same
+    signal `update`/`refresh` route on) — NOT cwd/``which codegraph``, which
+    are unreliable (serve cwd ≠ queried workspace; installed-for-another-
+    project would hide tools on every codeindex workspace). LOOMGRAPH_MCP_TOOLS
+    =all forces the full list. Falls back to the full list when the workspace
+    can't be opened (no workspace yet, or non-codegraph) — the default stays
+    the full list until a codegraph workspace is actually queried.
+    """
+    import os
+
+    if os.environ.get(ALL_TOOLS_ENV, "").lower() == "all":
+        return list(_TOOL_SPECS)
+    if not _active_workspace_is_codegraph():
+        return list(_TOOL_SPECS)
+    return [t for t in _TOOL_SPECS if t.name not in _CODEGRAPH_OVERLAP_TOOLS]
+
+
+def _active_workspace_is_codegraph() -> bool:
+    """True when the active workspace's recorded extraction_backend is codegraph.
+
+    Resolves the workspace the same way the query tools do (per-call arg >
+    server default env > CLI auto-detect from cwd/git), opens it, and reads
+    the meta. Any failure (no workspace, unreadable, no meta) → False (the
+    default full list is the safe fallback).
+    """
+    import asyncio
+    import os
+
+    from loomgraph.cli._common import get_auto_workspace
+    from loomgraph.mcp.tools._common import DEFAULT_WORKSPACE_ENV
+
+    ws_arg = os.environ.get(DEFAULT_WORKSPACE_ENV)
+    ws = ws_arg or get_auto_workspace(None)
+    if not ws:
+        return False
+    try:
+        from loomgraph.storage.factory import create_graph_store
+
+        async def _peek() -> str | None:
+            store = await create_graph_store(workspace=ws)
+            try:
+                get_meta = getattr(store, "get_meta", None)
+                if get_meta is None:
+                    return None
+                recorded = await get_meta("extraction_backend")
+                return str(recorded) if recorded else None
+            finally:
+                close = getattr(store, "close", None)
+                if close is not None:
+                    await close()
+
+        recorded = asyncio.run(_peek())
+        return recorded == "codegraph"
+    except Exception:
+        return False
 
 
 async def serve_stdio() -> None:

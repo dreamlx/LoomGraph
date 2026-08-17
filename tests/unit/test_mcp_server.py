@@ -16,7 +16,13 @@ from unittest.mock import patch
 
 import pytest
 
-from loomgraph.mcp.server import _TOOL_HANDLERS, _TOOL_SPECS, build_server
+from loomgraph.mcp.server import (
+    _CODEGRAPH_OVERLAP_TOOLS,
+    _TOOL_HANDLERS,
+    _TOOL_SPECS,
+    _visible_tool_specs,
+    build_server,
+)
 from loomgraph.mcp.tools import _common
 from loomgraph.mcp.tools import find as t_find
 from loomgraph.mcp.tools import graph as t_graph
@@ -93,6 +99,57 @@ def test_build_server_version_tracks_package():
     server = build_server()
     assert server.version == __version__
     assert server.version != "0.15.3" or __version__ == "0.15.3"  # not hardcoded
+
+
+# ---- #152: adaptive MCP surface (unlist codegraph-overlap tools) ----------
+
+
+def test_visible_tools_full_list_by_default(monkeypatch):
+    """A non-codegraph (or un-openable) workspace → full tool list (#152)."""
+    monkeypatch.delenv("LOOMGRAPH_MCP_TOOLS", raising=False)
+    monkeypatch.setattr(
+        "loomgraph.mcp.server._active_workspace_is_codegraph", lambda: False
+    )
+    names = {t.name for t in _visible_tool_specs()}
+    assert names == {t.name for t in _TOOL_SPECS}
+    assert _CODEGRAPH_OVERLAP_TOOLS.issubset(names)
+
+
+def test_visible_tools_hides_overlap_on_codegraph_workspace(monkeypatch):
+    """A codegraph-backed workspace → find/graph unlisted (still callable)."""
+    monkeypatch.delenv("LOOMGRAPH_MCP_TOOLS", raising=False)
+    monkeypatch.setattr(
+        "loomgraph.mcp.server._active_workspace_is_codegraph", lambda: True
+    )
+    names = {t.name for t in _visible_tool_specs()}
+    assert _CODEGRAPH_OVERLAP_TOOLS.isdisjoint(names), (
+        "find/graph must be unlisted on a codegraph workspace (#152)"
+    )
+    # everything else stays visible
+    assert "loomgraph_topology" in names
+    assert "loomgraph_debt" in names
+
+
+def test_visible_tools_env_all_forces_full_list(monkeypatch):
+    """LOOMGRAPH_MCP_TOOLS=all overrides the codegraph unlist (parity with
+    codegraph's CODEGRAPH_MCP_TOOLS philosophy — unlist ≠ removed)."""
+    monkeypatch.setenv("LOOMGRAPH_MCP_TOOLS", "all")
+    monkeypatch.setattr(
+        "loomgraph.mcp.server._active_workspace_is_codegraph", lambda: True
+    )
+    names = {t.name for t in _visible_tool_specs()}
+    assert _CODEGRAPH_OVERLAP_TOOLS.issubset(names)
+
+
+def test_overlap_tools_remain_callable_when_unlisted(monkeypatch):
+    """call_tool serves unlisted tools — unlist only affects discovery."""
+    monkeypatch.delenv("LOOMGRAPH_MCP_TOOLS", raising=False)
+    monkeypatch.setattr(
+        "loomgraph.mcp.server._active_workspace_is_codegraph", lambda: True
+    )
+    # The handler registry is independent of the visibility filter.
+    assert "loomgraph_find" in _TOOL_HANDLERS
+    assert "loomgraph_graph" in _TOOL_HANDLERS
 
 
 async def test_git_metrics_handle_errors_on_non_git_path(tmp_path):

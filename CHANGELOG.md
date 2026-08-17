@@ -7,6 +7,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — pluggable extraction backend: codegraph (#152)
+- **`loomgraph index --backend codegraph`** — a second extraction backend
+  alongside codeindex. codegraph (`@colbymchenry/codegraph`, TS+Rust, 33
+  languages) keeps its own SQLite graph at `.codegraph/codegraph.db`; the
+  adapter snapshots it (SQLite `backup()` API, `query_only=ON` — never mutates
+  the user's db, honors WAL) and maps it to the SAME `(entities, relations)`
+  4-tuple the codeindex path produces, so the shared `embed → inject` pipeline
+  is reused unchanged. Per-workspace single source (parallel, not serial —
+  codeindex navigation is a side path that never enters the graph). cbm stays
+  a candidate-#3 stub.
+- **Why**: #168 spike measured codegraph at 100% edge joinability on 3
+  fixtures where codeindex hit 5.3% / 3.2% / 20.9% (Java DI / TS `@` alias /
+  Python cross-file). The #167 pnpm-mono cross-package CALLS gap (1.76% on
+  codeindex) resolves to ~263 edges on the codegraph backend.
+- **Schema fingerprint (fail-loud, #142)**: required tables/columns are a
+  subset check (codegraph migrations v1–v9 are append-only); a
+  semantics-bump without a schema change is caught by
+  `indexed_with_extraction_version <= 24`. Mismatch → `CodegraphSchemaError`
+  → exit 1, never a silent mis-map.
+- **Name disambiguation (BLOCKER)**: codegraph `qualified_name` is not
+  unique (354 shared names on the BlueHawkLock fixture, `styles`×33) and
+  `entity_name` is the store PK, so unqualified names would silently merge
+  into phantom hubs. Non-unique names get `file_path::qualified_name`; the
+  93% unique majority keeps clean `::` names. Edges use the same map.
+- **file nodes as first-class entities**: 64% of codegraph calls edges
+  originate at a file node (measured), so dropping them guts the graph.
+  topology now excludes `entity_type ∈ {module, file}` from orphan + god
+  detection (4 spots: server-side orphan/gods + client fallback) — a file's
+  ~19 avg out-degree would flag every file as a god function otherwise.
+- **`::` name resolution**: `graph <simple-name>` and the #105 class-fold
+  now try both `.` (codeindex) and `::` (codegraph) separators, so the #98
+  feature isn't dead for the whole backend. The orphan whitelist split
+  matches. Backend-neutral (existing codeindex workspaces unaffected).
+- **New edge kind `REFERENCES`**: codegraph `references`/`decorates` edges
+  map to it (codeindex had no equivalent). `VALID_EDGE_KINDS` and
+  `graph --relation-type` extended.
+- **`update --backend codegraph`**: codegraph has no per-symbol content_hash
+  → no incremental. Instead a content fingerprint (node/edge counts + max
+  `updated_at`) is recorded in workspace meta; an unchanged snapshot returns
+  `mode: codegraph_noop` (loomgraph never runs `codegraph sync` itself — a
+  noop carries a `run codegraph sync` hint rather than silently re-ingesting
+  identical data). Changed → `clear=True` rebuild. A bare `update` (no
+  `--backend`) reads the workspace's `extraction_backend` meta and routes to
+  the same backend — a bare update must not swap a codegraph graph for a
+  codeindex one.
+- **MCP `refresh` routing**: a codegraph workspace's `force_full` re-snapshots
+  + clear-rebuilds; incremental refresh fails loud (no content_hash →
+  `ingest_incremental` would GC codegraph symbols).
+- **Adaptive MCP surface**: on a codegraph-backed workspace `loomgraph_find`
+  + `loomgraph_graph` are unlisted (they overlap `codegraph_explore`).
+  Detection reads the workspace's `extraction_backend` meta — NOT cwd/`which
+  codegraph` (unreliable: serve cwd ≠ queried workspace; installed-for-
+  another-project would hide tools on every codeindex workspace). Unlisted ≠
+  removed (still callable); `LOOMGRAPH_MCP_TOOLS=all` forces the full list.
+  Tool descriptions carry the division-of-labor wording.
+- **`status` backend recommendation** (non-enforcing): reuses the #161
+  language fingerprint — TS/Java/multi-language/mobile repos get a
+  `codegraph` recommendation; Python/PHP stay codeindex.
+- **Provenance**: codegraph's db carries no git sha, so loomgraph records
+  `codegraph_head` = `git rev-parse HEAD` at snapshot time + the fingerprint
+  + codegraph versions into workspace meta.
+- **Documented residuals (accept, not fix)**: constant/interface entities
+  enter hub candidates (calls file→constant measured 892); `find` short
+  queries match file-path names; cross-backend `compare` matches ~0; a
+  disambiguated name can flip across commits when a duplicate appears/
+  disappears (`clear=True` makes this moot for correctness).
+
 ### Added — index output: language-fingerprint warning + reading guide (#161, #162)
 - **Language fingerprint warning** (#161): a non-Python repo (TS/Java/Swift…)
   indexed without `.codeindex.yaml` defaults codeindex to

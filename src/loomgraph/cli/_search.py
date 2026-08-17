@@ -359,6 +359,33 @@ def _edge_is_trusted(rel: dict[str, Any], include_unresolved: bool) -> bool:
     return qualifier == "resolved"
 
 
+def _resolve_simple_name(
+    entity_name: str, source_id_map: dict[str, str]
+) -> str:
+    """Resolve a simple name to a stored FQN (#98), trying both `.` and `::`
+    separators so the codegraph backend (`Class::method`) isn't blind (#152).
+
+    Exact-match caller responsibility: unique dotted/`::`-suffix match wins;
+    ambiguous/none returns the name unchanged (empty result, no worse than
+    before)."""
+    for sep in (".", "::"):
+        suffix = sep + entity_name
+        matches = [n for n in source_id_map if n.endswith(suffix)]
+        if len(matches) == 1:
+            return matches[0]
+    return entity_name
+
+
+def _class_methods(class_name: str, source_id_map: dict[str, str]) -> list[str]:
+    """Names that are methods of ``class_name`` — ``Class.method`` (#105) and
+    ``Class::method`` (codegraph, #152)."""
+    out = []
+    for sep in (".", "::"):
+        prefix = class_name + sep
+        out.extend(n for n in source_id_map if n.startswith(prefix))
+    return out
+
+
 @main.command()
 @click.argument("entity_name")
 @click.option(
@@ -369,7 +396,7 @@ def _edge_is_trusted(rel: dict[str, Any], include_unresolved: bool) -> bool:
 )
 @click.option("--depth", default=1, help="Traversal depth")
 @click.option("--relation-type",
-    type=click.Choice(["CALLS", "INHERITS", "IMPORTS", "all"]),
+    type=click.Choice(["CALLS", "INHERITS", "IMPORTS", "REFERENCES", "all"]),
     default="all",
     help="Relation type filter",
 )
@@ -422,12 +449,12 @@ async def _async_graph_query(
     # `downstreamBlockers` must hit `src.lib.api.queries.downstreamBlockers`.
     # Exact wins; else a unique dotted-suffix match resolves; ambiguous/none
     # leaves the name as-is (empty result, no worse than before).
+    # #152: codegraph names use `::` separators (MigrationManager::constructor)
+    # rather than `.` — try both so the codegraph backend isn't blind to
+    # simple-name queries (#98 feature dead for a whole backend otherwise).
     resolved = entity_name
     if entity_name not in source_id_map:
-        suffix = "." + entity_name
-        suffix_matches = [n for n in source_id_map if n.endswith(suffix)]
-        if len(suffix_matches) == 1:
-            resolved = suffix_matches[0]
+        resolved = _resolve_simple_name(entity_name, source_id_map)
 
     # Build relation_type-filtered adjacency and BFS up to `depth` layers
     # (#103): previously `--depth` was a no-op (graph() dropped it before
@@ -465,15 +492,14 @@ async def _async_graph_query(
     # class, fold its methods' callees in (additive over any direct edges the
     # class already has, e.g. REFERENCES; deduped by target). callers are
     # unaffected — constructor edges land on the class via codeindex #132.
+    # #152: codegraph uses `Class::method` — try both separators.
     if entity_type_map.get(resolved) == "class":
-        method_prefix = resolved + "."
         seen_callees = {c["entity"] for c in callees}
-        for name in source_id_map:
-            if name.startswith(method_prefix):
-                for edge in _bfs_collect(name, outgoing, depth):
-                    if edge["entity"] not in seen_callees:
-                        seen_callees.add(edge["entity"])
-                        callees.append(edge)
+        for method_name in _class_methods(resolved, source_id_map):
+            for edge in _bfs_collect(method_name, outgoing, depth):
+                if edge["entity"] not in seen_callees:
+                    seen_callees.add(edge["entity"])
+                    callees.append(edge)
 
     result: dict[str, Any] = {
         "entity": resolved,
