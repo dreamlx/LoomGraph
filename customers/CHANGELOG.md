@@ -6,11 +6,11 @@
 
 ---
 
-## [Unreleased] 预告 — codegraph 提取后端 (#152)
+## [0.19.0] - 2026-08-17
 
-> **本条为预告,未发版。** 安装方式不变;codegraph 后端需额外 `npm i -g @colbymchenry/codegraph`。
+> **更新方式**: `pipx upgrade loomgraph`（已装 `[embed]` extra 的用 `pipx upgrade loomgraph --include-extra`）。codegraph 后端为可选项，需额外 `npm i -g @colbymchenry/codegraph`。
 
-### 新增 — 第二提取后端 codegraph(可选)
+### 新增 — 第二提取后端 codegraph（可选）
 
 - `loomgraph index --backend codegraph`:除默认 codeindex 外,可选用 codegraph
   (`@colbymchenry/codegraph`,33 语言 TS+Rust)做提取源。**多语言 / TS / Java /
