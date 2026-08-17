@@ -1,0 +1,74 @@
+- generic [ref=f32e4]:
+  - banner [ref=f32e5]:
+    - generic [ref=f32e7]:
+      - link [ref=f32e8] [cursor=pointer]:
+        - /url: /
+      - generic [ref=f32e12]:
+        - link "Home" [ref=f32e14] [cursor=pointer]:
+          - /url: /home
+        - link "Models" [ref=f32e17] [cursor=pointer]:
+          - /url: /models
+        - link "Datasets" [ref=f32e20] [cursor=pointer]:
+          - /url: /datasets
+        - link "Studios" [ref=f32e23] [cursor=pointer]:
+          - /url: /studios
+        - link "Spotlight" [ref=f32e26] [cursor=pointer]:
+          - /url: /spotlight
+        - generic [ref=f32e28]: Community
+        - link "Skills" [ref=f32e35] [cursor=pointer]:
+          - /url: /skills
+        - link "MCP" [ref=f32e39] [cursor=pointer]:
+          - /url: /mcp
+        - link "Civision" [ref=f32e44] [cursor=pointer]:
+          - /url: /aigc
+      - generic [ref=f32e48]:
+        - link [ref=f32e50] [cursor=pointer]:
+          - /url: https://github.com/modelscope
+        - generic [ref=f32e54] [cursor=pointer]
+        - button "search" [ref=f32e56] [cursor=pointer]
+      - button "Magic Cube" [ref=f32e60] [cursor=pointer]:
+        - img "Magic Cube" [ref=f32e61]
+      - button "loading login / register" [ref=f32e65]:
+        - img "loading" [ref=f32e67]
+        - generic [ref=f32e70]: login / register
+  - main [ref=f32e71]:
+    - generic [ref=f32e74]:
+      - generic [ref=f32e77]:
+        - generic [ref=f32e80]:
+          - generic [ref=f32e82]:
+            - generic [ref=f32e83]: /LoomGraph-embed
+            - img [ref=f32e84] [cursor=pointer]
+          - generic [ref=f32e87]:
+            - generic [ref=f32e88] [cursor=pointer]: Like
+            - generic [ref=f32e93]: Collections
+        - generic [ref=f32e101]:
+          - link "@" [ref=f32e103] [cursor=pointer]:
+            - /url: /profile/undefined
+          - separator [ref=f32e104]
+          - text: 0 downloads
+          - separator [ref=f32e105]
+          - text: updated Aug 16,2026
+      - generic [ref=f32e108]:
+        - generic [ref=f32e109]:
+          - tablist [ref=f32e110]:
+            - generic [ref=f32e112]:
+              - tab [ref=f32e114] [cursor=pointer]:
+                - link "Model card" [ref=f32e115]:
+                  - /url: /models/dreamlinx/LoomGraph-embed
+              - tab [selected] [ref=f32e118] [cursor=pointer]:
+                - link "Files and versions" [ref=f32e119]:
+                  - /url: /models/dreamlinx/LoomGraph-embed/files
+              - tab [ref=f32e122] [cursor=pointer]:
+                - link "Discussions" [ref=f32e123]:
+                  - /url: /models/dreamlinx/LoomGraph-embed/feedback
+          - generic:
+            - generic:
+              - tabpanel "Files and versions"
+        - generic [ref=f32e126] [cursor=pointer]
+    - generic [ref=f32e130]:
+      - generic [ref=f32e131]: © 2022-2026 ModelScope.cn All rights reserved
+      - generic [ref=f32e132]:
+        - link [ref=f32e134] [cursor=pointer]:
+          - /url: https://github.com/modelscope
+        - link [ref=f32e139] [cursor=pointer]:
+          - /url: https://x.com/ModelScope2022

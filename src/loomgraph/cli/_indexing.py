@@ -25,6 +25,11 @@ from loomgraph.core.graph_export_ingest import (
     ingest_incremental,
     run_graph_export,
 )
+from loomgraph.io.codegraph_reader import (
+    CodegraphDbMissingError,
+    CodegraphSchemaError,
+    run_codegraph_export,
+)
 
 # Extensions codeindex can parse (any configured language). `update` skips the
 # whole-tree re-export when the git diff touches none of them (#165) — the
@@ -41,6 +46,49 @@ _GRAPH_AFFECTING_CONFIGS = {
     ".codeindex.yaml", ".codeindex.yml",
     ".loomgraph.yaml", ".loomgraph.yml",
 }
+
+# Extraction backends (#152). codeindex is the default (unchanged); codegraph
+# (@colbymchenry/codegraph, 33-language TS+Rust) is opt-in via `--backend`.
+# Each backend produces the SAME (entities, relations, summary, warnings)
+# 4-tuple so the shared `ingest()` pipeline is reused. Per-workspace single
+# source — the backend is recorded in workspace meta so `update` without an
+# explicit flag routes to the same one (a bare `update` must not silently
+# swap a codegraph workspace's graph for a codeindex one).
+DEFAULT_BACKEND = "codeindex"
+SUPPORTED_BACKENDS = ("codeindex", "codegraph")
+# MCP/CLI hint when codegraph isn't installed but the repo needs it.
+CODEGRAPH_INSTALL_HINT = (
+    "codegraph not found — install with `npm i -g @colbymchenry/codegraph` "
+    "then run `codegraph init`"
+)
+
+
+async def _workspace_backend(store: Any, explicit: str | None) -> str:
+    """Resolve the extraction backend for a workspace.
+
+    Explicit ``--backend`` always wins and is recorded. Without it, the
+    workspace's recorded ``extraction_backend`` meta is honored (so `update`
+    on a codegraph workspace stays codegraph). Falls back to codeindex
+    (default, backward-compatible) when no meta is recorded — a fresh
+    workspace or a pre-#152 workspace.
+    """
+    if explicit:
+        return explicit
+    get_meta = getattr(store, "get_meta", None)
+    if get_meta is not None:
+        recorded = await get_meta("extraction_backend")
+        if recorded:
+            return str(recorded)
+    return DEFAULT_BACKEND
+
+
+def _run_export(
+    backend: str, repo: Path
+) -> tuple[list[Any], list[Any], Any, list[str]]:
+    """Dispatch to the configured backend's export function."""
+    if backend == "codegraph":
+        return run_codegraph_export(repo)
+    return run_graph_export(repo)
 
 
 def _silence_warnings(warnings: list[str]) -> list[str]:
@@ -153,11 +201,23 @@ def _diff_names_with_deletions(since: str, repo: Path) -> list[str] | None:
 @click.argument("repo_path", type=click.Path(exists=True))
 @click.option("--clear/--no-clear", default=True, help="Clear old data before indexing")
 @click.option("--workspace", "-w", default=None, help="Workspace name (default: current directory name)")
-def index(repo_path: str, clear: bool, workspace: str | None) -> None:
+@click.option(
+    "--backend",
+    type=click.Choice(SUPPORTED_BACKENDS),
+    default=DEFAULT_BACKEND,
+    help=(
+        "Extraction backend: codeindex (default, 7 langs, README_AI nav) or "
+        "codegraph (@colbymchenry/codegraph, 33 langs, TS/Java/multi-lang #152)"
+    ),
+)
+def index(
+    repo_path: str, clear: bool, workspace: str | None, backend: str
+) -> None:
     """Index a code repository (one-step pipeline).
 
-    Calls: codeindex graph-export → embed → inject (module-qualified entity
-    ids — fixes the cross-module same-name collision, #66).
+    Backend dispatch (#152): codeindex graph-export (default) or codegraph
+    snapshot. Both produce the same (entities, relations) 4-tuple that the
+    shared embed→inject pipeline consumes.
 
     REPO_PATH: Directory path to index
     """
@@ -166,22 +226,40 @@ def index(repo_path: str, clear: bool, workspace: str | None) -> None:
     start_time = time.time()
     repo = Path(repo_path).resolve()
 
-    # Step 1: Check codeindex
-    click.echo("[1/3] Checking codeindex installation...", err=True)
-    codeindex_status = check_codeindex()
-    if not codeindex_status.get("installed"):
+    # #152: backend branch BEFORE the codeindex gate — a codegraph workspace
+    # on a machine without codeindex would otherwise die with
+    # CODEINDEX_NOT_FOUND before meta routing ever runs.
+    if backend == "codeindex":
+        click.echo("[1/3] Checking codeindex installation...", err=True)
+        codeindex_status = check_codeindex()
+        if not codeindex_status.get("installed"):
+            output_error(
+                code=ErrorCode.CODEINDEX_NOT_FOUND,
+                message="codeindex command not found in PATH",
+                suggestion="Install codeindex: pip install ai-codeindex",
+                docs="https://github.com/dreamlx/codeindex#installation",
+            )
+            return
+        click.echo(f"[2/3] Exporting {repo.name}/ with codeindex graph-export...", err=True)
+    else:
+        click.echo(f"[1/2] Snapshotting {repo.name}/.codegraph/...", err=True)
+
+    try:
+        entities, relations, summary, warnings = _run_export(backend, repo)
+    except CodegraphDbMissingError as e:
         output_error(
-            code=ErrorCode.CODEINDEX_NOT_FOUND,
-            message="codeindex command not found in PATH",
-            suggestion="Install codeindex: pip install ai-codeindex",
-            docs="https://github.com/dreamlx/codeindex#installation",
+            code=ErrorCode.INVALID_INPUT,
+            message=str(e),
+            suggestion=CODEGRAPH_INSTALL_HINT,
         )
         return
-
-    # Step 2: Run codeindex graph-export (qualified entity ids + edges)
-    click.echo(f"[2/3] Exporting {repo.name}/ with codeindex graph-export...", err=True)
-    try:
-        entities, relations, summary, warnings = run_graph_export(repo)
+    except CodegraphSchemaError as e:
+        output_error(
+            code=ErrorCode.STORAGE_ERROR,
+            message=f"codegraph schema mismatch: {e}",
+            suggestion="Re-run `codegraph index` to rebuild, or upgrade loomgraph",
+        )
+        return
     except GraphExportError as e:
         output_error(
             code=ErrorCode.CODEINDEX_FAILED,
@@ -231,7 +309,9 @@ def index(repo_path: str, clear: bool, workspace: str | None) -> None:
     # Step 3: Embed + inject asynchronously
     click.echo("[3/3] Injecting into knowledge graph...", err=True)
     try:
-        result = asyncio.run(_async_index(entities, relations, workspace, clear))
+        result = asyncio.run(
+            _async_index(entities, relations, workspace, clear, backend, summary)
+        )
     except Exception as e:
         output_error(
             code=ErrorCode.STORAGE_ERROR,
@@ -271,12 +351,15 @@ async def _async_index(
     relations: list[Any],
     workspace: str | None,
     clear: bool,
+    backend: str = DEFAULT_BACKEND,
+    summary: Any = None,
 ) -> dict[str, Any]:
     """Resolve workspace, build the store, run the shared ingest pipeline.
 
-    Receives already-mapped entities/relations from ``run_graph_export``
-    (module-qualified ids — fixes the cross-module same-name collision, #66).
-    Delegates embed + insert to :func:`ingest`.
+    Receives already-mapped entities/relations (codeindex graph-export or a
+    codegraph snapshot, #152 — both produce the same 4-tuple). Records the
+    extraction backend + codegraph provenance into workspace meta so `update`
+    routes to the same backend without an explicit flag.
     """
     from loomgraph.storage.factory import create_graph_store
 
@@ -294,6 +377,142 @@ async def _async_index(
     )
     result["workspace"] = ws
     result["mode"] = "cold_rebuild" if clear else "append"
+    result["backend"] = backend
+
+    # #152: record backend + provenance so update routes correctly and the
+    # graph's source is auditable. codegraph db has no git sha — record HEAD.
+    set_meta = getattr(store, "set_meta", None)
+    if set_meta is not None:
+        await set_meta("extraction_backend", backend)
+        if backend == "codegraph" and summary is not None:
+            meta = summary.meta or {}
+            if (fp := meta.get("codegraph_fingerprint")):
+                await set_meta("codegraph_fingerprint", fp)
+            if (iv := meta.get("indexed_with_version")):
+                await set_meta("codegraph_indexed_with_version", iv)
+            if (ev := meta.get("indexed_with_extraction_version")):
+                await set_meta("codegraph_extraction_version", ev)
+            await set_meta("codegraph_head", _git_head_safe())
+    return result
+
+
+def _git_head_safe() -> str:
+    """``git rev-parse HEAD`` at snapshot time, or '' when not a git repo.
+
+    codegraph's db carries no git provenance — loomgraph records the HEAD the
+    snapshot was taken at so the graph's source revision is auditable (#152).
+    """
+    import subprocess as _sp
+
+    try:
+        r = _sp.run(
+            ["git", "rev-parse", "HEAD"], capture_output=True, text=True,
+            timeout=10, check=True,
+        )
+        return r.stdout.strip()
+    except Exception:
+        return ""
+
+
+def _update_codegraph(
+    workspace: str | None, repo: Path, ws_name: str | None
+) -> dict[str, Any] | None:
+    """codegraph backend update path (#152).
+
+    codegraph has no per-symbol content_hash → no incremental. Instead:
+    re-snapshot, compare the content fingerprint to the workspace's recorded
+    one; unchanged → noop (graph already current for this snapshot); changed
+    → clear rebuild. loomgraph never runs ``codegraph sync`` itself (the
+    user's tool to refresh the snapshot), so a noop also carries a hint to
+    run it when the working tree has moved ahead.
+
+    Returns the result dict, or None when output_error was already emitted.
+    """
+    import time
+
+    start_time = time.time()
+    click.echo("[1/2] Snapshotting .codegraph/...", err=True)
+    try:
+        entities, relations, summary, warnings = run_codegraph_export(repo)
+    except CodegraphDbMissingError as e:
+        output_error(
+            code=ErrorCode.INVALID_INPUT, message=str(e),
+            suggestion=CODEGRAPH_INSTALL_HINT,
+        )
+        return None
+    except CodegraphSchemaError as e:
+        output_error(
+            code=ErrorCode.STORAGE_ERROR,
+            message=f"codegraph schema mismatch: {e}",
+            suggestion="Re-run `codegraph index` to rebuild, or upgrade loomgraph",
+        )
+        return None
+
+    # 0-entity gate (same fail-loud contract as codeindex, #142).
+    safe, zero_warning = assess_export(summary, warnings)
+    if not safe:
+        click.echo(f"⚠️  WARNING: {zero_warning}", err=True)
+        output_error(
+            code=ErrorCode.GRAPH_EXPORT_EMPTY,
+            message=zero_warning or "codegraph snapshot returned 0 entities",
+        )
+        return None
+
+    # Fingerprint noop (#152): skip the clear-rebuild when the snapshot is
+    # unchanged. loomgraph never refreshes the codegraph db itself, so an
+    # unchanged snapshot means the post-commit hook is re-ingesting identical
+    # data — visible noop beats silent stale-graph-as-success.
+    new_fp = (summary.meta or {}).get("codegraph_fingerprint", "")
+    recorded_fp = ""
+
+    async def _peek_fingerprint() -> str:
+        from loomgraph.storage.factory import create_graph_store as _cgs
+
+        store = await _cgs(workspace=ws_name)
+        try:
+            get_meta = getattr(store, "get_meta", None)
+            if get_meta is None:
+                return ""
+            rec = await get_meta("codegraph_fingerprint")
+            return str(rec) if rec else ""
+        finally:
+            close = getattr(store, "close", None)
+            if close is not None:
+                await close()
+
+    try:
+        recorded_fp = asyncio.run(_peek_fingerprint())
+    except Exception:
+        recorded_fp = ""
+    if new_fp and recorded_fp and new_fp == recorded_fp:
+        click.echo(
+            "       codegraph snapshot unchanged — skipping rebuild. "
+            "Run `codegraph sync` if the working tree moved ahead.",
+            err=True,
+        )
+        return {
+            "skipped": True,
+            "reason": "codegraph_snapshot_unchanged",
+            "workspace": ws_name,
+            "mode": "codegraph_noop",
+            "fingerprint": new_fp,
+        }
+
+    click.echo("[2/2] Rebuilding knowledge graph...", err=True)
+    result = asyncio.run(
+        _async_index(entities, relations, workspace, clear=True,
+                     backend="codegraph", summary=summary)
+    )
+    duration = time.time() - start_time
+    result["duration_seconds"] = round(duration, 2)
+    result["repo_path"] = str(repo)
+    result["mode"] = "codegraph_rebuild"
+    click.echo(
+        f"       Done in {result['duration_seconds']}s ({result['mode']}).",
+        err=True,
+    )
+    if warnings:
+        result["warning"] = "; ".join(warnings)
     return result
 
 
@@ -356,12 +575,19 @@ def _zero_entities_warning(repo: Path, warnings: list[str] | None = None) -> str
 @click.option("--files", default=None, help="Comma-separated list of files to update (skips git detection)")
 @click.option("--embedding-url", default=None, help="Override embedding API URL from config")
 @click.option("--use-affected", is_flag=True, help="Use 'codeindex affected' instead of 'git diff' (smarter detection)")
+@click.option(
+    "--backend",
+    type=click.Choice(SUPPORTED_BACKENDS),
+    default=None,
+    help="Extraction backend override (default: workspace's recorded backend, #152)",
+)
 def update(
     since: str,
     workspace: str | None,
     files: str | None,
     embedding_url: str | None,
     use_affected: bool,
+    backend: str | None,
 ) -> None:
     """Update the knowledge graph (per-file warm-diff via git, 路 B).
 
@@ -406,6 +632,46 @@ def update(
         forced_whole_tree = True
 
     repo = Path(".").resolve()
+
+    # #152: resolve the workspace's backend BEFORE the codeindex gate — a
+    # codegraph workspace must not die with CODEINDEX_NOT_FOUND, and a bare
+    # `update` (no --backend) must route to the workspace's recorded backend.
+    ws_name = get_auto_workspace(workspace)
+    resolved_backend = backend or DEFAULT_BACKEND
+    if backend is None:
+        # Peek the workspace meta for a recorded backend (one-shot open +
+        # close). Runs in a worker thread so the close (an async WAL
+        # checkpoint) actually executes — the old `_peek_store.close()`
+        # produced an un-awaited coroutine, leaking the connection and
+        # skipping the checkpoint (codex review #172).
+        async def _peek_backend() -> str | None:
+            from loomgraph.storage.factory import create_graph_store as _cgs
+
+            store = await _cgs(workspace=ws_name)
+            try:
+                get_meta = getattr(store, "get_meta", None)
+                if get_meta is None:
+                    return None
+                recorded = await get_meta("extraction_backend")
+                return str(recorded) if recorded else None
+            finally:
+                close = getattr(store, "close", None)
+                if close is not None:
+                    await close()
+
+        try:
+            recorded = asyncio.run(_peek_backend())
+            if recorded:
+                resolved_backend = recorded
+        except Exception:
+            pass  # fresh workspace / non-existent: fall through to default
+
+    # codegraph backend takes a separate path (snapshot + fingerprint noop).
+    if resolved_backend == "codegraph":
+        result = _update_codegraph(workspace, repo, ws_name)
+        if result is not None:
+            output_success(result)
+        return
 
     # Step 1: Check codeindex
     click.echo("[1/3] Checking codeindex installation...", err=True)
@@ -514,6 +780,7 @@ def update(
             _async_update(
                 entities, relations, workspace, repo, since,
                 forced_whole_tree, config_rebuild=config_rebuild,
+                backend="codeindex",
             )
         )
     except Exception as e:
@@ -542,6 +809,7 @@ async def _async_update(
     since: str,
     forced_whole_tree: bool,
     config_rebuild: bool = False,
+    backend: str = DEFAULT_BACKEND,
 ) -> dict[str, Any]:
     """Branch update into per-file incremental (git) or whole-tree upsert.
 
@@ -625,7 +893,15 @@ async def _async_refresh(
     including untracked new files — so an agent that just edited a file can
     see it in the graph without committing first.
 
-    Branching:
+    Backend routing (#152): a codegraph workspace's recorded
+    ``extraction_backend`` meta is honored — refresh otherwise shells
+    codeindex into a codegraph workspace and ``ingest_incremental`` would GC
+    every codegraph symbol in changed files (graph destruction). On a
+    codegraph workspace, ``force_full`` re-snapshots + clear-rebuilds;
+    incremental refresh is not supported (codegraph has no content_hash) and
+    fails loud with a "use CLI update" hint.
+
+    codeindex branching:
 
     - ``force_full=True`` → ``ingest(clear=True)`` cold rebuild (like
       ``index --clear``).
@@ -639,6 +915,17 @@ async def _async_refresh(
 
     ws = get_auto_workspace(workspace)
     store = await create_graph_store(workspace=ws)
+
+    # #152: route by the workspace's recorded backend. A codegraph workspace
+    # has no content_hash → incremental refresh would GC codegraph symbols.
+    get_meta = getattr(store, "get_meta", None)
+    recorded_backend = None
+    if get_meta is not None:
+        recorded_backend = await get_meta("extraction_backend")
+    if recorded_backend == "codegraph":
+        return await _async_refresh_codegraph(
+            store, ws, repo, path, force_full
+        )
 
     if force_full:
         entities, relations, summary, warnings = run_graph_export(repo)
@@ -690,4 +977,52 @@ async def _async_refresh(
         result["mode"] = "whole_tree_upsert"
 
     result["workspace"] = ws
+    return result
+
+
+async def _async_refresh_codegraph(
+    store: Any,
+    ws: str | None,
+    repo: Path,
+    path: str | None,
+    force_full: bool,
+) -> dict[str, Any]:
+    """codegraph refresh (#152): re-snapshot + clear-rebuild on force_full.
+
+    codegraph has no per-symbol content_hash, so per-file incremental refresh
+    is impossible — ``ingest_incremental`` would GC codegraph symbols in the
+    changed set. Incremental refresh (path or working-tree) fails loud with a
+    "use CLI update" hint instead of silently destroying the graph.
+    """
+    if not force_full:
+        raise GraphExportEmptyError(
+            "incremental refresh is not supported on a codegraph workspace "
+            "(no per-symbol content_hash) — use `loomgraph update` (full "
+            "rebuild) or `force_full=true`"
+        )
+    entities, relations, summary, warnings = run_codegraph_export(repo)
+    safe, warning = assess_export(summary, warnings)
+    if not safe:
+        raise GraphExportEmptyError(
+            warning or "codegraph snapshot returned 0 entities"
+        )
+    result = await ingest(entities, relations, store, clear=True)
+    # Record backend + provenance (mirror _async_index — all fields, so a
+    # force_full refresh produces the same meta as a fresh index; codex review
+    # #172: the initial index records indexed_with_version/extraction_version
+    # too, and refresh must not drop them).
+    set_meta = getattr(store, "set_meta", None)
+    if set_meta is not None:
+        meta = summary.meta or {}
+        await set_meta("extraction_backend", "codegraph")
+        if (fp := meta.get("codegraph_fingerprint")):
+            await set_meta("codegraph_fingerprint", fp)
+        if (iv := meta.get("indexed_with_version")):
+            await set_meta("codegraph_indexed_with_version", iv)
+        if (ev := meta.get("indexed_with_extraction_version")):
+            await set_meta("codegraph_extraction_version", ev)
+        await set_meta("codegraph_head", _git_head_safe())
+    result["mode"] = "codegraph_rebuild"
+    result["workspace"] = ws
+    result["backend"] = "codegraph"
     return result

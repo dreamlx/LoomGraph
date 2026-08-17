@@ -34,6 +34,9 @@ def fakes(monkeypatch: pytest.MonkeyPatch) -> types.SimpleNamespace:
     ns.store = MagicMock()
     ns.store.insert_custom_kg = AsyncMock()
     ns.store.get_graph_stats = AsyncMock(return_value={"entities": 0, "relations": 0})
+    # #152: _async_refresh now reads extraction_backend meta to route codegraph
+    # workspaces. Default None → codeindex path (these fakes are codeindex).
+    ns.store.get_meta = AsyncMock(return_value=None)
     ns.create = AsyncMock(return_value=ns.store)
     # Default to a HEALTHY export (entity_count > 0). The 0-entity gate (#120)
     # would otherwise short-circuit every routing test to zero_entity_skipped.

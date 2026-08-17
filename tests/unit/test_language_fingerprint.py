@@ -117,9 +117,12 @@ def _patch_index_env(monkeypatch: pytest.MonkeyPatch, repo: Path) -> None:
         lambda r: ([EntityData("a", {}), EntityData("b", {})], [],
                    ImportSummary(entity_count=2), []),
     )
+    # Store with async set_meta (#152: _async_index now records extraction_backend).
+    store = MagicMock()
+    store.set_meta = AsyncMock(return_value=None)
     monkeypatch.setattr(
         "loomgraph.storage.factory.create_graph_store",
-        AsyncMock(return_value=MagicMock()),
+        AsyncMock(return_value=store),
     )
     monkeypatch.setattr(
         _indexing, "ingest",

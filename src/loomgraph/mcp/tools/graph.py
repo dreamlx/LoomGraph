@@ -16,11 +16,15 @@ TOOL_SPEC = Tool(
     name="loomgraph_graph",
     title="Walk graph relations from an entity",
     description=(
-        "Walk CALLS / INHERITS / IMPORTS edges of a SPECIFIC entity in the "
-        "loomgraph workspace. Returns callers (who calls this) and/or "
-        "callees (who this calls). Use AFTER `loomgraph_find` so you have "
-        "the exact qualified entity name. Direction defaults to `both`; "
-        "relation type defaults to `all`."
+        "Walk CALLS / INHERITS / IMPORTS / REFERENCES edges of a SPECIFIC "
+        "entity in the loomgraph workspace. Returns callers (who calls this) "
+        "and/or callees (who this calls). Use AFTER `loomgraph_find` so you "
+        "have the exact qualified entity name. Direction defaults to `both`; "
+        "relation type defaults to `all`. "
+        "#152 division of labor: for a fresh structural walk on a "
+        "codegraph-backed workspace, `codegraph_explore` is the narrower "
+        "tool; loomgraph_graph serves cross-time / snapshot-based traversal "
+        "(e.g. comparing what called X at the last index)."
     ),
     inputSchema={
         "type": "object",
@@ -40,7 +44,7 @@ TOOL_SPEC = Tool(
             },
             "relation_type": {
                 "type": "string",
-                "enum": ["CALLS", "INHERITS", "IMPORTS", "all"],
+                "enum": ["CALLS", "INHERITS", "IMPORTS", "REFERENCES", "all"],
                 "description": "Filter by relation type. Default all.",
                 "default": "all",
             },

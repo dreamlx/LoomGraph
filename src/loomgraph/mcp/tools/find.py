@@ -21,7 +21,11 @@ TOOL_SPEC = Tool(
         "in the loomgraph workspace. Returns up to `limit` matches each with "
         "entity name, type, source_id (file:line), and a relevance score. "
         "Use this FIRST to discover the exact qualified name of an entity "
-        "before walking the call graph with `loomgraph_graph`."
+        "before walking the call graph with `loomgraph_graph`. "
+        "#152 division of labor: if `codegraph_explore` is available and you "
+        "need a fresh structural lookup, prefer it (per-call fresh); use "
+        "loomgraph_find for cross-time / cross-workspace names loomgraph "
+        "already indexed."
     ),
     inputSchema={
         "type": "object",

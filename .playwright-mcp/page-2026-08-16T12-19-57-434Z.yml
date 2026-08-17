@@ -1,0 +1,104 @@
+- generic [ref=f35e4]:
+  - banner [ref=f35e5]:
+    - generic [ref=f35e7]:
+      - link [ref=f35e8] [cursor=pointer]:
+        - /url: /
+      - generic [ref=f35e12]:
+        - link "Home" [ref=f35e14] [cursor=pointer]:
+          - /url: /home
+        - link "Models" [ref=f35e17] [cursor=pointer]:
+          - /url: /models
+        - link "Datasets" [ref=f35e20] [cursor=pointer]:
+          - /url: /datasets
+        - link "Studios" [ref=f35e23] [cursor=pointer]:
+          - /url: /studios
+        - link "Spotlight" [ref=f35e26] [cursor=pointer]:
+          - /url: /spotlight
+        - generic [ref=f35e28]: Community
+        - link "Skills" [ref=f35e35] [cursor=pointer]:
+          - /url: /skills
+        - link "MCP" [ref=f35e39] [cursor=pointer]:
+          - /url: /mcp
+        - link "Civision" [ref=f35e44] [cursor=pointer]:
+          - /url: /aigc
+      - generic [ref=f35e48]:
+        - link [ref=f35e50] [cursor=pointer]:
+          - /url: https://github.com/modelscope
+        - generic [ref=f35e54] [cursor=pointer]
+        - img [ref=f35e55] [cursor=pointer]
+        - button "search" [ref=f35e59] [cursor=pointer]
+      - button "Magic Cube" [ref=f35e63] [cursor=pointer]:
+        - img "Magic Cube" [ref=f35e64]
+        - generic [ref=f35e65]: "250"
+      - generic [ref=f35e68] [cursor=pointer]
+  - main [ref=f35e77]:
+    - generic [ref=f35e79]:
+      - generic [ref=f35e80]:
+        - generic [ref=f35e83]:
+          - generic [ref=f35e86]:
+            - generic [ref=f35e88]:
+              - generic [ref=f35e89]: /LoomGraph-embed
+              - img [ref=f35e90] [cursor=pointer]
+            - generic [ref=f35e93]:
+              - generic [ref=f35e94] [cursor=pointer]: Like
+              - generic [ref=f35e99]: Collections
+          - generic [ref=f35e107]:
+            - link "@" [ref=f35e109] [cursor=pointer]:
+              - /url: /profile/undefined
+            - separator [ref=f35e110]
+            - text: 0 downloads
+            - separator [ref=f35e111]
+            - text: updated Aug 16,2026
+        - generic [ref=f35e114]:
+          - generic [ref=f35e115]:
+            - tablist [ref=f35e116]:
+              - generic [ref=f35e118]:
+                - tab [ref=f35e120] [cursor=pointer]:
+                  - link "Model card" [ref=f35e121]:
+                    - /url: /models/dreamlinx/LoomGraph-embed
+                - tab [ref=f35e124] [cursor=pointer]:
+                  - link "Files and versions" [ref=f35e125]:
+                    - /url: /models/dreamlinx/LoomGraph-embed/files
+                - tab [ref=f35e128] [cursor=pointer]:
+                  - link "Discussions" [ref=f35e129]:
+                    - /url: /models/dreamlinx/LoomGraph-embed/feedback
+                - tab [selected] [ref=f35e132] [cursor=pointer]:
+                  - link "Setting" [ref=f35e133]:
+                    - /url: /models/dreamlinx/LoomGraph-embed/settings
+            - generic:
+              - generic:
+                - tabpanel "Setting"
+          - generic [ref=f35e136] [cursor=pointer]
+      - generic [ref=f35e141]:
+        - generic [ref=f35e142]:
+          - generic [ref=f35e143]:
+            - text: Basic model information
+            - link "Edit" [ref=f35e144] [cursor=pointer]:
+              - /url: /models/edit?target=undefined/undefined&orgName=undefined
+          - generic [ref=f35e150]:
+            - generic [ref=f35e151]:
+              - generic [ref=f35e152]: Owner：
+              - generic [ref=f35e153]: "--"
+            - generic [ref=f35e154]:
+              - generic [ref=f35e155]: Licence：
+              - generic [ref=f35e156]: "--"
+            - generic [ref=f35e157]: Visibility：
+            - generic [ref=f35e159]:
+              - generic [ref=f35e160]: Description：
+              - generic [ref=f35e161]: "--"
+        - generic [ref=f35e164]:
+          - generic [ref=f35e165]: Model Settings
+          - generic [ref=f35e166]:
+            - generic [ref=f35e167] [cursor=pointer]: Set as Public Model
+            - generic [ref=f35e168] [cursor=pointer]: Set as private model
+            - generic [ref=f35e169] [cursor=pointer]: Set as Gated Access
+            - generic [ref=f35e170]: Rename
+            - generic [ref=f35e173]: Transfer
+            - generic [ref=f35e176] [cursor=pointer]: Delete
+    - generic [ref=f35e177]:
+      - generic [ref=f35e178]: © 2022-2026 ModelScope.cn All rights reserved
+      - generic [ref=f35e179]:
+        - link [ref=f35e181] [cursor=pointer]:
+          - /url: https://github.com/modelscope
+        - link [ref=f35e186] [cursor=pointer]:
+          - /url: https://x.com/ModelScope2022

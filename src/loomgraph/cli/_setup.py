@@ -21,6 +21,48 @@ from loomgraph.cli._deps_check import check_codeindex, check_embedding, check_st
 from loomgraph.cli.main import main
 from loomgraph.core.config import get_settings
 
+# Languages where codegraph (@colbymchenry/codegraph, 33-lang TS+Rust) is the
+# stronger extraction backend (codeindex has historical blind spots: TS alias
+# #139/#140, Java caller naming #76, and only 7 languages total). Kept as a
+# named set for the recommendation message + future status detail, even though
+# _backend_recommendation currently keys off the #161 fingerprint directly.
+_CODEGRAPH_STRONG_LANGS = {
+    "typescript", "javascript", "java", "swift", "objc",
+}
+
+
+def _backend_recommendation() -> dict[str, Any] | None:
+    """Non-enforcing extraction-backend hint based on the repo's language
+    fingerprint (#152, reuses #161 helpers). Returns None when nothing
+    actionable surfaces (Python/PHP repo, or not in a repo)."""
+    from loomgraph.cli._indexing import (
+        _effective_languages,
+        _language_fingerprint_warning,
+    )
+
+    try:
+        repo = Path.cwd()
+    except Exception:
+        return None
+    # Reuse the #161 fingerprint: it already counts source files per language
+    # (vendored dirs excluded) and knows the effective languages. When it
+    # fires, the repo's dominant language is misconfigured-for-codeindex —
+    # exactly the codegraph-recommendation trigger.
+    fp = _language_fingerprint_warning(repo)
+    if not fp:
+        return None
+    langs = _effective_languages(repo)
+    return {
+        "recommended_backend": "codegraph",
+        "reason": (
+            "codegraph (33 langs) extracts TS/Java/mobile/multi-language "
+            "repos more completely than codeindex (7 langs)"
+        ),
+        "detected_signal": fp,
+        "current_effective_languages": sorted(langs),
+        "install": "npm i -g @colbymchenry/codegraph && codegraph init",
+    }
+
 
 @main.command()
 def status() -> None:
@@ -97,6 +139,15 @@ def status() -> None:
         },
         "dependencies": dependencies,
     }
+
+    # #152: extraction-backend recommendation (non-enforcing). codegraph
+    # (@colbymchenry/codegraph, 33 langs) outperforms codeindex on TS/Java/
+    # multi-language/mobile; codeindex (7 langs) stays the default for
+    # Python/PHP. Reuses the #161 language fingerprint to detect the repo's
+    # dominant languages without re-walking the tree.
+    rec = _backend_recommendation()
+    if rec:
+        data["backend_recommendation"] = rec
 
     if not storage_status.get("connected"):
         output_partial_error(

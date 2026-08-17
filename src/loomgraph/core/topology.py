@@ -119,9 +119,12 @@ def _is_whitelisted_orphan(name: str, source_id: str = "") -> bool:
     if "models.py" in source_id or "/models/" in source_id:
         return True
 
-    # Namespaced methods (.to_dict, .__post_init__, etc.)
-    if "." in name:
-        base_name, method_name = name.rsplit(".", 1)
+    # Namespaced methods (.to_dict, .__post_init__, etc.).
+    # #152: codegraph uses `::` (Class::method) alongside codeindex's `.` —
+    # split on whichever separator the name carries.
+    sep = "::" if "::" in name else ("." if "." in name else None)
+    if sep:
+        base_name, method_name = name.rsplit(sep, 1)
         if method_name in WHITELIST_ORPHANS:  # e.g., "to_dict", "__post_init__"
             return True
         # Dunder methods (called by runtime)
@@ -129,8 +132,11 @@ def _is_whitelisted_orphan(name: str, source_id: str = "") -> bool:
             return True
 
     # Suffix patterns (Analyzer, Extractor, Parser, etc.)
-    # Extract the class name (before the last dot if namespaced)
-    class_name = name.split(".")[-1] if "." not in name else name.split(".")[0]
+    # Extract the owning class name = the FIRST segment (before the separator)
+    # so `FooConfig.method` / `FooConfig::method` checks "FooConfig" against
+    # the suffix patterns, not "method" (codex review #172: rsplit[-1] took
+    # the method name and regressed orphan whitelisting for namespaced names).
+    class_name = name.split(sep)[0] if sep else name
     if any(class_name.endswith(pattern) for pattern in ORPHAN_SUFFIX_PATTERNS):
         return True
 
@@ -385,7 +391,13 @@ class TopologyAnalyzer:
 
         orphans, hubs, gods, stats = await asyncio.gather(
             self.client.get_orphan_entities(
-                exclude_types=["module"], source_prefix=filter_prefix
+                # #152: codegraph backend ingests file nodes as first-class
+                # entities (64% of calls edges originate at a file node).
+                # Excluding both "module" and "file" keeps leaf files (no
+                # stored relations) off the orphan list and out of god/hub
+                # degree counts (a file's out-degree is ~19 avg → every file
+                # would be a god function otherwise).
+                exclude_types=["module", "file"], source_prefix=filter_prefix
             ),
             self.client.get_degree_distribution(
                 direction="in",
@@ -429,8 +441,13 @@ class TopologyAnalyzer:
             return not _is_whitelisted_orphan(name, source_id)
 
         def _keep_hub(item: dict[str, Any]) -> bool:
-            """Filter hubs, excluding whitelisted utilities."""
+            """Filter hubs, excluding whitelisted utilities + file/module
+            entities (#152: a file's out-degree is structural containment,
+            not a coupling signal — excluding it from hubs too, not just
+            orphans/gods)."""
             if not _keep(item):
+                return False
+            if item.get("entity_type") in ("module", "file"):
                 return False
             name = _server_name(item)
             # Exclude whitelisted hubs (public utilities)
@@ -446,7 +463,7 @@ class TopologyAnalyzer:
         hubs = [h for h in hubs if _keep_hub(h)]
         gods = [
             g for g in gods
-            if _keep(g) and g.get("entity_type") != "module"
+            if _keep(g) and g.get("entity_type") not in ("module", "file")
         ]
 
         # Normalize field names to match client-side format
@@ -637,10 +654,10 @@ class TopologyAnalyzer:
                         aggregated_out_degree[name] = []
                     aggregated_out_degree[name].extend(out_degree[init_name])
 
-        # Detect orphans (0 in + 0 out, exclude module type and whitelisted)
+        # Detect orphans (0 in + 0 out, exclude module/file type and whitelisted)
         orphans = []
         for name, entity in entity_map.items():
-            if entity.get("entity_type", "") == "module":
+            if entity.get("entity_type", "") in ("module", "file"):
                 continue
             # Use aggregated degrees (includes constructor relations for classes)
             if name not in aggregated_in_degree and name not in aggregated_out_degree:
@@ -672,6 +689,11 @@ class TopologyAnalyzer:
                 if name in WHITELIST_HUBS:
                     continue
                 entity = entity_map[name]
+                # #152: file/module entities have structural in-degree
+                # (containment) not a coupling signal — exclude from hubs
+                # too, mirroring the server-side _keep_hub and the god path.
+                if entity.get("entity_type", "") in ("module", "file"):
+                    continue
                 source_id = entity.get("source_id", "")
                 # Exclude by file pattern (common utilities)
                 if "_common.py" in source_id or "/config.py" in source_id:
@@ -691,7 +713,7 @@ class TopologyAnalyzer:
         ):
             if len(callees) >= self.god_threshold and name in entity_map:
                 entity = entity_map[name]
-                if entity.get("entity_type", "") == "module":
+                if entity.get("entity_type", "") in ("module", "file"):
                     continue
                 god_functions.append({
                     "entity": name,

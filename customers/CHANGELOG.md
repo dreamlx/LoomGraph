@@ -4,6 +4,31 @@
 
 ---
 
+---
+
+## [Unreleased] 预告 — codegraph 提取后端 (#152)
+
+> **本条为预告,未发版。** 安装方式不变;codegraph 后端需额外 `npm i -g @colbymchenry/codegraph`。
+
+### 新增 — 第二提取后端 codegraph(可选)
+
+- `loomgraph index --backend codegraph`:除默认 codeindex 外,可选用 codegraph
+  (`@colbymchenry/codegraph`,33 语言 TS+Rust)做提取源。**多语言 / TS / Java /
+  移动端仓库**的图质量显著优于 codeindex(实测:Java DI / TS `@` 别名 / Python
+  跨文件结构检查,codeindex 5.3% / 3.2% / 20.9% vs codegraph 100% joinability)。
+- 每 workspace 单源:codegraph 与 codeindex 是并联关系,不互相污染;同一 repo
+  可分别建两个 workspace 对比。`update` 不带 `--backend` 时自动沿用该 workspace
+  建库时的后端(不会把 codegraph 图洗成 codeindex 图)。
+- **谁该用**:TS/Java/多语言/移动端仓库 → 建议 codegraph;纯 Python/PHP → 继续
+  codeindex(默认不变)。`loomgraph status` 会按仓库语言指纹给一条非强制建议。
+- codegraph 的图自己维护在 `.codegraph/codegraph.db`(WAL);loomgraph 只读快照、
+  从不修改它、也不替你跑 `codegraph sync`——快照没变时 `update` 返回 noop 并提示
+  你手动 sync,而不是静默重灌一份陈旧图。
+- MCP:codegraph workspace 上,与 `codegraph_explore` 重叠的 `loomgraph_find` /
+  `loomgraph_graph` 自动从工具列表隐藏(仍可调用,`LOOMGRAPH_MCP_TOOLS=all` 可强制全量)。
+
+---
+
 ## [0.18.1] - 2026-08-17
 
 > **更新方式**: `pipx upgrade loomgraph`(已装 `[embed]` extra 的用 `pipx upgrade loomgraph --include-extra`)

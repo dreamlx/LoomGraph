@@ -79,6 +79,16 @@ _register(t_evolution_track.TOOL_SPEC, t_evolution_track.handle)
 _register(t_sync_advice.TOOL_SPEC, t_sync_advice.handle)
 
 
+# Tools that overlap codegraph's `codegraph_explore` (single-tool structural
+# queries, fresh per-call). On a codegraph-backed workspace these are unlisted
+# so an agent picks the narrower, fresher codegraph tool instead of diluting
+# its salience across two near-identical query surfaces (#152 adaptive surface).
+# Unlisted ≠ removed: call_tool still serves them, and LOOMGRAPH_MCP_TOOLS=all
+# forces the full list (parity with codegraph's CODEGRAPH_MCP_TOOLS philosophy).
+_CODEGRAPH_OVERLAP_TOOLS = {"loomgraph_find", "loomgraph_graph"}
+ALL_TOOLS_ENV = "LOOMGRAPH_MCP_TOOLS"
+
+
 def build_server() -> Server:
     """Construct the MCP Server instance with all tools registered.
 
@@ -87,7 +97,7 @@ def build_server() -> Server:
     """
 
     async def list_tools(ctx: Any, params: Any) -> ListToolsResult:
-        return ListToolsResult(tools=list(_TOOL_SPECS))
+        return ListToolsResult(tools=_visible_tool_specs())
 
     async def call_tool(ctx: Any, params: Any) -> CallToolResult:
         name = params.name
@@ -121,6 +131,108 @@ def build_server() -> Server:
         on_list_tools=list_tools,
         on_call_tool=call_tool,
     )
+
+
+def _visible_tool_specs() -> list[Tool]:
+    """The tool list an agent sees, minus codegraph-overlap tools when the
+    active workspace is codegraph-backed (#152).
+
+    Detection reads the workspace's ``extraction_backend`` meta (the same
+    signal `update`/`refresh` route on) — NOT cwd/``which codegraph``, which
+    are unreliable (serve cwd ≠ queried workspace; installed-for-another-
+    project would hide tools on every codeindex workspace). LOOMGRAPH_MCP_TOOLS
+    =all forces the full list. Falls back to the full list when the workspace
+    can't be opened (no workspace yet, or non-codegraph) — the default stays
+    the full list until a codegraph workspace is actually queried.
+
+    NOTE: callers may be sync (tests) or async (the real ``list_tools``
+    handler runs inside the MCP event loop). The event-loop case is why this
+    returns a non-coroutine but defers the meta read to a thread —
+    ``asyncio.run()`` inside an active loop raises ``RuntimeError``, which
+    the bare ``except`` would swallow, silently defeating the unlist (codex
+    review #172).
+    """
+    import os
+
+    if os.environ.get(ALL_TOOLS_ENV, "").lower() == "all":
+        return list(_TOOL_SPECS)
+    if not _active_workspace_is_codegraph():
+        return list(_TOOL_SPECS)
+    return [t for t in _TOOL_SPECS if t.name not in _CODEGRAPH_OVERLAP_TOOLS]
+
+
+def _active_workspace_is_codegraph() -> bool:
+    """True when the active workspace's recorded extraction_backend is codegraph.
+
+    Resolves the workspace the same way the query tools do (per-call arg >
+    server default env > CLI auto-detect from cwd/git), opens it, and reads
+    the meta. Any failure (no workspace, unreadable, no meta) → False (the
+    default full list is the safe fallback).
+
+    The SQLite read runs via ``asyncio.run``. When ``list_tools`` is already
+    inside the MCP event loop, ``asyncio.run`` raises ``RuntimeError``; we
+    catch that and run the peek in a worker thread (which has no event loop,
+    so ``asyncio.run`` works there). Without this the RuntimeError was
+    swallowed → codegraph workspaces always saw the full list (codex review
+    #172 — adaptive unlist was nonfunctional).
+    """
+    import os
+
+    from loomgraph.cli._common import get_auto_workspace
+    from loomgraph.mcp.tools._common import DEFAULT_WORKSPACE_ENV
+
+    ws_arg = os.environ.get(DEFAULT_WORKSPACE_ENV)
+    ws = ws_arg or get_auto_workspace(None)
+    if not ws:
+        return False
+    return _detect_backend_sync(ws) == "codegraph"
+
+
+def _detect_backend_sync(ws: str) -> str | None:
+    """Run the meta peek, handling the nested-event-loop case by thread-fallback.
+
+    When the MCP ``list_tools`` handler is already inside the event loop,
+    ``asyncio.run`` would raise (and the already-created coroutine would
+    warn "never awaited"). Detect the running loop first and route to a
+    worker thread up front (codex review #172)."""
+    import asyncio
+    import concurrent.futures
+
+    try:
+        asyncio.get_running_loop()
+        in_loop = True
+    except RuntimeError:
+        in_loop = False
+
+    if not in_loop:
+        try:
+            return asyncio.run(_peek_backend_meta(ws))
+        except Exception:
+            return None
+
+    # We're inside the MCP event loop — run in a worker thread (which has
+    # no loop, so asyncio.run works there).
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+        return ex.submit(
+            lambda: asyncio.run(_peek_backend_meta(ws))
+        ).result()
+
+
+async def _peek_backend_meta(ws: str) -> str | None:
+    """Open ``ws`` and return its recorded extraction_backend meta (or None)."""
+    from loomgraph.storage.factory import create_graph_store
+
+    store = await create_graph_store(workspace=ws)
+    try:
+        get_meta = getattr(store, "get_meta", None)
+        if get_meta is None:
+            return None
+        recorded = await get_meta("extraction_backend")
+        return str(recorded) if recorded else None
+    finally:
+        close = getattr(store, "close", None)
+        if close is not None:
+            await close()
 
 
 async def serve_stdio() -> None:

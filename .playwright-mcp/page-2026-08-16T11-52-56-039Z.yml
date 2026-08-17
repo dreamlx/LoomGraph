@@ -1,0 +1,114 @@
+- generic [ref=f14e1]:
+  - generic [ref=f14e4]:
+    - banner [ref=f14e5]:
+      - generic [ref=f14e7]:
+        - link [ref=f14e8] [cursor=pointer]:
+          - /url: /
+        - generic [ref=f14e12]:
+          - link "Home" [ref=f14e14] [cursor=pointer]:
+            - /url: /home
+          - link "Models" [ref=f14e17] [cursor=pointer]:
+            - /url: /models
+          - link "Datasets" [ref=f14e20] [cursor=pointer]:
+            - /url: /datasets
+          - link "Studios" [ref=f14e23] [cursor=pointer]:
+            - /url: /studios
+          - link "Spotlight" [ref=f14e26] [cursor=pointer]:
+            - /url: /spotlight
+          - generic [ref=f14e28]: Community
+          - link "Skills" [ref=f14e35] [cursor=pointer]:
+            - /url: /skills
+          - link "MCP" [ref=f14e39] [cursor=pointer]:
+            - /url: /mcp
+          - link "Civision" [ref=f14e44] [cursor=pointer]:
+            - /url: /aigc
+        - generic [ref=f14e48]:
+          - link [ref=f14e50] [cursor=pointer]:
+            - /url: https://github.com/modelscope
+          - generic [ref=f14e54] [cursor=pointer]
+          - img [ref=f14e86] [cursor=pointer]
+          - button "search" [ref=f14e56] [cursor=pointer]
+        - button "Magic Cube" [ref=f14e60] [cursor=pointer]:
+          - img "Magic Cube" [ref=f14e61]
+          - generic [ref=f14e89]: "250"
+        - generic [ref=f14e90] [cursor=pointer]
+    - main [ref=f14e71]:
+      - generic [ref=f14e99]:
+        - generic [ref=f14e101]:
+          - generic [ref=f14e108] [cursor=pointer]:
+            - generic [ref=f14e109]:
+              - paragraph [ref=f14e110]: dreamlinx
+              - link [ref=f14e111]:
+                - /url: /my/accountsettings
+                - paragraph [ref=f14e112]
+            - generic [ref=f14e116]:
+              - paragraph [ref=f14e117]: Profile
+              - paragraph [ref=f14e118]
+          - menu [ref=f14e122]:
+            - menuitem "Overview" [ref=f14e123] [cursor=pointer]
+            - menuitem "Profile" [ref=f14e128] [cursor=pointer]
+            - menuitem "My ModelScope" [ref=f14e133] [cursor=pointer]
+            - menuitem "Favorites" [ref=f14e138] [cursor=pointer]
+            - menuitem "Access Control Connected App" [ref=f14e143] [cursor=pointer]:
+              - generic [ref=f14e147]:
+                - text: Access Control
+                - generic [ref=f14e148]: Connected App
+          - generic [ref=f14e150]:
+            - generic [ref=f14e151]:
+              - generic [ref=f14e155]: Organization
+              - link [ref=f14e156] [cursor=pointer]:
+                - /url: /organization/create
+                - button [ref=f14e157]
+            - generic [ref=f14e162]: None yet
+        - generic [ref=f14e166]:
+          - generic [ref=f14e415]:
+            - tablist [ref=f14e416]:
+              - generic [ref=f14e418]:
+                - tab "Access Tokens" [selected] [ref=f14e420] [cursor=pointer]
+                - tab "OAuth Connected Apps" [ref=f14e422] [cursor=pointer]
+                - tab "Agent Identity" [ref=f14e424] [cursor=pointer]
+            - generic:
+              - generic:
+                - tabpanel "Access Tokens"
+          - generic [ref=f14e425]:
+            - generic [ref=f14e426]:
+              - text: ModelScope Token
+              - button "Create Your Token" [ref=f14e428] [cursor=pointer]
+            - generic [ref=f14e430]:
+              - generic [ref=f14e431]:
+                - text: Access tokens authenticate your identity for
+                - link "accessing restricted resources" [ref=f14e432] [cursor=pointer]:
+                  - /url: /docs/accounts/token
+                - text: on ModelScope.
+              - generic [ref=f14e433]: 10 / 10 tokens remaining
+      - generic [ref=f14e73]:
+        - generic [ref=f14e74]: © 2022-2026 ModelScope.cn All rights reserved
+        - generic [ref=f14e75]:
+          - link [ref=f14e77] [cursor=pointer]:
+            - /url: https://github.com/modelscope
+          - link [ref=f14e82] [cursor=pointer]:
+            - /url: https://x.com/ModelScope2022
+  - generic [ref=f14e442]:
+    - dialog "New ModelScope Token":
+      - generic [ref=f14e443]:
+        - button "Close" [ref=f14e444] [cursor=pointer]
+        - generic [ref=f14e449]: New ModelScope Token
+        - generic [ref=f14e455]:
+          - generic [ref=f14e456]: Write permission token
+          - generic [ref=f14e457]: Enter a token name and click "Create Token" to generate it.
+          - generic [ref=f14e458]:
+            - textbox [ref=f14e464]
+            - generic [ref=f14e466]:
+              - generic "Token validity" [ref=f14e468]: "Token validity :"
+              - generic [ref=f14e472]:
+                - generic [ref=f14e473] [cursor=pointer]:
+                  - generic [ref=f14e474]:
+                    - radio "Long-term use" [checked]
+                  - text: Long-term use
+                - generic [ref=f14e475] [cursor=pointer]:
+                  - generic [ref=f14e476]:
+                    - radio "Short-term"
+                  - text: Short-term
+        - generic [ref=f14e481]:
+          - button "Cancel" [ref=f14e482] [cursor=pointer]
+          - button "Create Token" [ref=f14e484] [cursor=pointer]
