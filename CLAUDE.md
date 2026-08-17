@@ -307,6 +307,12 @@ mypy src/
 
 > 本地 SQLite，无需 docker / postgres（v0.11+ 起 LightRAG/Postgres 已移除）。
 
+## 整理 manifest
+<!-- 本项目连续工作后会留下的特有残留;/tidy 会把这些加进 inventory -->
+- 短命 feature/fix 分支(trunk-based squash-merge):`git branch --merged main` 不够——squash 合入后 `--merged` 看不到,但内容已落地。判落地用 `git diff --stat main <branch>` 方向:main 删多增少(删 N×增 1)= main 领先 = 已落地 → 可删本地分支;远端 stale tracking 用 `git branch -r -d` 直接删本地副本(走 `git remote prune` 需网络,常被代理卡超时)
+- 版本三处一致性:`pyproject.toml` / `customers/VERSION` / `CHANGELOG.md [Unreleased]`——bump 后 `python scripts/bump_version.py --check` 校验
+- `uv.lock` 在 `.gitignore`(项目作 lib 有意不入库):版本对齐是本地行为,`uv lock --upgrade-package <pkg>` 后 `uv sync` 验证,不进 commit
+
 ## 操作前必读清单（MUST READ）
 
 > **强制规则**：执行以下操作前，必须先读取对应文档。
