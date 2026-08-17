@@ -19,7 +19,7 @@ SUPPORTED_HOOKS = ["post-commit"]
 # only shell-inert characters are accepted (codex review on PR #169). Names
 # come from repo dirs / branch names where `:` `/` `.` `-` `_` are legit;
 # space/quote/$/backtick would split args or alter the script.
-_SAFE_WORKSPACE = re.compile(r"^[A-Za-z0-9._:/-]+$")
+_SAFE_WORKSPACE = re.compile(r"[A-Za-z0-9._:/-]+")
 
 
 def find_git_repo() -> Path:
@@ -98,7 +98,7 @@ def install_hook(hook_name: str, force: bool = False, workspace: str | None = No
     """
     if hook_name not in SUPPORTED_HOOKS:
         raise ValueError(f"Unsupported hook: {hook_name}")
-    if workspace is not None and not _SAFE_WORKSPACE.match(workspace):
+    if workspace is not None and not _SAFE_WORKSPACE.fullmatch(workspace):
         raise ValueError(
             f"Invalid workspace name {workspace!r}: allowed characters are "
             "letters, digits and . _ : / - (the name is baked into a bash hook)"

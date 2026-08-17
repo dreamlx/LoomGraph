@@ -389,3 +389,16 @@ def test_install_hook_rejects_unsafe_workspace_names(
 
     # Legitimate shapes pass (branch-bearing names include '/' and ':').
     assert install_hook("post-commit", workspace="loomgraph:feature/fix-160") is True
+
+
+def test_install_hook_rejects_trailing_newline_workspace(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`match()` accepts a trailing \\n (Python $ quirk) — fullmatch must not
+    (codex re-review NIT: field splitting would target another workspace)."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_git_repo(repo)
+    monkeypatch.chdir(repo)
+    with pytest.raises(ValueError):
+        install_hook("post-commit", workspace="safe\n")
