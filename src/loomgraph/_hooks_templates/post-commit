@@ -37,6 +37,12 @@ fi
 # Detect changed files
 CHANGED_FILES=$(git diff-tree --no-commit-id --name-only -r HEAD | wc -l | tr -d ' ')
 
+# Target workspace — baked in by `loomgraph hooks install -w <name>` (#160).
+# Empty = auto-detect (<repo-dir>:<branch>); set it when the repo was indexed
+# with a fixed workspace name, or the hook updates a different db than the
+# one you query.
+WORKSPACE_ARG=""
+
 if [ "$CHANGED_FILES" -eq 0 ]; then
     echo -e "${GREEN}✓ No files changed${NC}"
     exit 0
@@ -70,8 +76,10 @@ mkdir -p "$(dirname "$LOG_FILE")"
 
 if [ "$RUN_MODE" == "sync" ]; then
     echo -e "   ${CYAN}→ Running incremental update...${NC}"
-    loomgraph update 2>&1 | tee -a "$LOG_FILE"
-    EXIT_CODE=$?
+    loomgraph update $WORKSPACE_ARG 2>&1 | tee -a "$LOG_FILE"
+    # $? here is tee's exit code, not update's — read the first pipe element
+    # (found during #160 triage: failed updates were reported as ✓)
+    EXIT_CODE=${PIPESTATUS[0]}
 
     if [ $EXIT_CODE -eq 0 ]; then
         echo -e "${GREEN}✓ Knowledge graph updated${NC}\n"
@@ -80,7 +88,7 @@ if [ "$RUN_MODE" == "sync" ]; then
     fi
 else
     echo -e "   ${CYAN}→ Running update in background...${NC}"
-    nohup loomgraph update >> "$LOG_FILE" 2>&1 &
+    nohup loomgraph update $WORKSPACE_ARG >> "$LOG_FILE" 2>&1 &
     echo -e "${GREEN}✓ Update started (check log: $LOG_FILE)${NC}\n"
 fi
 
