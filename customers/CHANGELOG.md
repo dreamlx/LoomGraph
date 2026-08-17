@@ -4,6 +4,24 @@
 
 ---
 
+## [0.18.1] - 2026-08-17
+
+> **更新方式**: `pipx upgrade loomgraph`(已装 `[embed]` extra 的用 `pipx upgrade loomgraph --include-extra`)
+
+### 修复 — post-commit hook 系列(首批外部项目实战反馈)
+
+- **hook 不再写错库**:`loomgraph hooks install -w <名字>` 把 workspace 固化进 hook——此前 hook 里裸调 `update` 会自动检测成 `<repo>:<branch>`,和你用 `index -w <名字>` 建的库**分裂成两个**(改了代码但查询的库永远不更新)。已装 hook 的项目直接重跑一次 `install -w` 即可修复,无需 `--force`
+- **husky v9 项目 hook 不再静默失效**:检测到 `core.hooksPath=.husky/_` 时改装 `.husky/post-commit`(husky 的用户 hook 区)。`_` 目录是 husky 每次安装时重建的临时区,装进去的 hook 会被静默清除
+- **纯文档/配置 commit 不再卡顿**:`update` 先检查 git diff,没有受支持语言的文件变更时直接跳过全树导出(此前每次 commit 固定付全量导出,大仓库 ~9 秒)
+- **语言配置变更自动全量重建**:commit 里改了 `.codeindex.yaml`(如切换 `languages:`)时,`update` 自动清库重建(`mode: config_rebuild`)——配置变更会重塑整张图,增量路径处理不了它
+
+### 改进 — CLI 易用性
+
+- `-q` 写在子命令后面(`loomgraph find x -q`)时报错附正确用法提示(全局选项需前置)
+- 刷屏的 partial-graph 警告可在 `.loomgraph.yaml` 里静默:`warnings: {silence: ["partial-graph"]}`(substring 匹配;空实体安全诊断不受影响)
+
+---
+
 ## [0.18.0] - 2026-08-16
 
 ### 新增 — 内建零配置语义搜索 (#158)

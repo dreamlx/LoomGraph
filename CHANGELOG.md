@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.1] - 2026-08-17
+
 ### Fixed — first external-project dogfood batch (HEXFORCE-RN / BlueHawkLock)
 - `hooks install -w <name>` bakes the workspace into the post-commit hook so
   it updates the db the user actually indexed; previously the hook's bare
@@ -19,7 +21,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`${PIPESTATUS[0]}` — `$?` was tee's).
 - `update` short-circuits before the whole-tree export when the git diff
   touches no parsable source file — docs/config/shell-only commits no longer
-  pay the multi-second export via the post-commit hook (#165).
+  pay the multi-second export via the post-commit hook (#165). A diff that
+  touches a graph-affecting config (`.codeindex.yaml` / `.loomgraph.yaml`,
+  modified OR deleted — the gate reads `--diff-filter=ACMRD`) instead routes
+  to a clear rebuild (`mode: config_rebuild`): a `languages:` change reshapes
+  the whole graph, and the incremental path would have ingested nothing
+  (a config file is no entity's source_id).
 - `-q` placed after the subcommand (`loomgraph find x -q`) now gets a usage
   hint pointing at the global-flag form instead of a bare
   `No such option '-q'` (#163, #166).
