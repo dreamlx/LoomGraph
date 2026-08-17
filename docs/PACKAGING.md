@@ -34,6 +34,31 @@ python scripts/bump_version.py 0.16.0
 python scripts/bump_version.py --check
 ```
 
+### 1.5. self-dogfood gate（push tag 前必跑，人工执行）
+
+`release.yml` 跑 ruff + pytest，但 CI 测不到"装机后真实索引 + 查询链路是否
+正常"——v0.19.0 的 status/codeindex 路径漂移和 debt git 维度 cliff 都是 CI
+全绿却 ship 到 PyPI 的 bug，靠发版前在**目标装机环境**跑一遍自查才暴露。
+
+push `v*` tag 前在当前仓跑（.venv 已 `uv sync`，代表用户装机后的真实依赖）：
+
+```bash
+loomgraph index . --clear && loomgraph status && loomgraph debt --with-git
+```
+
+确认三点（任一异常 → **停，先修，不要打 tag**）：
+
+- `index`：`entities_created > 0`、`resolved_ratio` 非 0、无 `WARNING:`
+- `status`：`codeindex.version` 与 `loomgraph codeindex --version` **一致**
+  （`path` 应是 venv python，不是 PATH 上的别的 binary — #76 PATH-bypass
+  类的正反两面都靠这个判据抓）
+- `debt`：`overall_health.breakdown.git` 不是 0-cliff（有 git 信号的仓
+  应在 0–100 之间，不是非 0 即 100）；`issues[].source` 字段存在
+
+> 这是人工 gate，不做进 CI。CI 只跑静态测试；self-dogfood 是"装机后真值"
+> 的唯一来源。若自查发现 bug，修完重跑，**bug 修复不进同一 tag**（要么
+> 升 patch 重发，要么若已 push tag 删 tag 重打——但 PyPI 不可覆盖，慎之）。
+
 ### 2. commit + tag + push
 
 ```bash

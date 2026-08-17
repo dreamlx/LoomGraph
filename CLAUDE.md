@@ -313,7 +313,7 @@ mypy src/
 
 | 当你准备... | 先读... | 同步检查 |
 |------------|---------|---------|
-| 发版（`git tag vX.Y.Z`） | `docs/PACKAGING.md` | 确认三处版本一致 + release.yml 流程 |
+| 发版（`git tag vX.Y.Z`） | `docs/PACKAGING.md` §1.5 | **push tag 前必须先跑 self-dogfood gate**：`loomgraph index . --clear && loomgraph status && loomgraph debt --with-git`，确认 codeindex version 一致 + debt git 维度非 cliff。v0.19.0 两个 bug 都靠这个才暴露 |
 | 新增/修改/删除 CLI 命令 | 根 `README.md` + `loomgraph --help` | 同步 CLI 命令表 + 前置条件列 |
 | bump 版本 | `customers/CHANGELOG.md` + 根 `CHANGELOG.md` | 同步变更日志 |
 | 修改架构 | `docs/adr/` 对应 ADR | 确认是否需要新 ADR |
