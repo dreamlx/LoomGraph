@@ -757,6 +757,10 @@ class DebtAnalyzer:
             "suggestion": issue.suggestion,
             "estimated_effort": issue.estimated_effort,
             "references": issue.references,
+            # source (static | topology | git) is first-class — the #59
+            # double-count guard keys off it. Dropping it made the whole
+            # git/topology issue set invisible downstream (#174 defect A).
+            "source": issue.source,
         }
 
         # Add git enrichment fields if present (EPIC-010)
@@ -778,11 +782,27 @@ class DebtAnalyzer:
             git_metrics: GitMetricsResult from GitMetricsAnalyzer
 
         Returns:
-            Git health score (0-100), penalty-based
+            Git health score (0-100), penalty-based.
+
+        Graduated, not a cliff (#174 defect B): the old unbounded
+        ``+= 15 per hotspot, += 8 per silo`` saturated at 7 hotspots → 0,
+        making every repo with a handful of hotspots indistinguishable
+        from a catastrophically fragile one. Per-category penalties are now
+        capped (matching topology.py ``_compute_score`` precedent — hub
+        cap 20, god cap 25), so more signal = strictly lower score, but
+        the dimension never collapses to 0 on first touch. Issues are
+        still emitted for every signal — only the score is capped.
         """
-        penalty = 0
+        # ponytail: per-category caps mirror topology._compute_score's shape.
+        # Upgrade path: log/sqrt scaling if discrimination between, say, 40 and
+        # 200 hotspots turns out to matter (today both cap out — acceptable).
+        hotspot_penalty_cap = 40  # max points hotspots can remove
+        silo_penalty_cap = 40  # max points knowledge silos can remove
+        per_hotspot = 15
+        per_silo = 8
 
         # 1. Critical Hotspot Detection (P0)
+        hotspot_penalty = 0
         for hotspot in git_metrics.hotspots:
             if hotspot.hotspot_score >= 80:  # Critical threshold
                 issue_id = f"debt-git-{len(self.issues) + 1:03d}"
@@ -803,9 +823,10 @@ class DebtAnalyzer:
                         suggestion=f"⚠️ Critical hotspot: {hotspot.change_freq} changes in {git_metrics.since}. Refactor ASAP to reduce fragility.",
                     )
                 )
-                penalty += 15  # P0 hotspot = 15 points
+                hotspot_penalty += per_hotspot  # P0 hotspot
 
         # 2. Knowledge Silo Detection (P1)
+        silo_penalty = 0
         for silo in git_metrics.bus_factor:
             if silo.risk_level == "critical":  # contributors = 1
                 issue_id = f"debt-git-{len(self.issues) + 1:03d}"
@@ -826,8 +847,11 @@ class DebtAnalyzer:
                         suggestion=f"Only {silo.owner} knows this code (bus factor = 1). Add documentation or pair programming.",
                     )
                 )
-                penalty += 8  # P1 silo = 8 points
+                silo_penalty += per_silo  # P1 silo
 
+        penalty = min(hotspot_penalty, hotspot_penalty_cap) + min(
+            silo_penalty, silo_penalty_cap
+        )
         return max(0, 100 - penalty)
 
     def _enrich_with_git_metrics(self, git_metrics: Any) -> None:

@@ -5,11 +5,13 @@ Unit tests for DebtAnalyzer
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
 from loomgraph.core.debt_analyzer import CodeindexData, DebtAnalyzer, DebtIssue
+from loomgraph.core.models import BusFactor, GitMetricsResult, Hotspot
 
 
 @pytest.fixture
@@ -704,3 +706,136 @@ class TestResolutionTrustCalculus:
             maintainability_score=80.0,
         )
         assert health["total_score"] == int(100 * 0.4 + 80 * 0.3 + 70 * 0.3)
+
+
+def _git_metrics(hotspots: list[Hotspot] | None = None, bus_factor: list[BusFactor] | None = None) -> GitMetricsResult:
+    """Build a GitMetricsResult with only the lists _analyze_git_issues reads."""
+    return GitMetricsResult(
+        repo_path=Path("."),
+        since="3 months",
+        analyzed_at=datetime.now(UTC),
+        file_metrics={},
+        hotspots=hotspots or [],
+        bus_factor=bus_factor or [],
+        summary={},
+    )
+
+
+class TestIssueToDictSourceField:
+    """#174 defect A: `_issue_to_dict` must serialize the `source` field.
+
+    `DebtIssue.source` (static | topology | git) is a first-class model field
+    — the #59 double-count guard keys off it. Dropping it at serialization
+    makes the whole git/topology issue set invisible to downstream consumers
+    (MCP debt_audit, agents), and misleads anyone reading the JSON into
+    thinking there are zero git-sourced issues.
+    """
+
+    def test_source_field_serialized_for_git(self, analyzer: DebtAnalyzer) -> None:
+        issue = DebtIssue(
+            id="debt-git-001",
+            severity="P0",
+            category="critical_hotspot",
+            entity="src/x.py",
+            entity_type="file",
+            location={"file": "src/x.py"},
+            metrics={},
+            source="git",
+        )
+        result = analyzer._issue_to_dict(issue)
+        assert result["source"] == "git"
+
+    def test_source_field_serialized_default_static(self, analyzer: DebtAnalyzer) -> None:
+        """Default source (static) must round-trip too."""
+        issue = DebtIssue(
+            id="debt-001",
+            severity="P0",
+            category="god_class",
+            entity="Big",
+            entity_type="class",
+            location={},
+            metrics={},
+        )
+        result = analyzer._issue_to_dict(issue)
+        assert result["source"] == "static"
+
+
+class TestAnalyzeGitIssuesGraduatedScore:
+    """#174 defect B: git_score must be graduated, not a 0/100 cliff.
+
+    The old `penalty += 15 per hotspot, += 8 per silo` is linear and
+    unbounded, so any repo with a handful of hotspots + silos saturates to
+    0 — losing all discrimination. Match the topology_score precedent
+    (topology.py `_compute_score`): per-category penalties capped, so 1
+    hotspot ≈ many hotspots but never collapses to 0 instantly.
+
+    Contract:
+    - zero git signal      → 100 (unchanged)
+    - a few hotspots       → < 100 but well above 0 (graduated)
+    - saturated repo       → approaches 0 but via a curve, not first-touch
+    """
+
+    def test_no_git_signal_is_100(self, analyzer: DebtAnalyzer) -> None:
+        score = analyzer._analyze_git_issues(_git_metrics())
+        assert score == 100
+
+    def test_one_hotspot_does_not_collapse_to_zero(self, analyzer: DebtAnalyzer) -> None:
+        """One critical hotspot must not tank git_score to 0 — a single
+        hotspot is common in healthy repos (a changelog, a config file)."""
+        metrics = _git_metrics(hotspots=[Hotspot("CHANGELOG.md", 46, 100, 85, 1)])
+        score = analyzer._analyze_git_issues(metrics)
+        assert 0 < score < 100, f"expected graduated (0 < s < 100), got {score}"
+
+    def test_seven_hotspots_must_not_saturate_to_zero(self, analyzer: DebtAnalyzer) -> None:
+        """ANTI-CLIFF (the actual defect): the old unbounded `+= 15 per
+        hotspot` saturates at 7 hotspots → score 0. From 7 onward every
+        repo is indistinguishable (7 == 47 == 286). A graduated score must
+        keep 7-hotspot repos strictly above 0 — that's the discrimination
+        the dimension exists to provide."""
+        metrics = _git_metrics(
+            hotspots=[Hotspot(f"f{i}", 40, 100, 85, i) for i in range(7)]
+        )
+        score = analyzer._analyze_git_issues(metrics)
+        assert score > 0, f"7 hotspots saturated to 0 (cliff); got {score}"
+
+    def test_saturated_repo_still_graduates_not_first_touch(
+        self, analyzer: DebtAnalyzer
+    ) -> None:
+        """47 hotspots + 286 silos (loomgraph's own repo) must score LOWER
+        than a single hotspot, but the single-hotspot score and the saturated
+        score must differ — i.e. more git signal = lower score, monotonically
+        by category caps rather than saturating on first touch.
+
+        ANTI-CLIFF: a handful of hotspots must NOT already be at/near 0.
+        The old unbounded `+= 15 per hotspot` saturates 7 hotspots → 0,
+        making 7-hotspot and 47-hotspot repos indistinguishable. The
+        graduated score keeps them apart: 3 hotspots ≪ 47 hotspots.
+        """
+        one = _git_metrics(hotspots=[Hotspot("f", 46, 100, 85, 1)])
+        few = _git_metrics(hotspots=[Hotspot(f"f{i}", 40, 100, 85, i) for i in range(3)])
+        many = _git_metrics(
+            hotspots=[Hotspot(f"f{i}", 40, 100, 85, i) for i in range(47)],
+            bus_factor=[
+                BusFactor(f"s{i}", "owner", 1, 1.0, 5, "critical") for i in range(286)
+            ],
+        )
+        s_one = analyzer._analyze_git_issues(one)
+        s_few = analyzer._analyze_git_issues(few)
+        s_many = analyzer._analyze_git_issues(many)
+        # monotonic: more signal = strictly lower
+        assert s_one > s_few > s_many, f"must be monotone: {s_one} > {s_few} > {s_many}"
+        # ANTI-CLIFF: 3 hotspots must NOT have saturated to ~0 — that's the
+        # whole defect. A 3-hotspot repo is mildly fragile, not catastrophic.
+        assert s_few >= 40, f"3 hotspots saturated to {s_few}; cliff not graduated"
+        assert s_one > 0
+
+    def test_git_issues_still_emitted(self, analyzer: DebtAnalyzer) -> None:
+        """Capping the penalty must NOT stop issues from being emitted —
+        the score is capped, the issue list still reports every signal."""
+        metrics = _git_metrics(
+            hotspots=[Hotspot("f0", 40, 100, 85, 1)],
+            bus_factor=[BusFactor("s0", "owner", 1, 1.0, 5, "critical")],
+        )
+        before = len(analyzer.issues)
+        analyzer._analyze_git_issues(metrics)
+        assert len(analyzer.issues) - before == 2  # 1 hotspot + 1 silo

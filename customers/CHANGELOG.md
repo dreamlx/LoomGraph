@@ -16,6 +16,19 @@
   `status` 报告的版本/path 与实际索引后端一致。**不影响索引结果**,只是
   排障时不再被误导。
 
+### 修复 — `debt --with-git` 的 git 维度:补回 source 字段 + 评分改为 graduated(#174)
+
+- **debt 报告的 issue 现在带 `source` 字段**(static / topology / git)。之前
+  序列化时漏了这个字段,导致所有 git/topology 来源的 issue 在 JSON 输出里
+  看不见(内存里有 333 个 git issue,输出里显示 0)。MCP `debt_audit` 和
+  agent 现在能按来源筛选 issue。
+- **git 维度评分从 cliff 改为 graduated**。旧的"每个 critical hotspot 扣 15、
+  每个 single-owner 文件扣 8"无上界,7 个 hotspot 就扣到 0——稍有热点的仓库
+  和灾难级脆弱的仓库打分无法区分。现在每类 penalty 有上限(hotspot 上限 40、
+  silo 上限 40,对齐 `topology` 维度的做法),信号越多分越低,但不会碰到第一个
+  hotspot 就塌到 0。issue 照常全部生成,只是分数有上限。loomgraph 自仓实测:
+  git 维度 0 → 20,总评 F → D。
+
 ---
 
 ## [0.19.0] - 2026-08-17

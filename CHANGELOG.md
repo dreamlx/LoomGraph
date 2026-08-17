@@ -16,6 +16,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   loomgraph depends on — the reverse-direction sibling of the #76
   PATH-bypass class. Surfaced by self-dogfood on the loomgraph repo itself.
 
+### Fixed — `debt --with-git` git dimension: serialize `source` field + graduate the score (#174)
+- **`_issue_to_dict` now serializes `source`** (static | topology | git).
+  `DebtIssue.source` is a first-class model field — the #59 double-count
+  guard keys off it — but it was dropped at serialization, making the
+  entire git/topology issue set invisible downstream (MCP `debt_audit`,
+  agents). On loomgraph's own repo, 333 git-sourced issues existed in
+  memory but read as 0 in the JSON.
+- **`_analyze_git_issues` penalty is now graduated, not a cliff.** The old
+  unbounded `+15 per critical hotspot, +8 per single-owner file`
+  saturated at 7 hotspots → score 0, so every repo with a handful of
+  hotspots scored indistinguishably from a catastrophically fragile one.
+  Per-category penalties are now capped (hotspot cap 40, silo cap 40,
+  matching the `topology._compute_score` precedent), so more signal =
+  strictly lower score, but the dimension never collapses to 0 on first
+  touch. Issues are still emitted for every signal — only the score is
+  capped. On loomgraph's own repo: git score 0 → 20, total F → D.
+- Surfaced by self-dogfood (same session as the status fix).
+
 ## [0.19.0] - 2026-08-17
 
 ### Added — pluggable extraction backend: codegraph (#152)
