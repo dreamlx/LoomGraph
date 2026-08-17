@@ -6,6 +6,18 @@
 
 ---
 
+## [Unreleased]
+
+### 修复 — `loomgraph status` 现在报告 loomgraph 实际调用的 codeindex
+
+- 之前 `status` 通过 PATH 查找 `codeindex`,可能命中一个与 `index` 实际使用
+  不同的安装(例如 pipx 上的 0.37.0 vs venv 钉住的版本)。现在改用与
+  `index`/`update` 相同的 `sys.executable -m codeindex.cli` 路径探测,
+  `status` 报告的版本/path 与实际索引后端一致。**不影响索引结果**,只是
+  排障时不再被误导。
+
+---
+
 ## [0.19.0] - 2026-08-17
 
 > **更新方式**: `pipx upgrade loomgraph`（已装 `[embed]` extra 的用 `pipx upgrade loomgraph --include-extra`）。codegraph 后端为可选项，需额外 `npm i -g @colbymchenry/codegraph`。

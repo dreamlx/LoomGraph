@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — `loomgraph status` reports the codeindex loomgraph actually invokes
+- `check_codeindex` now probes via `sys.executable -m codeindex.cli --version`
+  — the SAME pinned-env path `index` / `update` / `loomgraph codeindex` run
+  through. The old `shutil.which("codeindex")` PATH lookup could report a
+  different or stale install (e.g. pipx `0.37.0`) than the one `index` runs
+  (the venv-pinned dep), so `status` would lie about the version/path
+  loomgraph depends on — the reverse-direction sibling of the #76
+  PATH-bypass class. Surfaced by self-dogfood on the loomgraph repo itself.
+
 ## [0.19.0] - 2026-08-17
 
 ### Added — pluggable extraction backend: codegraph (#152)

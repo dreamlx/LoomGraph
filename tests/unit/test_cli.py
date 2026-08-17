@@ -1159,28 +1159,39 @@ class TestGraphCommand:
 class TestDependencyChecks:
     """Tests for dependency check functions."""
 
-    @patch("shutil.which")
-    def test_check_codeindex_not_found(self, mock_which: MagicMock) -> None:
-        """Test codeindex check when not installed."""
-        mock_which.return_value = None
+    @patch("loomgraph.cli._deps_check.subprocess.run")
+    def test_check_codeindex_not_found(self, mock_run: MagicMock) -> None:
+        """codeindex not importable in the venv -> installed=False.
+
+        Asserts on the pinned-env invocation (``sys.executable -m codeindex.cli``),
+        not a PATH ``shutil.which`` lookup — see _deps_check.check_codeindex.
+        """
+        mock_run.return_value = MagicMock(
+            returncode=1, stdout="", stderr="No module named codeindex"
+        )
         result = check_codeindex()
         assert result["installed"] is False
         assert "error" in result
 
-    @patch("subprocess.run")
-    @patch("shutil.which")
-    def test_check_codeindex_found(
-        self, mock_which: MagicMock, mock_run: MagicMock
-    ) -> None:
-        """Test codeindex check when installed."""
-        mock_which.return_value = "/usr/bin/codeindex"
+    @patch("loomgraph.cli._deps_check.subprocess.run")
+    def test_check_codeindex_found(self, mock_run: MagicMock) -> None:
+        """codeindex importable in the venv -> installed=True.
+
+        path is sys.executable (the env loomgraph actually runs codeindex in),
+        never a PATH-resolved binary that may be a different install.
+        """
+        import sys
+
         mock_run.return_value = MagicMock(
-            returncode=0, stdout="codeindex 1.0.0"
+            returncode=0, stdout="codeindex 1.0.0", stderr=""
         )
 
         result = check_codeindex()
         assert result["installed"] is True
-        assert result["path"] == "/usr/bin/codeindex"
+        assert result["path"] == sys.executable
+        # invoked via the pinned-env module path, not a bare PATH binary
+        cmd = mock_run.call_args[0][0]
+        assert cmd[1:] == ["-m", "codeindex.cli", "--version"]
 
     def test_check_storage_smoke(self) -> None:
         """check_storage opens an in-memory SQLite + loads sqlite-vec."""

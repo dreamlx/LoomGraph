@@ -2,30 +2,44 @@
 
 from __future__ import annotations
 
-import shutil
 import subprocess
+import sys
 from typing import Any
 
 
 def check_codeindex() -> dict[str, Any]:
-    """Check if codeindex CLI is available."""
-    codeindex_path = shutil.which("codeindex")
-    if not codeindex_path:
-        return {"installed": False, "error": "command not found"}
+    """Check if the codeindex loomgraph actually invokes is available.
 
+    Uses ``sys.executable -m codeindex.cli`` — the SAME pinned-env path
+    ``index`` / ``update`` / ``loomgraph codeindex`` run through
+    (graph_export_ingest.py, _codeindex.py). A PATH-resolved ``codeindex``
+    (the old ``shutil.which`` lookup) can be a different or stale install
+    (e.g. pipx), so reporting it would describe an install loomgraph never
+    runs — the reverse-direction sibling of the #76 PATH-bypass class.
+    """
     try:
         result = subprocess.run(
-            ["codeindex", "--version"],
+            [sys.executable, "-m", "codeindex.cli", "--version"],
             capture_output=True,
             text=True,
             timeout=5,
         )
-        version = result.stdout.strip() if result.returncode == 0 else "unknown"
-        return {"installed": True, "version": version, "path": codeindex_path}
     except subprocess.TimeoutExpired:
-        return {"installed": True, "version": "unknown", "path": codeindex_path}
+        return {"installed": False, "error": "codeindex --version timed out"}
     except Exception as e:
         return {"installed": False, "error": str(e)}
+
+    if result.returncode != 0:
+        return {
+            "installed": False,
+            "error": result.stderr.strip() or f"exit {result.returncode}",
+        }
+
+    return {
+        "installed": True,
+        "version": result.stdout.strip(),
+        "path": sys.executable,
+    }
 
 
 def check_storage(settings: Any) -> dict[str, Any]:
