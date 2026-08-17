@@ -1,0 +1,45 @@
+- generic [ref=f3e3]:
+  - generic [ref=f3e4]:
+    - img [ref=f3e5] [cursor=pointer]
+    - generic [ref=f3e8] [cursor=pointer]
+    - generic [ref=f3e9]:
+      - generic [ref=f3e10]: AI for everyone
+      - generic [ref=f3e11]: Forwarding AI development at a faster-pace
+  - iframe [ref=f3e14]:
+    - generic [ref=f5e3]:
+      - generic [ref=f5e4]:
+        - generic [ref=f5e5] [cursor=pointer]: Password
+        - generic [ref=f5e6] [cursor=pointer]: SMS verification code login
+      - generic [ref=f5e8]:
+        - text: 
+        - generic [ref=f5e9]:
+          - generic [ref=f5e10]:
+            - text: 
+            - generic [ref=f5e11]:
+              - text: Username
+              - textbox "Username" [ref=f5e12]
+          - generic [ref=f5e13]:
+            - text: 
+            - generic [ref=f5e14]:
+              - text: Password
+              - textbox "Enter password" [ref=f5e15]
+              - generic [ref=f5e16]: 
+          - generic [ref=f5e19]:
+            - checkbox "Read and agree to the 《User Agreement》 and 《Privacy Policy》" [ref=f5e20]
+            - generic [ref=f5e21]:
+              - text: Read and agree to the
+              - link "《User Agreement》" [ref=f5e22] [cursor=pointer]:
+                - /url: https://modelscope.cn/protocol/terms-privacy-policy
+              - text: and
+              - link "《Privacy Policy》" [ref=f5e23] [cursor=pointer]:
+                - /url: https://modelscope.cn/protocol/terms-privacy-policy
+          - generic [ref=f5e25]:
+            - generic [ref=f5e26]: Other login methods
+            - generic [ref=f5e27]:
+              - link "GitHub" [ref=f5e28] [cursor=pointer]:
+                - /url: javascript:;
+              - link "启悟账号登录" [ref=f5e29] [cursor=pointer]:
+                - /url: javascript:;
+          - link "Forgot password" [ref=f5e31] [cursor=pointer]:
+            - /url: https://passport.modelscope.cn/ac/password_find.htm?from_site=90&bizcode=modelscope&lang=en_US
+          - button "Log in" [ref=f5e33]

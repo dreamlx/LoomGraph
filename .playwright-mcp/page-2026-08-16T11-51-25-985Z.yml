@@ -1,0 +1,41 @@
+- generic [ref=f14e4]:
+  - banner [ref=f14e5]:
+    - generic [ref=f14e7]:
+      - link [ref=f14e8] [cursor=pointer]:
+        - /url: /
+      - generic [ref=f14e12]:
+        - link "Home" [ref=f14e14] [cursor=pointer]:
+          - /url: /home
+        - link "Models" [ref=f14e17] [cursor=pointer]:
+          - /url: /models
+        - link "Datasets" [ref=f14e20] [cursor=pointer]:
+          - /url: /datasets
+        - link "Studios" [ref=f14e23] [cursor=pointer]:
+          - /url: /studios
+        - link "Spotlight" [ref=f14e26] [cursor=pointer]:
+          - /url: /spotlight
+        - generic [ref=f14e28]: Community
+        - link "Skills" [ref=f14e35] [cursor=pointer]:
+          - /url: /skills
+        - link "MCP" [ref=f14e39] [cursor=pointer]:
+          - /url: /mcp
+        - link "Civision" [ref=f14e44] [cursor=pointer]:
+          - /url: /aigc
+      - generic [ref=f14e48]:
+        - link [ref=f14e50] [cursor=pointer]:
+          - /url: https://github.com/modelscope
+        - generic [ref=f14e54] [cursor=pointer]
+        - button "search" [ref=f14e56] [cursor=pointer]
+      - button "Magic Cube" [ref=f14e60] [cursor=pointer]:
+        - img "Magic Cube" [ref=f14e61]
+      - button "loading login / register" [ref=f14e65]:
+        - img "loading" [ref=f14e67]
+        - generic [ref=f14e70]: login / register
+  - main [ref=f14e71]:
+    - generic [ref=f14e73]:
+      - generic [ref=f14e74]: © 2022-2026 ModelScope.cn All rights reserved
+      - generic [ref=f14e75]:
+        - link [ref=f14e77] [cursor=pointer]:
+          - /url: https://github.com/modelscope
+        - link [ref=f14e82] [cursor=pointer]:
+          - /url: https://x.com/ModelScope2022

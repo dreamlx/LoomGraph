@@ -132,8 +132,11 @@ def _is_whitelisted_orphan(name: str, source_id: str = "") -> bool:
             return True
 
     # Suffix patterns (Analyzer, Extractor, Parser, etc.)
-    # Extract the class name (before the last separator if namespaced)
-    class_name = name.rsplit(sep, 1)[-1] if sep else name
+    # Extract the owning class name = the FIRST segment (before the separator)
+    # so `FooConfig.method` / `FooConfig::method` checks "FooConfig" against
+    # the suffix patterns, not "method" (codex review #172: rsplit[-1] took
+    # the method name and regressed orphan whitelisting for namespaced names).
+    class_name = name.split(sep)[0] if sep else name
     if any(class_name.endswith(pattern) for pattern in ORPHAN_SUFFIX_PATTERNS):
         return True
 
@@ -438,8 +441,13 @@ class TopologyAnalyzer:
             return not _is_whitelisted_orphan(name, source_id)
 
         def _keep_hub(item: dict[str, Any]) -> bool:
-            """Filter hubs, excluding whitelisted utilities."""
+            """Filter hubs, excluding whitelisted utilities + file/module
+            entities (#152: a file's out-degree is structural containment,
+            not a coupling signal — excluding it from hubs too, not just
+            orphans/gods)."""
             if not _keep(item):
+                return False
+            if item.get("entity_type") in ("module", "file"):
                 return False
             name = _server_name(item)
             # Exclude whitelisted hubs (public utilities)
@@ -681,6 +689,11 @@ class TopologyAnalyzer:
                 if name in WHITELIST_HUBS:
                     continue
                 entity = entity_map[name]
+                # #152: file/module entities have structural in-degree
+                # (containment) not a coupling signal — exclude from hubs
+                # too, mirroring the server-side _keep_hub and the god path.
+                if entity.get("entity_type", "") in ("module", "file"):
+                    continue
                 source_id = entity.get("source_id", "")
                 # Exclude by file pattern (common utilities)
                 if "_common.py" in source_id or "/config.py" in source_id:

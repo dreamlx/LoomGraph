@@ -144,6 +144,13 @@ def _visible_tool_specs() -> list[Tool]:
     =all forces the full list. Falls back to the full list when the workspace
     can't be opened (no workspace yet, or non-codegraph) — the default stays
     the full list until a codegraph workspace is actually queried.
+
+    NOTE: callers may be sync (tests) or async (the real ``list_tools``
+    handler runs inside the MCP event loop). The event-loop case is why this
+    returns a non-coroutine but defers the meta read to a thread —
+    ``asyncio.run()`` inside an active loop raises ``RuntimeError``, which
+    the bare ``except`` would swallow, silently defeating the unlist (codex
+    review #172).
     """
     import os
 
@@ -161,8 +168,14 @@ def _active_workspace_is_codegraph() -> bool:
     server default env > CLI auto-detect from cwd/git), opens it, and reads
     the meta. Any failure (no workspace, unreadable, no meta) → False (the
     default full list is the safe fallback).
+
+    The SQLite read runs via ``asyncio.run``. When ``list_tools`` is already
+    inside the MCP event loop, ``asyncio.run`` raises ``RuntimeError``; we
+    catch that and run the peek in a worker thread (which has no event loop,
+    so ``asyncio.run`` works there). Without this the RuntimeError was
+    swallowed → codegraph workspaces always saw the full list (codex review
+    #172 — adaptive unlist was nonfunctional).
     """
-    import asyncio
     import os
 
     from loomgraph.cli._common import get_auto_workspace
@@ -172,26 +185,54 @@ def _active_workspace_is_codegraph() -> bool:
     ws = ws_arg or get_auto_workspace(None)
     if not ws:
         return False
+    return _detect_backend_sync(ws) == "codegraph"
+
+
+def _detect_backend_sync(ws: str) -> str | None:
+    """Run the meta peek, handling the nested-event-loop case by thread-fallback.
+
+    When the MCP ``list_tools`` handler is already inside the event loop,
+    ``asyncio.run`` would raise (and the already-created coroutine would
+    warn "never awaited"). Detect the running loop first and route to a
+    worker thread up front (codex review #172)."""
+    import asyncio
+    import concurrent.futures
+
     try:
-        from loomgraph.storage.factory import create_graph_store
+        asyncio.get_running_loop()
+        in_loop = True
+    except RuntimeError:
+        in_loop = False
 
-        async def _peek() -> str | None:
-            store = await create_graph_store(workspace=ws)
-            try:
-                get_meta = getattr(store, "get_meta", None)
-                if get_meta is None:
-                    return None
-                recorded = await get_meta("extraction_backend")
-                return str(recorded) if recorded else None
-            finally:
-                close = getattr(store, "close", None)
-                if close is not None:
-                    await close()
+    if not in_loop:
+        try:
+            return asyncio.run(_peek_backend_meta(ws))
+        except Exception:
+            return None
 
-        recorded = asyncio.run(_peek())
-        return recorded == "codegraph"
-    except Exception:
-        return False
+    # We're inside the MCP event loop — run in a worker thread (which has
+    # no loop, so asyncio.run works there).
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+        return ex.submit(
+            lambda: asyncio.run(_peek_backend_meta(ws))
+        ).result()
+
+
+async def _peek_backend_meta(ws: str) -> str | None:
+    """Open ``ws`` and return its recorded extraction_backend meta (or None)."""
+    from loomgraph.storage.factory import create_graph_store
+
+    store = await create_graph_store(workspace=ws)
+    try:
+        get_meta = getattr(store, "get_meta", None)
+        if get_meta is None:
+            return None
+        recorded = await get_meta("extraction_backend")
+        return str(recorded) if recorded else None
+    finally:
+        close = getattr(store, "close", None)
+        if close is not None:
+            await close()
 
 
 async def serve_stdio() -> None:

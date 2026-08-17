@@ -464,17 +464,26 @@ def _update_codegraph(
     # data — visible noop beats silent stale-graph-as-success.
     new_fp = (summary.meta or {}).get("codegraph_fingerprint", "")
     recorded_fp = ""
-    try:
+
+    async def _peek_fingerprint() -> str:
         from loomgraph.storage.factory import create_graph_store as _cgs
 
-        _peek = asyncio.run(_cgs(workspace=ws_name))
-        _get_meta = getattr(_peek, "get_meta", None)
-        if _get_meta is not None:
-            recorded_fp = asyncio.run(_get_meta("codegraph_fingerprint")) or ""
-        if hasattr(_peek, "close"):
-            _peek.close()
+        store = await _cgs(workspace=ws_name)
+        try:
+            get_meta = getattr(store, "get_meta", None)
+            if get_meta is None:
+                return ""
+            rec = await get_meta("codegraph_fingerprint")
+            return str(rec) if rec else ""
+        finally:
+            close = getattr(store, "close", None)
+            if close is not None:
+                await close()
+
+    try:
+        recorded_fp = asyncio.run(_peek_fingerprint())
     except Exception:
-        pass
+        recorded_fp = ""
     if new_fp and recorded_fp and new_fp == recorded_fp:
         click.echo(
             "       codegraph snapshot unchanged — skipping rebuild. "
@@ -630,18 +639,30 @@ def update(
     ws_name = get_auto_workspace(workspace)
     resolved_backend = backend or DEFAULT_BACKEND
     if backend is None:
-        # Peek the workspace meta for a recorded backend (cheap one-shot open).
-        try:
+        # Peek the workspace meta for a recorded backend (one-shot open +
+        # close). Runs in a worker thread so the close (an async WAL
+        # checkpoint) actually executes — the old `_peek_store.close()`
+        # produced an un-awaited coroutine, leaking the connection and
+        # skipping the checkpoint (codex review #172).
+        async def _peek_backend() -> str | None:
             from loomgraph.storage.factory import create_graph_store as _cgs
 
-            _peek_store = asyncio.run(_cgs(workspace=ws_name))
-            recorded = None
-            _get_meta = getattr(_peek_store, "get_meta", None)
-            if _get_meta is not None:
-                recorded = asyncio.run(_get_meta("extraction_backend"))
+            store = await _cgs(workspace=ws_name)
+            try:
+                get_meta = getattr(store, "get_meta", None)
+                if get_meta is None:
+                    return None
+                recorded = await get_meta("extraction_backend")
+                return str(recorded) if recorded else None
+            finally:
+                close = getattr(store, "close", None)
+                if close is not None:
+                    await close()
+
+        try:
+            recorded = asyncio.run(_peek_backend())
             if recorded:
                 resolved_backend = recorded
-            _peek_store.close() if hasattr(_peek_store, "close") else None
         except Exception:
             pass  # fresh workspace / non-existent: fall through to default
 
@@ -986,13 +1007,20 @@ async def _async_refresh_codegraph(
             warning or "codegraph snapshot returned 0 entities"
         )
     result = await ingest(entities, relations, store, clear=True)
-    # Record backend + provenance (mirror _async_index).
+    # Record backend + provenance (mirror _async_index — all fields, so a
+    # force_full refresh produces the same meta as a fresh index; codex review
+    # #172: the initial index records indexed_with_version/extraction_version
+    # too, and refresh must not drop them).
     set_meta = getattr(store, "set_meta", None)
     if set_meta is not None:
-        await set_meta("extraction_backend", "codegraph")
         meta = summary.meta or {}
+        await set_meta("extraction_backend", "codegraph")
         if (fp := meta.get("codegraph_fingerprint")):
             await set_meta("codegraph_fingerprint", fp)
+        if (iv := meta.get("indexed_with_version")):
+            await set_meta("codegraph_indexed_with_version", iv)
+        if (ev := meta.get("indexed_with_extraction_version")):
+            await set_meta("codegraph_extraction_version", ev)
         await set_meta("codegraph_head", _git_head_safe())
     result["mode"] = "codegraph_rebuild"
     result["workspace"] = ws

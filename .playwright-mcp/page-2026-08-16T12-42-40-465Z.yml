@@ -1,0 +1,84 @@
+- generic [ref=f44e4]:
+  - banner [ref=f44e5]:
+    - generic [ref=f44e7]:
+      - link [ref=f44e8] [cursor=pointer]:
+        - /url: /
+      - generic [ref=f44e12]:
+        - link "Home" [ref=f44e14] [cursor=pointer]:
+          - /url: /home
+        - link "Models" [ref=f44e17] [cursor=pointer]:
+          - /url: /models
+        - link "Datasets" [ref=f44e20] [cursor=pointer]:
+          - /url: /datasets
+        - link "Studios" [ref=f44e23] [cursor=pointer]:
+          - /url: /studios
+        - link "Spotlight" [ref=f44e26] [cursor=pointer]:
+          - /url: /spotlight
+        - generic [ref=f44e28]: Community
+        - link "Skills" [ref=f44e35] [cursor=pointer]:
+          - /url: /skills
+        - link "MCP" [ref=f44e39] [cursor=pointer]:
+          - /url: /mcp
+        - link "Civision" [ref=f44e44] [cursor=pointer]:
+          - /url: /aigc
+      - generic [ref=f44e48]:
+        - link [ref=f44e50] [cursor=pointer]:
+          - /url: https://github.com/modelscope
+        - generic [ref=f44e54] [cursor=pointer]
+        - img [ref=f44e55] [cursor=pointer]
+        - button "search" [ref=f44e59] [cursor=pointer]
+      - button "Magic Cube" [ref=f44e63] [cursor=pointer]:
+        - img "Magic Cube" [ref=f44e64]
+        - generic [ref=f44e65]: "250"
+      - generic [ref=f44e68] [cursor=pointer]
+  - main [ref=f44e77]:
+    - generic [ref=f44e80]:
+      - generic [ref=f44e83]:
+        - generic [ref=f44e86]:
+          - generic [ref=f44e88]:
+            - generic [ref=f44e89]: dreamlinx/LoomGraph-embed
+            - img [ref=f44e90] [cursor=pointer]
+          - generic [ref=f44e94]:
+            - generic [ref=f44e95] [cursor=pointer]: Like
+            - generic [ref=f44e100]: Collections
+        - generic [ref=f44e108]:
+          - generic [ref=f44e109] [cursor=pointer]: ONNX
+          - generic [ref=f44e113] [cursor=pointer]
+          - generic [ref=f44e115] [cursor=pointer]:
+            - generic [ref=f44e117]: "License:"
+            - generic [ref=f44e118]: MIT
+        - generic [ref=f44e120]:
+          - link "@" [ref=f44e122] [cursor=pointer]:
+            - /url: /profile/dreamlinx
+          - separator [ref=f44e123]
+          - text: 0 downloads
+          - separator [ref=f44e124]
+          - text: 277.95MB
+          - separator [ref=f44e125]
+          - text: updated Aug 16,2026
+      - generic [ref=f44e128]:
+        - generic [ref=f44e129]:
+          - tablist [ref=f44e130]:
+            - generic [ref=f44e132]:
+              - tab [ref=f44e134] [cursor=pointer]:
+                - link "Model card" [ref=f44e135]:
+                  - /url: /models/dreamlinx/LoomGraph-embed
+              - tab [selected] [ref=f44e138] [cursor=pointer]:
+                - link "Files and versions" [ref=f44e139]:
+                  - /url: /models/dreamlinx/LoomGraph-embed/files
+              - tab [ref=f44e142] [cursor=pointer]:
+                - link "Discussions" [ref=f44e143]:
+                  - /url: /models/dreamlinx/LoomGraph-embed/feedback
+          - generic:
+            - generic:
+              - tabpanel "Files and versions"
+        - generic [ref=f44e145]:
+          - generic [ref=f44e146] [cursor=pointer]
+          - button "Download model" [ref=f44e151] [cursor=pointer]
+    - generic [ref=f44e165]:
+      - generic [ref=f44e166]: © 2022-2026 ModelScope.cn All rights reserved
+      - generic [ref=f44e167]:
+        - link [ref=f44e169] [cursor=pointer]:
+          - /url: https://github.com/modelscope
+        - link [ref=f44e174] [cursor=pointer]:
+          - /url: https://x.com/ModelScope2022

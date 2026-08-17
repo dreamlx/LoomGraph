@@ -44,7 +44,7 @@ TOOL_SPEC = Tool(
             },
             "relation_type": {
                 "type": "string",
-                "enum": ["CALLS", "INHERITS", "IMPORTS", "all"],
+                "enum": ["CALLS", "INHERITS", "IMPORTS", "REFERENCES", "all"],
                 "description": "Filter by relation type. Default all.",
                 "default": "all",
             },

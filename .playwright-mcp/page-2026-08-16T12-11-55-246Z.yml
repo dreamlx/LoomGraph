@@ -1,0 +1,126 @@
+- generic [ref=f29e4]:
+  - banner [ref=f29e5]:
+    - generic [ref=f29e8]:
+      - link [ref=f29e9] [cursor=pointer]:
+        - /url: /
+      - generic [ref=f29e13]:
+        - link "Home" [ref=f29e15] [cursor=pointer]:
+          - /url: /home
+        - link "Models" [ref=f29e18] [cursor=pointer]:
+          - /url: /models
+        - link "Datasets" [ref=f29e21] [cursor=pointer]:
+          - /url: /datasets
+        - link "Studios" [ref=f29e24] [cursor=pointer]:
+          - /url: /studios
+        - link "Spotlight" [ref=f29e27] [cursor=pointer]:
+          - /url: /spotlight
+        - generic [ref=f29e29]: Community
+        - link "Skills" [ref=f29e36] [cursor=pointer]:
+          - /url: /skills
+        - link "MCP" [ref=f29e40] [cursor=pointer]:
+          - /url: /mcp
+        - link "Civision" [ref=f29e45] [cursor=pointer]:
+          - /url: /aigc
+      - generic [ref=f29e49]:
+        - link [ref=f29e51] [cursor=pointer]:
+          - /url: https://github.com/modelscope
+        - generic [ref=f29e55] [cursor=pointer]
+        - button "search" [ref=f29e57] [cursor=pointer]
+      - button "Magic Cube" [ref=f29e61] [cursor=pointer]:
+        - img "Magic Cube" [ref=f29e62]
+      - button "loading login / register" [ref=f29e66]:
+        - img "loading" [ref=f29e68]
+        - generic [ref=f29e71]: login / register
+  - main [ref=f29e72]:
+    - generic [ref=f29e75]:
+      - generic:
+        - generic:
+          - generic:
+            - generic:
+              - link "Explore the Model Universe Enter enter icon planet character dot":
+                - /url: https://modelscope.cn/active/model-galaxy
+                - generic: Explore the Model Universe
+                - generic:
+                  - generic:
+                    - generic:
+                      - generic:
+                        - generic: Enter
+                        - img "enter icon"
+                - img "planet"
+                - generic:
+                  - img "character"
+                - img "dot"
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: Tasks
+                    - generic: Libraries
+                    - generic: Other
+                    - generic: Organizations
+                - generic:
+                  - generic:
+                    - generic:
+                      - generic:
+                        - generic:
+                          - generic:
+                            - generic:
+                              - img "search"
+                            - textbox "Filter Tasks by name"
+            - generic:
+              - generic:
+                - generic:
+                  - generic:
+                    - generic:
+                      - generic:
+                        - generic:
+                          - generic:
+                            - generic:
+                              - generic:
+                                - generic:
+                                  - generic:
+                                    - generic:
+                                      - generic:
+                                        - generic:
+                                          - generic:
+                                            - generic:
+                                              - textbox "Search models": nomic
+                                              - generic:
+                                                - button "close-circle":
+                                                  - img "close-circle"
+                  - generic:
+                    - generic:
+                      - generic:
+                        - combobox
+                      - generic "Trending"
+                - generic:
+                  - generic:
+                    - generic: Found in total results
+                    - generic: nomic
+                    - generic: Clear
+    - generic [ref=f29e83]:
+      - generic [ref=f29e88]:
+        - generic [ref=f29e89]:
+          - link "Terms-and-Condition" [ref=f29e90] [cursor=pointer]:
+            - /url: /protocol/Terms-and-Condition
+          - link "Privacy-Policy" [ref=f29e91] [cursor=pointer]:
+            - /url: /protocol/Privacy-Policy
+          - link "Proposal of Artificial Intelligence Ethics" [ref=f29e92] [cursor=pointer]:
+            - /url: /protocol/ai-ethics-charter
+          - link "Code of Conduct" [ref=f29e93] [cursor=pointer]:
+            - /url: /protocol/code-of-conduct
+          - link "About" [ref=f29e94] [cursor=pointer]:
+            - /url: /protocol/about
+          - link "Contact us" [ref=f29e95] [cursor=pointer]:
+            - /url: /protocol/contact
+        - generic [ref=f29e96]:
+          - link [ref=f29e98] [cursor=pointer]:
+            - /url: https://github.com/modelscope
+          - link [ref=f29e103] [cursor=pointer]:
+            - /url: https://x.com/ModelScope2022
+      - generic [ref=f29e108]:
+        - link [ref=f29e109] [cursor=pointer]:
+          - /url: https://zzlz.gsxt.gov.cn/businessCheck/verifKey.do?showType=p&serial=91310104MADMFRK385-SAIC_SHOW_10000091310104MADMFRK3851722938115672&signData=MEQCICKMR2FAUY9d8jT2MbA4tU6HEPIIV0kPEr9UXdH7ZfVjAiBfL2m8hpilRs+pDu7y1lvTRoj/d6ym+r0YDGcm7A3Jrg==
+        - link "浙公网安备33010002000365" [ref=f29e111] [cursor=pointer]:
+          - /url: https://beian.mps.gov.cn/#/query/webSearch?code=33010002000365
+        - link "沪ICP备2024081488号-1" [ref=f29e114] [cursor=pointer]:
+          - /url: https://beian.miit.gov.cn/

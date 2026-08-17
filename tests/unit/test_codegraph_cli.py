@@ -193,6 +193,7 @@ def _wire_codegraph_update(
         return None
     store.get_meta = AsyncMock(side_effect=_get_meta)
     store.set_meta = AsyncMock(return_value=None)
+    store.close = AsyncMock(return_value=None)
     monkeypatch.setattr(
         "loomgraph.storage.factory.create_graph_store",
         AsyncMock(return_value=store),
