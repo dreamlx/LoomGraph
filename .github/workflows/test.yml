@@ -43,3 +43,12 @@ jobs:
         run: |
           source .venv/bin/activate
           pytest tests/unit/ -v --tb=short
+
+      # #179 contract tests: pin the codeindex CLI output shapes loomgraph
+      # consumes. NOT under tests/unit/ — a path-filtered `pytest tests/unit/`
+      # never collects them, so the #173-class drift guard existed only
+      # locally until this step (codex review finding, 2026-08-17).
+      - name: Contract tests (codeindex output shapes)
+        run: |
+          source .venv/bin/activate
+          pytest tests/contract/ -v --tb=short

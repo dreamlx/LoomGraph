@@ -69,10 +69,17 @@ class TestParseOutputShape:
     def test_symbol_line_fields_present(self, contract_repo: Path) -> None:
         """Line anchors (line_start/line_end) feed ChangedSymbol extraction."""
         proc = _run_codeindex("parse", str(contract_repo / "a.py"))
+        assert proc.returncode == 0, (
+            f"codeindex parse failed (exit {proc.returncode}): {proc.stderr[:300]}"
+        )
         data = json.loads(proc.stdout)
-        sym = next(s for s in data["symbols"] if s["name"] == "greeter")
-        assert sym["line_start"] >= 1
-        assert sym["line_end"] >= sym["line_start"]
+        sym = next(
+            (s for s in data["symbols"] if s["name"] == "greeter"),
+            None,
+        )
+        assert sym is not None, f"greeter not in symbols: {[s.get('name') for s in data['symbols']]}"
+        assert sym["line_start"] >= 1, f"line_start missing/drifted: {sym}"
+        assert sym["line_end"] >= sym["line_start"], f"line_end drifted: {sym}"
 
 
 class TestGraphExportShape:

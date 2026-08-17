@@ -70,6 +70,13 @@ jobs:
           source .venv/bin/activate
           pytest tests/unit/ -v --tb=short
 
+      # #179 contract tests — release gate variant. Same rationale as
+      # test.yml: path-filtered unit run never collects tests/contract/.
+      - name: Contract tests (codeindex output shapes)
+        run: |
+          source .venv/bin/activate
+          pytest tests/contract/ -v --tb=short
+
   build:
     needs: test
     runs-on: ubuntu-latest
