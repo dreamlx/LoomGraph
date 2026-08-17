@@ -8,6 +8,33 @@
 
 ---
 
+## [0.19.2] - 2026-08-17
+
+> **更新方式**: `pipx upgrade loomgraph`(已装 `[embed]` extra 的用 `pipx upgrade loomgraph --include-extra`)。本版为 bug 修复版,无破坏性变更。
+
+### 修复 — `update` 不再静默跳过未暂存(unstaged)的源码改动(#175)
+
+- 之前 `update` 的"无代码变更"短路判断对比到 working tree,但实际增量
+  索引只对比到上一次 commit——post-commit hook 触发时工作区里还有未
+  暂存改动的话,短路放行后索引腿看不到这些文件,**改动被静默跳过**。
+  现在两条路径统一默认 diff 到 working tree;显式 `--since` 仍保留
+  committed-range 语义。
+
+### 修复 — `workspace=None` 不再产生字面 `{workspace}.db` 垃圾文件(#176)
+
+- 之前内部以 `workspace=None` 建探索句柄时会创建字面路径
+  `~/.loomgraph/{workspace}.db`(占位符未插值),在磁盘上留垃圾文件,
+  大小写敏感文件系统上直接报错。现在 `None` 变为 in-memory 句柄
+  (`:memory:`),`workspace list` / `similar` 行为不变。
+
+### 修复 — 缺失语法的告警按语言去重,不再只报第一个(#178)
+
+- 之前"Parser library not installed for <lang>"全局只保留第一个命中的
+  语言——缺 3 个 tree-sitter 语法只报 1 个,其余被藏住。现在按语言去重
+  (缺 3 个 → 报 3 行),每行仍带完整修复提示。
+
+---
+
 ## [0.19.1] - 2026-08-17
 
 > **更新方式**: `pipx upgrade loomgraph`(已装 `[embed]` extra 的用 `pipx upgrade loomgraph --include-extra`)。本版为 bug 修复版,无破坏性变更。

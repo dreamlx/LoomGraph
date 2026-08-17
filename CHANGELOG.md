@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.2] - 2026-08-17
+
+### Fixed — `update` silently skipped unstaged source edits (#175)
+- The skip gate diffed `HEAD~1..working-tree` but the ingest path diffed
+  `HEAD~1..HEAD` — a post-commit-hook run with unstaged edits in the
+  working tree passed the "no code changes" short-circuit while the ingest
+  leg never saw those files. `get_changed_files` now diffs to the working
+  tree by default on both legs; an explicit `until` ref still selects the
+  committed-range semantics. Verified live on lh-enterprise:develop.
+
+### Fixed — `workspace=None` no longer creates a literal `{workspace}.db` (#176)
+- `create_graph_store(workspace=None)` left the `{workspace}` placeholder
+  un-interpolated and opened a real file at
+  `~/.loomgraph/{workspace}.db` (a junk file on disk that also failed on
+  case-sensitive filesystems). `None` is now an in-memory discovery handle
+  (`db_path=":memory:"`) used by `workspace list` / `similar`; the returned
+  object is still a `SqliteGraphStore`, interface-compatible. No caller
+  depended on the old literal-file behavior (verified call-chain).
+
+### Fixed — parser-missing warnings dedup per language, not globally (#178)
+- The "Parser library not installed for <lang>" dedup kept only the FIRST
+  missing language ever seen — a repo missing 3 tree-sitter grammars
+  reported one, hiding the rest. Now dedups per language (3 missing → 3
+  lines); a line that can't be parsed for its language falls back to the
+  whole line as key (at worst loses dedup, never the diagnostic — #118's
+  fix-hint semantics preserved).
+
+### Added — contract tests pinning the codeindex CLI output shapes (#179)
+- `tests/contract/` invokes the pinned venv codeindex (never PATH) and pins
+  the two shapes loomgraph's correctness depends on: `parse` returns bare
+  symbol names (the #173 fix's qualification logic prepends module paths
+  itself) and `graph-export` emits module-qualified entity ids + the
+  known edge-kind set. This is the drift guard for the #173 bug class —
+  RED on any breaking change forces a coordinated update instead of a
+  silent field drift. Collected by CI in both the PR gate (test.yml) and
+  the release gate (release.yml) — a path-filtered `pytest tests/unit/`
+  would otherwise never run them (codex review finding, fixed in 5bd6357).
+
 ## [0.19.1] - 2026-08-17
 
 ### Fixed — `loomgraph impact` direct/indirect callers always empty (#173)
