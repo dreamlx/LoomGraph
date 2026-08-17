@@ -842,6 +842,7 @@ class TestUpdateCommand:
         # --since is active: forwarded to get_changed_files
         assert mock_gcf.call_args.kwargs["since"] == "HEAD~3"
 
+    @patch("loomgraph.cli._indexing.get_changed_files")
     @patch("loomgraph.cli._indexing.ingest_incremental", new_callable=AsyncMock)
     @patch("loomgraph.cli._indexing.ingest", new_callable=AsyncMock)
     @patch("loomgraph.storage.factory.create_graph_store", new_callable=AsyncMock)
@@ -856,10 +857,13 @@ class TestUpdateCommand:
         mock_store: AsyncMock,
         mock_ingest: AsyncMock,
         mock_incr: AsyncMock,
+        mock_changed: MagicMock,
         runner: CliRunner,
     ) -> None:
         """Non-git repo → whole-tree ingest(clear=False); incremental not used."""
         mock_check.return_value = {"installed": True, "version": "0.29.0"}
+        # #165 skip-gate precondition: diff has supported-language files.
+        mock_changed.return_value = [Path("x.swift")]
         # Healthy (non-empty) export — this test pins the routing, not the
         # 0-entity gate (#120); an empty ImportSummary would short-circuit it.
         mock_export.return_value = ([], [], ImportSummary(entity_count=2), [])
@@ -920,6 +924,7 @@ class TestUpdateCommand:
         mock_incr.assert_not_awaited()
         mock_gcf.assert_not_called()  # git diff skipped under --files
 
+    @patch("loomgraph.cli._indexing.get_changed_files")
     @patch("loomgraph.cli._indexing._async_update", new_callable=AsyncMock)
     @patch("loomgraph.cli._indexing.run_graph_export")
     @patch("loomgraph.cli._indexing.check_codeindex")
@@ -928,12 +933,16 @@ class TestUpdateCommand:
         mock_check: MagicMock,
         mock_export: MagicMock,
         mock_async_update: AsyncMock,
+        mock_changed: MagicMock,
         runner: CliRunner,
     ) -> None:
         """#120: a 0-entity export must not reach ingest_incremental (whose symbol
         GC would delete the changed files' real symbols). Hard-stop with a
         diagnosis; _async_update is never awaited."""
         mock_check.return_value = {"installed": True, "version": "0.29.0"}
+        # #165 skip-gate precondition: the commit touched a supported file
+        # (AppState.swift per the warning) — must NOT skip before export.
+        mock_changed.return_value = [Path("Sources/App/AppState.swift")]
         mock_export.return_value = (
             [],
             [],

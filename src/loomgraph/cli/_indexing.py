@@ -25,6 +25,25 @@ from loomgraph.core.graph_export_ingest import (
     run_graph_export,
 )
 
+# Extensions codeindex can parse (any configured language). `update` skips the
+# whole-tree re-export when the git diff touches none of them (#165) — the
+# post-commit hook makes every docs/config/CI commit pay the full export
+# otherwise. Deliberately conservative:宁可多跑一次 export,不可漏更新.
+SUPPORTED_SOURCE_EXTS = {
+    ".py", ".php", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs",
+    ".swift", ".java", ".m", ".h",
+}
+
+
+def _silence_warnings(warnings: list[str]) -> list[str]:
+    """Drop warnings matching a `warnings.silence` substring (#166)."""
+    from loomgraph.core.config import get_settings
+
+    silence = [s.lower() for s in get_settings().warnings.silence]
+    if not silence:
+        return warnings
+    return [w for w in warnings if not any(s in w.lower() for s in silence)]
+
 
 @main.command()
 @click.argument("repo_path", type=click.Path(exists=True))
@@ -76,6 +95,7 @@ def index(repo_path: str, clear: bool, workspace: str | None) -> None:
     # indexed with default languages:[python] yields a few stray entities and
     # a "WARNING: partial graph" line. Surface it so a misconfigured repo
     # doesn't index as a silent success (#108).
+    warnings = _silence_warnings(warnings)
     for line in warnings:
         click.echo(f"⚠️  {line}", err=True)
 
@@ -269,6 +289,29 @@ def update(
         )
         return
 
+    # #165: short-circuit before the whole-tree export when the diff touches
+    # no parsable source file — the export is the multi-second bulk of update,
+    # and the post-commit hook pays it on every docs/config/CI-only commit.
+    if not forced_whole_tree:
+        try:
+            source_changes = get_changed_files(
+                since=since, repo_path=repo, extensions=SUPPORTED_SOURCE_EXTS
+            )
+        except Exception:
+            source_changes = None  # non-git / bad ref: fall through to export
+        if source_changes is not None and not source_changes:
+            click.echo(
+                "       No supported-language files in diff — skipping update.",
+                err=True,
+            )
+            output_success({
+                "skipped": True,
+                "reason": "no_supported_source_files_in_diff",
+                "since": since,
+                "workspace": get_auto_workspace(workspace),
+            })
+            return
+
     # Step 2: Run codeindex graph-export (whole tree)
     click.echo("[2/3] Exporting whole tree with codeindex graph-export...", err=True)
     try:
@@ -286,6 +329,7 @@ def update(
         err=True,
     )
     # Surface codeindex partial-graph warnings (#108) — same as `index`.
+    warnings = _silence_warnings(warnings)
     for line in warnings:
         click.echo(f"⚠️  {line}", err=True)
 

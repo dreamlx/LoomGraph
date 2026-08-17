@@ -1,0 +1,169 @@
+"""CLI 使用摩擦修复的回归测试(外部项目 dogfood 反馈批次)。
+
+- #165: `update` 在 diff 无受支持语言文件时短路(post-commit 场景大头)
+- #163/#166-1: `-q` 后置报错带正确用法 hint
+- #166-2: partial-graph warning 可按配置静默(`warnings.silence`)
+"""
+
+from __future__ import annotations
+
+import subprocess
+from pathlib import Path
+
+import pytest
+from click.testing import CliRunner
+
+from loomgraph.cli.main import main
+
+
+def _git_repo_with_commits(repo: Path) -> None:
+    """Two commits: first a .py file, second only non-source files."""
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "t@t.com"],
+                   cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "t"],
+                   cwd=repo, check=True, capture_output=True)
+    (repo / "a.py").write_text("def foo():\n    pass\n")
+    subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-qm", "add a.py"],
+                   cwd=repo, check=True, capture_output=True)
+    # Second commit touches NO parsable source file (doc + shell).
+    (repo / "README.md").write_text("docs only\n")
+    (repo / ".husky").mkdir()
+    (repo / ".husky" / "post-commit").write_text("#!/bin/sh\necho hi\n")
+    subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-qm", "docs+shell only"],
+                   cwd=repo, check=True, capture_output=True)
+
+
+# ─── #165: update short-circuits on no-source diffs ──────────────────────
+
+
+def test_update_skips_when_diff_has_no_source_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Doc/config/shell-only commits must not pay the whole-tree re-export.
+
+    Dogfood (BlueHawkLock): committing `.husky/post-commit` (diff with zero
+    supported-language files) still cost the full ~9s export — the post-commit
+    hook makes every docs/CI commit slow (#165).
+    """
+    import json
+
+    from loomgraph.cli import _indexing
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git_repo_with_commits(repo)
+    monkeypatch.chdir(repo)
+
+    def _boom(*a: object, **k: object) -> None:
+        raise AssertionError("run_graph_export must not run on a no-source diff")
+
+    monkeypatch.setattr(_indexing, "run_graph_export", _boom)
+    monkeypatch.setattr(
+        _indexing, "check_codeindex", lambda: {"installed": True},
+    )
+
+    runner = CliRunner()
+    res = runner.invoke(main, ["update"])
+    assert res.exit_code == 0, res.output
+    data = json.loads(res.stdout)["data"]
+    assert data.get("skipped") is True, (
+        f"docs/shell-only diff must short-circuit, got: {data}"
+    )
+
+
+def test_update_runs_when_diff_has_source_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A .py in the diff must NOT skip — regression guard against over-eager
+    short-circuiting (silent no-update would be data loss)."""
+
+    from loomgraph.cli import _indexing
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "t@t.com"],
+                   cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "t"],
+                   cwd=repo, check=True, capture_output=True)
+    (repo / "a.py").write_text("def foo():\n    pass\n")
+    subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-qm", "add a.py"],
+                   cwd=repo, check=True, capture_output=True)
+    (repo / "a.py").write_text("def foo():\n    return 1\n")
+    subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-qm", "edit a.py"],
+                   cwd=repo, check=True, capture_output=True)
+    monkeypatch.chdir(repo)
+
+    called = {"export": False}
+
+    def _fake_export(repo_path: Path) -> tuple:
+        called["export"] = True
+        # Minimal shape: the skip decision happens before export parsing
+        # matters, so raise a distinctive error if ever reached deeply —
+        # but we just need the call fact here.
+        raise _indexing.GraphExportError("stop-here")
+
+    monkeypatch.setattr(_indexing, "run_graph_export", _fake_export)
+    monkeypatch.setattr(
+        _indexing, "check_codeindex", lambda: {"installed": True},
+    )
+
+    runner = CliRunner()
+    res = runner.invoke(main, ["update"])
+    assert called["export"] is True, (
+        ".py in diff must proceed to export, not skip (#165)"
+    )
+    # And the distinctive error surfaces (not a skipped:true success).
+    assert '"skipped": true' not in res.output
+
+
+# ─── #163/#166-1: -q after the subcommand gets a usage hint ─────────────
+
+
+def test_quiet_after_subcommand_hint() -> None:
+    """`loomgraph find x -q` must hint that -q is a global (pre-command) flag.
+
+    Click's standard error is bare `No such option '-q'` — git/gh muscle
+    memory puts global flags last, and the hook dogfood wrote it wrong on the
+    first try (#163/#166).
+    """
+    runner = CliRunner()
+    res = runner.invoke(main, ["find", "somequery", "-q"])
+    assert res.exit_code != 0
+    assert "before the command" in res.output, (
+        f"-q usage error must carry the hint in the printed message, got: {res.output!r}"
+    )
+
+
+# ─── #166-2: partial-graph warnings can be silenced by config ────────────
+
+
+def test_silence_warnings_filters_matching_lines(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """warnings.silence substrings drop matching export warnings on both the
+    stderr echo and the JSON `warning` field."""
+    from loomgraph.cli._indexing import _silence_warnings
+    from loomgraph.core.config import get_settings
+
+    s = get_settings()
+    monkeypatch.setattr(
+        s.warnings, "silence", ["partial-graph"],
+    )
+    out = _silence_warnings(
+        ["partial-graph: languages=[python] but repo has .ts files",
+         "some other warning"]
+    )
+    assert out == ["some other warning"]
+
+
+def test_silence_warnings_default_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from loomgraph.cli._indexing import _silence_warnings
+    assert _silence_warnings(["partial-graph: x"]) == ["partial-graph: x"]

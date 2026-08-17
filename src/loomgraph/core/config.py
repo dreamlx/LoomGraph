@@ -146,6 +146,20 @@ class RetrievalConfig(BaseSettings):
     similarity_threshold: float = 0.7
 
 
+class WarningsConfig(BaseSettings):
+    """Warning-output control.
+
+    ``silence`` (#166): substrings; any export warning containing one is
+    dropped from both the stderr echo and the JSON ``warning`` field. Use for
+    known-benign recurring warnings (e.g. a mixed-language repo that keeps
+    showing the partial-graph language hint on every update).
+    """
+
+    model_config = _IGNORE_EXTRA
+
+    silence: list[str] = []
+
+
 class Settings(BaseSettings):
     """Main application settings."""
 
@@ -171,6 +185,7 @@ class Settings(BaseSettings):
     retrieval: RetrievalConfig = Field(default_factory=RetrievalConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
+    warnings: WarningsConfig = Field(default_factory=WarningsConfig)
 
 
 # Global settings instance (lazy loaded)
