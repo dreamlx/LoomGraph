@@ -122,6 +122,80 @@ class TestGetChangedFiles:
         assert len(changed) == 1
         assert changed[0] == Path("code.py")
 
+    def test_includes_unstaged_working_tree_changes(self, tmp_path: Path) -> None:
+        """Default (no until) must diff to the working tree, not HEAD.
+
+        #175: the update skip gate diffs ``HEAD~1`` → working tree while the
+        ingest set diffed ``HEAD~1..HEAD`` — an unstaged source edit passed
+        the gate but never entered changed_files, leaving a silently stale
+        graph. Staged changes are covered by the same endpoint.
+        """
+        subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@test.com"],
+            cwd=tmp_path, capture_output=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "Test"],
+            cwd=tmp_path, capture_output=True,
+        )
+
+        (tmp_path / "file1.py").write_text("print('hello')")
+        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True)
+        subprocess.run(
+            ["git", "commit", "-m", "initial"],
+            cwd=tmp_path, capture_output=True,
+        )
+        (tmp_path / "file2.py").write_text("print('world')")
+        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True)
+        subprocess.run(
+            ["git", "commit", "-m", "add file2"],
+            cwd=tmp_path, capture_output=True,
+        )
+
+        # Unstaged edit + staged new file on top of the commits
+        (tmp_path / "file1.py").write_text("print('edited')")
+        (tmp_path / "file3.py").write_text("print('staged')")
+        subprocess.run(["git", "add", "file3.py"], cwd=tmp_path, capture_output=True)
+
+        changed = get_changed_files(since="HEAD~1", repo_path=tmp_path)
+
+        # file2 (committed since) + file1 (unstaged) + file3 (staged)
+        assert {p.name for p in changed} == {"file1.py", "file2.py", "file3.py"}
+
+    def test_explicit_until_still_ranges_two_commits(self, tmp_path: Path) -> None:
+        """Explicit until= keeps the committed-range semantics."""
+        subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@test.com"],
+            cwd=tmp_path, capture_output=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "Test"],
+            cwd=tmp_path, capture_output=True,
+        )
+
+        (tmp_path / "file1.py").write_text("print('hello')")
+        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True)
+        subprocess.run(
+            ["git", "commit", "-m", "initial"],
+            cwd=tmp_path, capture_output=True,
+        )
+        (tmp_path / "file2.py").write_text("print('world')")
+        subprocess.run(["git", "add", "."], cwd=tmp_path, capture_output=True)
+        subprocess.run(
+            ["git", "commit", "-m", "add file2"],
+            cwd=tmp_path, capture_output=True,
+        )
+        # Post-commit unstaged edit must NOT appear in the committed range
+        (tmp_path / "file3.py").write_text("print('unstaged')")
+
+        changed = get_changed_files(
+            since="HEAD~1", until="HEAD", repo_path=tmp_path
+        )
+
+        assert [p.name for p in changed] == ["file2.py"]
+
 
 class TestGetCurrentCommit:
     """Tests for get_current_commit function."""
