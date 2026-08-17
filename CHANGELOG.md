@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — index output: language-fingerprint warning + reading guide (#161, #162)
+- **Language fingerprint warning** (#161): a non-Python repo (TS/Java/Swift…)
+  indexed without `.codeindex.yaml` defaults codeindex to
+  `languages=["python"]` and silently captures only stray `.py files (from
+  Pods/node_modules) — entity_count > 0 evades the 0-entity gate and the
+  output reads as success with 0% coverage of the repo's actual language
+  (HEXFORCE-RN: 7 entities on an all-TS repo; correct config → 667). `index`
+  and `update` now fingerprint the repo's source files (excluding vendored
+  dirs) and warn when the dominant language isn't in the effective
+  `languages` set: `language fingerprint: detected N typescript source files,
+  none indexed — add 'typescript' to languages in .codeindex.yaml`. A
+  presentation-layer hint only — exit code unchanged, filterable via
+  `warnings.silence` like codeindex's own warnings.
+- **resolved_ratio reading guide** (#162): `index` now appends a warning at
+  `resolved_ratio < 0.1` (the known-blind-spot tier: PetClinic Java DI 4.9%,
+  HEXFORCE-RN TS aliases 6.1%) explaining that topology orphan counts are
+  not dead-code evidence at that level. No hint at ~0.2 — that's a normal
+  Python repo (loomgraph self: 0.19; third-party calls never resolve).
+- **New doc `docs/guides/index-output.md`** (#162): field-by-field reading
+  guide answering the recurring "why don't these numbers add up" questions —
+  `relations_created` (edge events) vs `store_stats.relation_count`
+  (deduped by `(src_id, tgt_id, keywords)`), `cross+intra ≠ relation_count`
+  (module stats only count edges whose both endpoints resolve to entities),
+  and the resolved_ratio tier table.
+- **click 8.3 compatibility** (found via `uv sync` against the lockfile):
+  the 0.18.1 `-q` usage hint matched the quoted option format `'-q'` that
+  click 8.4 prints; 8.3.1 prints `No such option: -q` (bare, colon), so on
+  the lockfile-pinned 8.3.1 the hint silently never fired. CI installs from
+  the dependency spec (resolves 8.4) which masked it. The match now covers
+  both formats.
+- dev extras: `types-PyYAML` added so local `mypy src/` doesn't report
+  missing stubs for the three existing `import yaml` sites (CI runs ruff
+  only; mypy is a local-dev gate).
+
 ## [0.18.1] - 2026-08-17
 
 ### Fixed — first external-project dogfood batch (HEXFORCE-RN / BlueHawkLock)

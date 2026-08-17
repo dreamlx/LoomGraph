@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from pathlib import Path
 from typing import Any
 
@@ -52,6 +53,79 @@ def _silence_warnings(warnings: list[str]) -> list[str]:
     if not silence:
         return warnings
     return [w for w in warnings if not any(s in w.lower() for s in silence)]
+
+
+# codeindex's FILE_EXTENSIONS mapping — used only for the #161 language
+# fingerprint (files codeindex *would* parse if the language were configured).
+_LANG_EXTS = {
+    ".py": "python", ".php": "php", ".java": "java",
+    ".ts": "typescript", ".tsx": "typescript",
+    ".js": "javascript", ".jsx": "javascript", ".mjs": "javascript",
+    ".cjs": "javascript",
+    ".swift": "swift", ".h": "objc", ".m": "objc",
+}
+# Third-party/generated trees don't count as the repo's language fingerprint
+# (they're also where the stray .py files that mask this case come from).
+_FINGERPRINT_SKIP_DIRS = {
+    ".git", "node_modules", "Pods", "vendor", "dist", "build",
+    ".venv", "venv", "__pycache__",
+}
+# Below this many files a language isn't "the repo's main language missed by
+# config" — just stray tool scripts. Keeps small repos warning-free.
+_FINGERPRINT_MIN_FILES = 10
+
+
+def _effective_languages(repo: Path) -> set[str]:
+    """codeindex 的生效 languages:无 `.codeindex.yaml`(或缺 languages 键)→ python。"""
+    for name in (".codeindex.yaml", ".codeindex.yml"):
+        cfg = repo / name
+        if not cfg.exists():
+            continue
+        try:
+            import yaml
+
+            data = yaml.safe_load(cfg.read_text()) or {}
+            langs = data.get("languages")
+            if isinstance(langs, list) and langs:
+                return {str(x) for x in langs}
+        except Exception:
+            pass  # unreadable config → codeindex falls back to its default too
+    return {"python"}
+
+
+def _language_fingerprint_warning(repo: Path) -> str | None:
+    """#161: repo 主语言不在生效 languages 里 → partial-graph warning。
+
+    全 TS/Java/Swift 仓无 `.codeindex.yaml` 时 codeindex 默认
+    `languages=["python"]`,静默只抓到零星 .py(Pods/node_modules 残留)——
+    实体数 7≠0 不触发 0-entity gate,输出 success,用户拿到 0% 覆盖目标
+    语言的残缺图。呈现层提醒(不阻断 exit code,对齐 codeindex
+    "提醒+建议不自动 fallback" 哲学):dominant 语言文件数 ≥ 阈值且超过
+    生效 languages 覆盖的文件总数 → 提示补 languages 配置。
+    """
+    from collections import Counter
+
+    counts: Counter[str] = Counter()
+    for _, dirnames, filenames in os.walk(repo):
+        dirnames[:] = [d for d in dirnames if d not in _FINGERPRINT_SKIP_DIRS]
+        for fn in filenames:
+            lang = _LANG_EXTS.get(Path(fn).suffix)
+            if lang:
+                counts[lang] += 1
+    if not counts:
+        return None
+
+    langs = _effective_languages(repo)
+    covered = sum(counts.get(lang, 0) for lang in langs)
+    for lang, n in counts.most_common():
+        if lang in langs or n < _FINGERPRINT_MIN_FILES or n <= covered:
+            continue
+        return (
+            f"language fingerprint: detected {n} {lang} source files, none "
+            f"indexed — add '{lang}' to `languages` in .codeindex.yaml "
+            f"(effective languages: {', '.join(sorted(langs))})"
+        )
+    return None
 
 
 def _diff_names_with_deletions(since: str, repo: Path) -> list[str] | None:
@@ -126,6 +200,13 @@ def index(repo_path: str, clear: bool, workspace: str | None) -> None:
     # a "WARNING: partial graph" line. Surface it so a misconfigured repo
     # doesn't index as a silent success (#108).
     raw_warnings = warnings
+    # #161: >0 entities can still be a partial graph (stray .py only) — the
+    # language fingerprint names the dominant language the config missed.
+    # Appended BEFORE silence so it's filterable like codeindex's own warnings.
+    if summary.entity_count > 0:
+        fingerprint = _language_fingerprint_warning(repo)
+        if fingerprint:
+            warnings.append(fingerprint)
     warnings = _silence_warnings(warnings)
     for line in warnings:
         click.echo(f"⚠️  {line}", err=True)
@@ -162,6 +243,22 @@ def index(repo_path: str, clear: bool, workspace: str | None) -> None:
     result["duration_seconds"] = round(duration, 2)
     result["repo_path"] = str(repo)
     click.echo(f"       Done in {result['duration_seconds']}s.", err=True)
+
+    # #162: <0.1 is the known-blind-spot tier (PetClinic Java DI 4.9%,
+    # HEXFORCE-RN TS aliases 6.1%) where topology/debt orphan counts stop
+    # being dead-code evidence. ~0.2 is normal (self: 0.19 — third-party
+    # calls never resolve), so no hint there. Reading guide:
+    # docs/guides/index-output.md
+    ratio = result.get("resolved_ratio")
+    if ratio is not None and ratio < 0.1:
+        hint = (
+            f"resolved_ratio {ratio}: almost no edges join two stored entities "
+            "(TS path-alias / Java DI / dynamic dispatch blind spots at this "
+            "level) — topology orphan counts are NOT dead-code evidence here; "
+            "see docs/guides/index-output.md"
+        )
+        click.echo(f"⚠️  {hint}", err=True)
+        warnings.append(hint)
 
     if warnings:
         result["warning"] = "; ".join(warnings)
@@ -386,6 +483,11 @@ def update(
     # The zero-export safety gate below consumes the RAW warnings: a user
     # silence pattern must not degrade the 0-entity diagnosis (codex review).
     raw_warnings = warnings
+    # #161: language fingerprint (same treatment as `index`).
+    if summary.entity_count > 0:
+        fingerprint = _language_fingerprint_warning(repo)
+        if fingerprint:
+            warnings.append(fingerprint)
     warnings = _silence_warnings(warnings)
     for line in warnings:
         click.echo(f"⚠️  {line}", err=True)

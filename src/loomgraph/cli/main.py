@@ -28,7 +28,9 @@ class _QuietHintGroup(click.Group):
             return super().invoke(ctx)
         except click.exceptions.UsageError as exc:
             msg = exc.format_message()
-            if "'-q'" in msg or '"-q"' in msg or "'--quiet'" in msg:
+            # click 8.3 formats the option error as `No such option: -q`,
+            # 8.4 as `No such option '-q'` — match the bare substring for both.
+            if "-q" in msg or "--quiet" in msg:
                 exc.message = (
                     f"{msg}\n\n  Hint: -q/--quiet is a global flag — put it "
                     "before the command: loomgraph -q <command> [args]"
