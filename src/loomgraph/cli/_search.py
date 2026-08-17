@@ -379,7 +379,7 @@ def _resolve_simple_name(
 def _class_methods(class_name: str, source_id_map: dict[str, str]) -> list[str]:
     """Names that are methods of ``class_name`` — ``Class.method`` (#105) and
     ``Class::method`` (codegraph, #152)."""
-    out = []
+    out: list[str] = []
     for sep in (".", "::"):
         prefix = class_name + sep
         out.extend(n for n in source_id_map if n.startswith(prefix))
