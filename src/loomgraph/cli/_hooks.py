@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
-from importlib.resources import as_file, files
+from importlib.resources import files
 from pathlib import Path
 
 import click
@@ -51,6 +51,20 @@ def get_hooks_dir() -> Path:
     # rev-parse returns a path relative to the repo root (or absolute);
     # resolve it to an absolute path either way.
     hooks_dir = (repo_root / result.stdout.strip()).resolve()
+
+    # husky v9 layout (#164): core.hooksPath points at `.husky/_`, husky's
+    # *generated* shim dir — `husky` (npm prepare) wipes and rebuilds it on
+    # every install, silently deleting our hook, and overwriting a shim there
+    # breaks husky's chain for every other hook. The husky convention for user
+    # hooks is the `.husky/` root (the shim sources `.husky/<hook>`), so map
+    # `_` up to its parent.
+    try:
+        rel = hooks_dir.relative_to(repo_root)
+    except ValueError:
+        rel = None  # hooks dir outside the repo (shared-hooks setups): use as-is
+    if rel is not None and len(rel.parts) == 2 and rel.parts[0] == ".husky" and rel.parts[1] == "_":
+        hooks_dir = hooks_dir.parent
+
     hooks_dir.mkdir(parents=True, exist_ok=True)
     return hooks_dir
 
@@ -67,8 +81,14 @@ def is_installed(hook_name: str) -> bool:
     return LOOMGRAPH_MARKER in content
 
 
-def install_hook(hook_name: str, force: bool = False) -> bool:
-    """Install hook from template."""
+def install_hook(hook_name: str, force: bool = False, workspace: str | None = None) -> bool:
+    """Install hook from template.
+
+    ``workspace`` (#160): bakes ``-w <name>`` into the hook so ``update`` hits
+    the workspace the user actually indexed (typically a fixed-name one created
+    by ``loomgraph index -w <name>``). Without it the hook's bare
+    ``loomgraph update`` auto-detects ``<repo-dir>:<branch>`` — a different db.
+    """
     if hook_name not in SUPPORTED_HOOKS:
         raise ValueError(f"Unsupported hook: {hook_name}")
 
@@ -95,10 +115,13 @@ def install_hook(hook_name: str, force: bool = False) -> bool:
     if not template_path.is_file():
         raise FileNotFoundError(f"Hook template not found in package: {hook_name}")
 
-    # as_file() yields a real filesystem Path (works for on-disk packages and
-    # transparently extracts zipapp-packed resources), which shutil.copy2 needs.
-    with as_file(template_path) as src:
-        shutil.copy2(src, hook_path)
+    content = template_path.read_text()
+    if workspace:
+        content = content.replace(
+            'WORKSPACE_ARG=""', f'WORKSPACE_ARG="-w {workspace}"'
+        )
+
+    hook_path.write_text(content)
     hook_path.chmod(0o755)  # Make executable
 
     return True
@@ -137,13 +160,22 @@ def hooks() -> None:
 @hooks.command()
 @click.option("--all", "install_all", is_flag=True, help="Install all supported hooks")
 @click.option("--force", is_flag=True, help="Overwrite existing hooks")
-def install(install_all: bool, force: bool) -> None:
+@click.option(
+    "-w", "--workspace",
+    help=(
+        "Bake this workspace name into the hook (#160). Required when the repo "
+        "was indexed with a fixed name (loomgraph index -w <name>) — otherwise "
+        "the hook's update auto-detects <repo>:<branch>, a different db."
+    ),
+)
+def install(install_all: bool, force: bool, workspace: str | None) -> None:
     """Install post-commit hook for automatic updates.
 
     Examples:
-        loomgraph hooks install          # Install post-commit hook
-        loomgraph hooks install --all    # Install all hooks
-        loomgraph hooks install --force  # Overwrite existing
+        loomgraph hooks install                     # Install post-commit hook
+        loomgraph hooks install -w myname           # Pin the hook's workspace (#160)
+        loomgraph hooks install --all               # Install all hooks
+        loomgraph hooks install --force -w myname   # Overwrite + repin
     """
     from ._setup import ErrorCode
     from .main import output_error, output_success
@@ -164,7 +196,7 @@ def install(install_all: bool, force: bool) -> None:
 
     for hook_name in hooks_to_install:
         try:
-            if install_hook(hook_name, force=force):
+            if install_hook(hook_name, force=force, workspace=workspace):
                 installed.append(hook_name)
         except Exception as e:
             skipped.append({"hook": hook_name, "error": str(e)})

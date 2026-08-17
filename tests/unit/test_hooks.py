@@ -208,3 +208,126 @@ def test_get_hooks_dir_does_not_fail_open(
 
     with pytest.raises(FileNotFoundError):
         _hooks.get_hooks_dir()
+
+
+# ─── #164: husky v9 layout — `.husky/_` is a regenerable shim dir ────────
+
+
+def test_get_hooks_dir_maps_husky_underscore_to_husky_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """husky v9: core.hooksPath=.husky/_ — install must land in .husky/, not _/.
+
+    `.husky/_` is husky's *generated* shim dir: `husky` (npm prepare) wipes and
+    rebuilds it on every install, silently deleting anything we put there. It
+    also holds the shims husky uses to source the real user hooks — overwriting
+    `.husky/_/post-commit` with our template breaks husky's chain for every
+    other hook. The husky-v9 convention for user hooks is the `.husky/` root:
+    the shim executes `.husky/<hook>`, which is where we must write (#164).
+    """
+    import subprocess
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_git_repo(repo)
+    (repo / ".husky" / "_").mkdir(parents=True)
+    subprocess.run(
+        ["git", "config", "core.hooksPath", ".husky/_"],
+        cwd=repo, check=True, capture_output=True,
+    )
+    monkeypatch.chdir(repo)
+
+    hooks_dir = _hooks.get_hooks_dir()
+    assert hooks_dir == (repo / ".husky").resolve(), (
+        f"husky v9 layout must map to .husky/ root (user-hook area), "
+        f"got {hooks_dir} (#164)"
+    )
+
+
+def test_install_hook_husky_layout_lands_in_husky_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """End-to-end: on a husky v9 repo the hook file appears at .husky/post-commit."""
+    import subprocess
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_git_repo(repo)
+    (repo / ".husky" / "_").mkdir(parents=True)
+    subprocess.run(
+        ["git", "config", "core.hooksPath", ".husky/_"],
+        cwd=repo, check=True, capture_output=True,
+    )
+    monkeypatch.chdir(repo)
+
+    assert install_hook("post-commit") is True
+
+    assert (repo / ".husky" / "post-commit").exists(), (
+        "hook must land in .husky/ root under husky v9 (#164)"
+    )
+    assert not (repo / ".husky" / "_" / "post-commit").exists(), (
+        "hook must NOT overwrite the husky shim (#164)"
+    )
+
+
+# ─── #160: hook must update the workspace the user actually indexed ──────
+
+
+def test_install_hook_injects_workspace_arg(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """install_hook(workspace=...) bakes `-w <name>` into the template.
+
+    Without it the hook calls bare `loomgraph update`, which auto-detects
+    `<repo-dir>:<branch>` — a different workspace than the fixed-name one the
+    user indexed with `index -w <name>`, so the graph never updates the db
+    the user queries (#160).
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_git_repo(repo)
+    monkeypatch.chdir(repo)
+
+    assert install_hook("post-commit", workspace="hexforce-rn") is True
+
+    content = (repo / ".git" / "hooks" / "post-commit").read_text()
+    assert '-w hexforce-rn' in content, (
+        "hook template must carry the workspace the user indexed (#160)"
+    )
+    # The bare call sites must consume the variable, not a hardcoded bare update.
+    assert "update $WORKSPACE_ARG" in content
+
+
+def test_install_hook_without_workspace_leaves_bare_update(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No workspace given → template keeps bare `update` (auto-detect, current default)."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_git_repo(repo)
+    monkeypatch.chdir(repo)
+
+    assert install_hook("post-commit") is True
+
+    content = (repo / ".git" / "hooks" / "post-commit").read_text()
+    assert "update $WORKSPACE_ARG" in content
+    # The variable stays empty (the -w <name> text in the comments is fine).
+    assert 'WORKSPACE_ARG=""' in content
+    assert 'WORKSPACE_ARG="-w' not in content
+
+
+# ─── tee exit-code: $? after a pipe is tee's status, not update's ────────
+
+
+def test_template_uses_pipestatus_not_dollar_question() -> None:
+    """After `update | tee`, `$?` is tee's exit code — failures show ✓.
+
+    The sync path must read bash's ${PIPESTATUS[0]} (first pipe element) so a
+    failed update is reported as failed (found during #160 triage).
+    """
+    template = files("loomgraph") / "_hooks_templates" / "post-commit"
+    content = template.read_text()
+    assert "PIPESTATUS[0]" in content, (
+        "sync path must use ${PIPESTATUS[0]} after `update | tee`"
+    )
+    assert 'EXIT_CODE=$?' not in content
