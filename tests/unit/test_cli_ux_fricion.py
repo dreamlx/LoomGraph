@@ -167,3 +167,69 @@ def test_silence_warnings_default_empty(
 ) -> None:
     from loomgraph.cli._indexing import _silence_warnings
     assert _silence_warnings(["partial-graph: x"]) == ["partial-graph: x"]
+
+
+# ─── codex review (PR #170): config-only diffs must not skip ──────────────
+
+
+def test_update_runs_when_diff_touches_codeindex_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A `.codeindex.yaml`-only commit changes what the graph WOULD contain
+    (languages:) — skipping the export on it serves a stale graph as
+    success:true (codex review BLOCKER: fail-loud violation)."""
+    from loomgraph.cli import _indexing
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "t@t.com"],
+                   cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "t"],
+                   cwd=repo, check=True, capture_output=True)
+    (repo / "a.py").write_text("def foo():\n    pass\n")
+    subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-qm", "add a.py"],
+                   cwd=repo, check=True, capture_output=True)
+    # Config-only second commit — no source file touched.
+    (repo / ".codeindex.yaml").write_text("languages: [typescript]\n")
+    subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-qm", "switch languages"],
+                   cwd=repo, check=True, capture_output=True)
+    monkeypatch.chdir(repo)
+
+    called = {"export": False}
+
+    def _fake_export(repo_path: Path) -> tuple:
+        called["export"] = True
+        raise _indexing.GraphExportError("stop-here")
+
+    monkeypatch.setattr(_indexing, "run_graph_export", _fake_export)
+    monkeypatch.setattr(
+        _indexing, "check_codeindex", lambda: {"installed": True},
+    )
+
+    runner = CliRunner()
+    res = runner.invoke(main, ["update"])
+    assert called["export"] is True, (
+        ".codeindex.yaml-only diff must NOT skip — it changes the graph (#165 BLOCKER)"
+    )
+    assert '"skipped": true' not in res.output
+
+
+# ─── codex review: silence must not eat the zero-export diagnosis ────────
+
+
+def test_silence_warnings_ignores_blank_patterns(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An empty/whitespace pattern is `'' in anything` == match-everything —
+    it would silence ALL warnings including safety diagnostics (codex
+    SHOULD-FIX). Blank entries are dropped instead."""
+    from loomgraph.cli._indexing import _silence_warnings
+    from loomgraph.core.config import get_settings
+
+    monkeypatch.setattr(get_settings().warnings, "silence", ["", "  "])
+    assert _silence_warnings(["partial-graph: x", "another"]) == [
+        "partial-graph: x", "another"
+    ]

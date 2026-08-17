@@ -862,8 +862,11 @@ class TestUpdateCommand:
     ) -> None:
         """Non-git repo → whole-tree ingest(clear=False); incremental not used."""
         mock_check.return_value = {"installed": True, "version": "0.29.0"}
-        # #165 skip-gate precondition: diff has supported-language files.
-        mock_changed.return_value = [Path("x.swift")]
+        # #165 skip-gate precondition, modeled on the REAL non-git path:
+        # get_changed_files raises GitError → the skip gate falls through to
+        # the whole-tree export (codex review SHOULD-FIX).
+        from loomgraph.core.git import GitError
+        mock_changed.side_effect = GitError("not a git repository")
         # Healthy (non-empty) export — this test pins the routing, not the
         # 0-entity gate (#120); an empty ImportSummary would short-circuit it.
         mock_export.return_value = ([], [], ImportSummary(entity_count=2), [])

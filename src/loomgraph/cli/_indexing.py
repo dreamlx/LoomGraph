@@ -34,12 +34,21 @@ SUPPORTED_SOURCE_EXTS = {
     ".swift", ".java", ".m", ".h",
 }
 
+# Config files whose content changes what the graph contains (or how it is
+# built) without any source-file diff — they always trigger a re-export.
+_GRAPH_AFFECTING_CONFIGS = {
+    ".codeindex.yaml", ".codeindex.yml",
+    ".loomgraph.yaml", ".loomgraph.yml",
+}
+
 
 def _silence_warnings(warnings: list[str]) -> list[str]:
     """Drop warnings matching a `warnings.silence` substring (#166)."""
     from loomgraph.core.config import get_settings
 
-    silence = [s.lower() for s in get_settings().warnings.silence]
+    silence = [
+        s.lower() for s in get_settings().warnings.silence if s.strip()
+    ]
     if not silence:
         return warnings
     return [w for w in warnings if not any(s in w.lower() for s in silence)]
@@ -95,6 +104,7 @@ def index(repo_path: str, clear: bool, workspace: str | None) -> None:
     # indexed with default languages:[python] yields a few stray entities and
     # a "WARNING: partial graph" line. Surface it so a misconfigured repo
     # doesn't index as a silent success (#108).
+    raw_warnings = warnings
     warnings = _silence_warnings(warnings)
     for line in warnings:
         click.echo(f"⚠️  {line}", err=True)
@@ -104,8 +114,10 @@ def index(repo_path: str, clear: bool, workspace: str | None) -> None:
     # mismatch) doesn't silently build an empty graph. Consistent with
     # `update`/`refresh`. An empty repo also exits 1: safe — the user checks
     # why there's nothing to index, rather than a silent success.
+    # The gate consumes the RAW warnings — a silence pattern must not eat
+    # the 0-entity diagnosis (codex review on #166).
     zero_warning = (
-        _zero_entities_warning(repo, warnings) if summary.entity_count == 0 else None
+        _zero_entities_warning(repo, raw_warnings) if summary.entity_count == 0 else None
     )
     if zero_warning is not None:
         click.echo(f"⚠️  WARNING: {zero_warning}", err=True)
@@ -294,12 +306,18 @@ def update(
     # and the post-commit hook pays it on every docs/config/CI-only commit.
     if not forced_whole_tree:
         try:
-            source_changes = get_changed_files(
-                since=since, repo_path=repo, extensions=SUPPORTED_SOURCE_EXTS
-            )
+            all_changes = get_changed_files(since=since, repo_path=repo)
         except Exception:
-            source_changes = None  # non-git / bad ref: fall through to export
-        if source_changes is not None and not source_changes:
+            all_changes = None  # non-git / bad ref: fall through to export
+        # A diff is skippable only when NOTHING in it can affect the graph:
+        # no parsable source file AND no graph-affecting config (codex review
+        # BLOCKER on #165 — a `.codeindex.yaml`-only commit changes `languages:`
+        # and thus what the graph WOULD contain; skipping it serves a stale
+        # graph as success:true, the exact silent-partial fail-loud violation).
+        def _graph_relevant(p: Path) -> bool:
+            return p.suffix in SUPPORTED_SOURCE_EXTS or p.name in _GRAPH_AFFECTING_CONFIGS
+
+        if all_changes is not None and not any(_graph_relevant(p) for p in all_changes):
             click.echo(
                 "       No supported-language files in diff — skipping update.",
                 err=True,
@@ -329,6 +347,9 @@ def update(
         err=True,
     )
     # Surface codeindex partial-graph warnings (#108) — same as `index`.
+    # The zero-export safety gate below consumes the RAW warnings: a user
+    # silence pattern must not degrade the 0-entity diagnosis (codex review).
+    raw_warnings = warnings
     warnings = _silence_warnings(warnings)
     for line in warnings:
         click.echo(f"⚠️  {line}", err=True)
@@ -337,7 +358,7 @@ def update(
     # mismatch. Letting it through to ingest_incremental would GC the changed
     # files' symbols (treated as "removed"); letting it through to the whole-
     # tree upsert writes an empty graph. Hard-stop with a diagnosis instead.
-    safe, zero_warning = assess_export(summary, warnings)
+    safe, zero_warning = assess_export(summary, raw_warnings)
     if not safe:
         click.echo(f"⚠️  WARNING: {zero_warning}", err=True)
         # #141: a 0-entity export is a config/grammar mismatch, not a success —
