@@ -43,15 +43,21 @@ def is_git_repository(path: Path | str = ".") -> bool:
 
 def get_changed_files(
     since: str = "HEAD~1",
-    until: str = "HEAD",
+    until: str | None = None,
     repo_path: Path | str = ".",
     extensions: set[str] | None = None,
 ) -> list[Path]:
-    """Get list of changed files between two commits.
+    """Get list of changed files from ``since`` (default: to working tree).
+
+    Without ``until`` the diff endpoint is the working tree — staged and
+    unstaged changes are included alongside committed ones, matching the
+    update skip gate (``_diff_names_with_deletions``). With ``until`` the
+    diff is the committed range ``since..until`` (#175: the two endpoints
+    disagreeing made dirty-tree updates silently skip the ingest set).
 
     Args:
         since: Starting commit reference (default: HEAD~1)
-        until: Ending commit reference (default: HEAD)
+        until: Ending commit reference (default: None = working tree)
         repo_path: Repository path (default: current directory)
         extensions: Filter by file extensions (e.g., {".py", ".java"})
 
@@ -67,24 +73,16 @@ def get_changed_files(
         raise GitError(f"Not a git repository: {repo}")
 
     try:
-        # Get changed files between commits
+        cmd = ["git", "diff", "--name-only", "--diff-filter=ACMR", since]
+        if until is not None:
+            cmd.append(until)
         result = subprocess.run(
-            ["git", "diff", "--name-only", "--diff-filter=ACMR", since, until],
+            cmd,
             cwd=str(repo),
             capture_output=True,
             text=True,
             timeout=30,
         )
-
-        if result.returncode != 0:
-            # Try without until (for staged changes or single commit)
-            result = subprocess.run(
-                ["git", "diff", "--name-only", "--diff-filter=ACMR", since],
-                cwd=str(repo),
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
 
         if result.returncode != 0:
             raise GitError(f"git diff failed: {result.stderr}")
