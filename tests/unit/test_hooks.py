@@ -331,3 +331,61 @@ def test_template_uses_pipestatus_not_dollar_question() -> None:
         "sync path must use ${PIPESTATUS[0]} after `update | tee`"
     )
     assert 'EXIT_CODE=$?' not in content
+
+
+# ─── codex review (PR #169): repin must rewrite, unsafe names must fail ────
+
+
+def test_install_hook_repin_rewrites_existing_managed_hook(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """install -w on an ALREADY-installed managed hook must rewrite it.
+
+    The #160 repair's primary audience is repos with a bare-update hook
+    already installed — the early `already installed` return would report
+    installed:true while silently leaving the bare `loomgraph update` in
+    place (codex review BLOCKER).
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_git_repo(repo)
+    monkeypatch.chdir(repo)
+
+    assert install_hook("post-commit") is True  # bare install (no -w)
+    bare = (repo / ".git" / "hooks" / "post-commit").read_text()
+    assert 'WORKSPACE_ARG=""' in bare  # variable stayed empty (unpinned)
+
+    # Repin WITHOUT --force must rewrite the managed hook.
+    assert install_hook("post-commit", workspace="hexforce-rn") is True
+    content = (repo / ".git" / "hooks" / "post-commit").read_text()
+    assert '-w hexforce-rn' in content, (
+        "install -w must rewrite an existing managed hook, not no-op (codex BLOCKER)"
+    )
+
+
+def test_install_hook_rejects_unsafe_workspace_names(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Workspace names are baked into bash source — reject metacharacters.
+
+    Spaces split into multiple args; quotes/$/backticks alter the executable
+    script (codex review SHOULD-FIX). Workspace names come from repo dirs /
+    branch names, where `:` `/` `.` `-` `_` are legitimate; everything else
+    shell-active is not.
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_git_repo(repo)
+    monkeypatch.chdir(repo)
+
+    with pytest.raises(ValueError):
+        install_hook("post-commit", workspace="my ws")  # space
+    with pytest.raises(ValueError):
+        install_hook("post-commit", workspace='x"; rm -rf ~')  # quote
+    with pytest.raises(ValueError):
+        install_hook("post-commit", workspace="$(cmd)")  # substitution
+    with pytest.raises(ValueError):
+        install_hook("post-commit", workspace="")  # empty
+
+    # Legitimate shapes pass (branch-bearing names include '/' and ':').
+    assert install_hook("post-commit", workspace="loomgraph:feature/fix-160") is True

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 from importlib.resources import files
@@ -13,6 +14,12 @@ from .main import main
 
 LOOMGRAPH_MARKER = "# loomgraph-managed hook"
 SUPPORTED_HOOKS = ["post-commit"]
+
+# Workspace names are baked into bash source (WORKSPACE_ARG="-w <name>"), so
+# only shell-inert characters are accepted (codex review on PR #169). Names
+# come from repo dirs / branch names where `:` `/` `.` `-` `_` are legit;
+# space/quote/$/backtick would split args or alter the script.
+_SAFE_WORKSPACE = re.compile(r"^[A-Za-z0-9._:/-]+$")
 
 
 def find_git_repo() -> Path:
@@ -91,17 +98,26 @@ def install_hook(hook_name: str, force: bool = False, workspace: str | None = No
     """
     if hook_name not in SUPPORTED_HOOKS:
         raise ValueError(f"Unsupported hook: {hook_name}")
+    if workspace is not None and not _SAFE_WORKSPACE.match(workspace):
+        raise ValueError(
+            f"Invalid workspace name {workspace!r}: allowed characters are "
+            "letters, digits and . _ : / - (the name is baked into a bash hook)"
+        )
 
     hooks_dir = get_hooks_dir()
     hook_path = hooks_dir / hook_name
 
-    # Check if already installed
-    if hook_path.exists() and not force:
+    # Check if already installed. An explicit `workspace` (re)pin must
+    # REWRITE the managed hook — the early return would report installed
+    # while silently leaving a bare `loomgraph update` in place, which is
+    # exactly the #160 case for repos with an existing hook (codex review).
+    if hook_path.exists():
         content = hook_path.read_text()
         if LOOMGRAPH_MARKER in content:
-            return True  # Already installed
+            if workspace is None and not force:
+                return True  # Already installed, same contract
         else:
-            # Backup existing custom hook
+            # Backup existing custom hook (any rewrite path, repin included)
             backup_path = hooks_dir / f"{hook_name}.backup"
             shutil.copy2(hook_path, backup_path)
 
