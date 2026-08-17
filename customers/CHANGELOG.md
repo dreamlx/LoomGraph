@@ -8,7 +8,15 @@
 
 ## [Unreleased]
 
-### 修复 — `loomgraph status` 现在报告 loomgraph 实际调用的 codeindex
+### 修复 — `loomgraph impact` 的 direct/indirect callers 不再恒为空(#173)
+
+- 之前 `impact` 报告的 `direct_callers` / `indirect_callers` 永远是 `[]`——
+  即使改的函数在图里有明确的调用者。根因:`codeindex parse` 返回的是裸名
+  (`func` / `Class.method`,无模块前缀),而图谱里存的是模块全限定 id
+  (`pkg.mod.func` / `pkg.mod.Class.method`),`_query_callers` 用裸名做精确
+  匹配永远对不上。现在用文件路径反推模块前缀拼成全限定名再查。**对实际
+  使用影响大**:impact 的调用链分析此前完全失效,现在能真正报出受影响调用方。
+  loomgraph 自仓实测:`impact ecc0e81` 从 0/0 调用方 → 21 direct / 12 indirect。
 
 - 之前 `status` 通过 PATH 查找 `codeindex`,可能命中一个与 `index` 实际使用
   不同的安装(例如 pipx 上的 0.37.0 vs venv 钉住的版本)。现在改用与

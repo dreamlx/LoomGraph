@@ -461,3 +461,145 @@ class TestImpactModels:
         assert len(data["changed_symbols"]) == 1
         assert data["impact_analysis"]["affected_modules"] == ["src.test", "src.main"]
         assert data["risk_assessment"]["level"] == "low"
+
+
+class TestQueryCallersNameQualification:
+    """#173: direct_callers always empty — name-format mismatch.
+
+    `codeindex parse` returns bare / class-qualified names
+    (``func`` or ``Class.method``) WITHOUT the module prefix, but the
+    graph stores module-qualified ids (``src.pkg.mod.func`` /
+    ``src.pkg.mod.Class.method``). `_query_callers` did an exact-equality
+    match on the bare name, so it never matched → direct_callers=[] always.
+
+    Fix (option 1 from #173, preserves #66's collision fix): qualify the
+    changed symbol's name with its file's module path before querying —
+    `_file_to_module(file) + "." + name` — matching exactly what
+    graph-export emits. The indirect path already passes graph-sourced
+    (qualified) names, so it's unaffected.
+    """
+
+    @pytest.mark.asyncio
+    async def test_bare_function_name_resolves_against_qualified_id(
+        self,
+    ) -> None:
+        """A top-level func's bare parse name must resolve to its
+        module-qualified graph id.
+
+        parse gives ``create_graph_store``; graph stores
+        ``src.loomgraph.storage.factory.create_graph_store``. The qualifier
+        built from ``file=src/loomgraph/storage/factory.py`` must bridge them.
+        """
+        store = MagicMock()
+        # One CALLS edge: qualified tgt + qualified src (what the graph holds)
+        store.get_all_relations = AsyncMock(
+            return_value=[
+                {
+                    "src_id": "src.loomgraph.cli._common.prepare_workspace_store",
+                    "tgt_id": "src.loomgraph.storage.factory.create_graph_store",
+                    "keywords": "CALLS",
+                    "source_id": "src/loomgraph/cli/_common.py:42",
+                }
+            ]
+        )
+        analyzer = ImpactAnalyzer(store=store, repo_path=Path("."))
+
+        # Symbol as codeindex parse returns it: bare name + file
+        direct, _ = await analyzer._find_callers(
+            [
+                ChangedSymbol(
+                    name="create_graph_store",
+                    file="src/loomgraph/storage/factory.py",
+                    change_type=ChangeType.MODIFIED,
+                )
+            ]
+        )
+
+        assert len(direct) == 1
+        assert direct[0].name == "src.loomgraph.cli._common.prepare_workspace_store"
+
+    @pytest.mark.asyncio
+    async def test_class_qualified_method_name_resolves(self) -> None:
+        """A method's parse name (``Class.method``) resolves to
+        ``module.Class.method`` — the file_to_module prefix is prepended
+        whole, not per-dot-segment."""
+        store = MagicMock()
+        store.get_all_relations = AsyncMock(
+            return_value=[
+                {
+                    "src_id": "src.app.bootstrap.run",
+                    "tgt_id": "src.app.config.Config.load",
+                    "keywords": "CALLS",
+                    "source_id": "src/app/bootstrap.py:7",
+                }
+            ]
+        )
+        analyzer = ImpactAnalyzer(store=store, repo_path=Path("."))
+
+        direct, _ = await analyzer._find_callers(
+            [
+                ChangedSymbol(
+                    name="Config.load",  # parse gives Class.method, no module
+                    file="src/app/config.py",
+                    change_type=ChangeType.MODIFIED,
+                )
+            ]
+        )
+
+        assert len(direct) == 1
+        assert direct[0].name == "src.app.bootstrap.run"
+
+    @pytest.mark.asyncio
+    async def test_non_python_file_falls_back_to_bare_name(self) -> None:
+        """A non-.py file (file_to_module returns "") must not crash —
+        falls back to the bare name (no match expected, but no exception)."""
+        store = MagicMock()
+        store.get_all_relations = AsyncMock(return_value=[])
+        analyzer = ImpactAnalyzer(store=store, repo_path=Path("."))
+
+        # Should not raise; returns empty
+        direct, indirect = await analyzer._find_callers(
+            [
+                ChangedSymbol(
+                    name="some_js_func",
+                    file="src/app/utils.js",
+                    change_type=ChangeType.MODIFIED,
+                )
+            ]
+        )
+        assert direct == [] and indirect == []
+
+    @pytest.mark.asyncio
+    async def test_indirect_callers_still_resolve_with_qualified_name(
+        self,
+    ) -> None:
+        """The indirect path passes graph-sourced (already-qualified) caller
+        names — it must NOT double-qualify. Regression guard: a qualified
+        name fed back through _find_callers at depth>1 still resolves."""
+        store = MagicMock()
+        # Edge into the (already-qualified) direct caller
+        store.get_all_relations = AsyncMock(
+            return_value=[
+                {
+                    "src_id": "src.app.entry.main",
+                    "tgt_id": "src.app.bootstrap.run",
+                    "keywords": "CALLS",
+                    "source_id": "src/app/entry.py:3",
+                }
+            ]
+        )
+        analyzer = ImpactAnalyzer(store=store, repo_path=Path("."), max_depth=2)
+
+        # Feed an already-qualified name (as the indirect path does via direct.name)
+        direct, indirect = await analyzer._find_callers(
+            [
+                ChangedSymbol(
+                    name="src.app.bootstrap.run",  # qualified, no file needed
+                    file="src/app/bootstrap.py",
+                    change_type=ChangeType.MODIFIED,
+                )
+            ]
+        )
+        # qualified name as-is matches the qualified tgt_id
+        assert len(direct) == 1
+        assert direct[0].name == "src.app.entry.main"

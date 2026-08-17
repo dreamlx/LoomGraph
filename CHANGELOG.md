@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — `loomgraph impact` direct/indirect callers always empty (#173)
+- `_find_callers` now qualifies the changed symbol's bare parse name with its
+  file's module path before the exact-equality match against the graph's
+  module-qualified ids. `codeindex parse` returns `func` / `Class.method`
+  (no module prefix); the graph stores `pkg.mod.func` /
+  `pkg.mod.Class.method` — the bare name never matched, so
+  `direct_callers`/`indirect_callers` were always `[]` even for symbols
+  with provable callers. The fix uses the existing `_file_to_module`
+  helper (`file` → `pkg.mod`) + `"." + name`, which matches graph-export's
+  id construction exactly (verified on top-level funcs and class methods).
+  Option 1 from the issue — preserves #66's same-name collision fix (no
+  loosened `endswith` match). The indirect path is unaffected: it feeds
+  back graph-sourced (already-qualified) names; `_qualify_symbol_name`
+  guards against double-prefixing. Dogfood (loomgraph:main): `impact
+  ecc0e81` went from 0/0 callers to 21 direct / 12 indirect.
+
 ### Fixed — `loomgraph status` reports the codeindex loomgraph actually invokes
 - `check_codeindex` now probes via `sys.executable -m codeindex.cli --version`
   — the SAME pinned-env path `index` / `update` / `loomgraph codeindex` run

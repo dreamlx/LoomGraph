@@ -148,8 +148,18 @@ class ImpactAnalyzer:
         seen_callers: set[str] = set()
 
         for symbol in symbols:
-            # Query LightRAG for callers
-            callers_data = await self._query_callers(symbol.name, depth=1)
+            # #173: qualify the bare parse name with its file's module path so
+            # it matches the module-qualified ids the graph stores. codeindex
+            # parse returns `func` / `Class.method` (no module prefix); the
+            # graph's entity ids + CALLS tgt_id are `pkg.mod.func` /
+            # `pkg.mod.Class.method`. _file_to_module + "." + name bridges them
+            # exactly (verified against graph-export output). Non-.py files →
+            # file_to_module returns "" → fall back to bare name (no match, but
+            # no crash; same as pre-#173 behaviour). The indirect path below
+            # passes direct.name, which comes from the graph's src_id and is
+            # already qualified — it is NOT re-qualified (would double-prefix).
+            query_name = self._qualify_symbol_name(symbol)
+            callers_data = await self._query_callers(query_name, depth=1)
 
             for caller_data in callers_data:
                 caller_key = f"{caller_data.get('file', '')}:{caller_data.get('name', '')}"
@@ -299,7 +309,6 @@ class ImpactAnalyzer:
         """
         if not file_path.endswith(".py"):
             return ""
-
         # Remove .py extension and convert path separators
         module = file_path[:-3].replace("/", ".").replace("\\", ".")
 
@@ -307,6 +316,26 @@ class ImpactAnalyzer:
         module = module.lstrip(".")
 
         return module
+
+    def _qualify_symbol_name(self, symbol: ChangedSymbol) -> str:
+        """Build the module-qualified id a changed symbol maps to in the graph.
+
+        #173: ``codeindex parse`` returns bare / class-qualified names
+        (``func`` / ``Class.method``) without the module prefix, but the
+        graph stores ``pkg.mod.func`` / ``pkg.mod.Class.method``. This
+        prepends ``_file_to_module(file) + "."`` so the exact-equality
+        match in ``_query_callers`` hits. If the symbol's own name is
+        already module-qualified (no file, or non-.py), return it as-is
+        — preserves the indirect path which feeds back qualified names.
+        """
+        module = self._file_to_module(symbol.file)
+        if not module:
+            return symbol.name
+        # Don't double-qualify: if the name already starts with the module
+        # path (indirect path feeds qualified names), leave it.
+        if symbol.name.startswith(module + "."):
+            return symbol.name
+        return f"{module}.{symbol.name}"
 
     def _identify_affected_tests(
         self,
