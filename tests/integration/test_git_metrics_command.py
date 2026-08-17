@@ -68,14 +68,20 @@ class TestGitMetricsCommand:
             assert "rank" in hotspot
             assert hotspot["rank"] == 1  # Top hotspot
 
-        # Verify bus_factor structure
+        # Verify bus_factor structure. Single-author suppression (#156):
+        # after the public-history rewrite unified commit emails, this repo
+        # reads as one author — every risk_level is legitimately
+        # "informational" with a bus_factor_note explaining why.
         if len(data["bus_factor"]) > 0:
             bf = data["bus_factor"][0]
             assert "file" in bf
             assert "owner" in bf
             assert "contributors" in bf
             assert "risk_level" in bf
-            assert bf["risk_level"] in ["critical", "high", "medium"]
+            if data.get("summary", {}).get("bus_factor_note"):
+                assert bf["risk_level"] == "informational"
+            else:
+                assert bf["risk_level"] in ["critical", "high", "medium"]
 
     def test_git_metrics_console_output(self):
         """Test git-metrics without --output (console output)."""

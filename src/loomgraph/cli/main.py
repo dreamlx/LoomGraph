@@ -12,7 +12,31 @@ from loomgraph import __version__
 from loomgraph.cli._common import _setup_logging
 
 
-@click.group()
+class _QuietHintGroup(click.Group):
+    """Group that annotates `-q`-after-subcommand usage errors (#163/#166).
+
+    Click parses global options only before the subcommand; git/gh muscle
+    memory puts them after, and the bare ``No such option '-q'`` cost a
+    dogfood first-try on the post-commit hook. We don't reparse (fragile) —
+    we amend the UsageError message in flight so whatever prints it (click's
+    ``show()`` in standalone mode, or ``cli_entry``'s handler) carries the
+    correct form.
+    """
+
+    def invoke(self, ctx: click.Context) -> object:
+        try:
+            return super().invoke(ctx)
+        except click.exceptions.UsageError as exc:
+            msg = exc.format_message()
+            if "'-q'" in msg or '"-q"' in msg or "'--quiet'" in msg:
+                exc.message = (
+                    f"{msg}\n\n  Hint: -q/--quiet is a global flag — put it "
+                    "before the command: loomgraph -q <command> [args]"
+                )
+            raise
+
+
+@click.group(cls=_QuietHintGroup)
 @click.version_option(version=__version__, prog_name="loomgraph")
 @click.option("--verbose", "-v", is_flag=True, help="Show debug logs on stderr")
 @click.option("--quiet", "-q", is_flag=True, help="Suppress all non-JSON output")

@@ -25,6 +25,55 @@ from loomgraph.core.graph_export_ingest import (
     run_graph_export,
 )
 
+# Extensions codeindex can parse (any configured language). `update` skips the
+# whole-tree re-export when the git diff touches none of them (#165) — the
+# post-commit hook makes every docs/config/CI commit pay the full export
+# otherwise. Deliberately conservative:宁可多跑一次 export,不可漏更新.
+SUPPORTED_SOURCE_EXTS = {
+    ".py", ".php", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs",
+    ".swift", ".java", ".m", ".h",
+}
+
+# Config files whose content changes what the graph contains (or how it is
+# built) without any source-file diff — they always trigger a re-export.
+_GRAPH_AFFECTING_CONFIGS = {
+    ".codeindex.yaml", ".codeindex.yml",
+    ".loomgraph.yaml", ".loomgraph.yml",
+}
+
+
+def _silence_warnings(warnings: list[str]) -> list[str]:
+    """Drop warnings matching a `warnings.silence` substring (#166)."""
+    from loomgraph.core.config import get_settings
+
+    silence = [
+        s.lower() for s in get_settings().warnings.silence if s.strip()
+    ]
+    if not silence:
+        return warnings
+    return [w for w in warnings if not any(s in w.lower() for s in silence)]
+
+
+def _diff_names_with_deletions(since: str, repo: Path) -> list[str] | None:
+    """Diff names INCLUDING deletions (ACMRD), or None when git fails.
+
+    The shared ``get_changed_files`` filters ACMR — a deleted file never
+    appears, so a deleted ``.codeindex.yaml`` would read as an empty diff
+    and the update would skip, silently keeping a graph built under the
+    deleted config (codex re-review on #165).
+    """
+    import subprocess as _sp
+
+    try:
+        r = _sp.run(
+            ["git", "diff", "--name-only", "--diff-filter=ACMRD", since],
+            cwd=str(repo), capture_output=True, text=True, timeout=30,
+            check=True,
+        )
+    except Exception:
+        return None  # non-git / bad ref: caller falls through to export
+    return [line.strip() for line in r.stdout.splitlines() if line.strip()]
+
 
 @main.command()
 @click.argument("repo_path", type=click.Path(exists=True))
@@ -76,6 +125,8 @@ def index(repo_path: str, clear: bool, workspace: str | None) -> None:
     # indexed with default languages:[python] yields a few stray entities and
     # a "WARNING: partial graph" line. Surface it so a misconfigured repo
     # doesn't index as a silent success (#108).
+    raw_warnings = warnings
+    warnings = _silence_warnings(warnings)
     for line in warnings:
         click.echo(f"⚠️  {line}", err=True)
 
@@ -84,8 +135,10 @@ def index(repo_path: str, clear: bool, workspace: str | None) -> None:
     # mismatch) doesn't silently build an empty graph. Consistent with
     # `update`/`refresh`. An empty repo also exits 1: safe — the user checks
     # why there's nothing to index, rather than a silent success.
+    # The gate consumes the RAW warnings — a silence pattern must not eat
+    # the 0-entity diagnosis (codex review on #166).
     zero_warning = (
-        _zero_entities_warning(repo, warnings) if summary.entity_count == 0 else None
+        _zero_entities_warning(repo, raw_warnings) if summary.entity_count == 0 else None
     )
     if zero_warning is not None:
         click.echo(f"⚠️  WARNING: {zero_warning}", err=True)
@@ -269,6 +322,50 @@ def update(
         )
         return
 
+    # #165: short-circuit before the whole-tree export when the diff touches
+    # no parsable source file — the export is the multi-second bulk of update,
+    # and the post-commit hook pays it on every docs/config/CI-only commit.
+    config_rebuild = False
+    if not forced_whole_tree:
+        diff_names = _diff_names_with_deletions(since, repo)
+        # A diff is skippable only when NOTHING in it can affect the graph.
+        # Config changes (.codeindex.yaml languages:, .loomgraph.yaml, their
+        # deletions included) don't just prevent the skip — they demand a
+        # CLEAR REBUILD: re-export alone is a no-op, because the incremental
+        # ingest only touches entities whose source_id is in changed_files,
+        # and a config file is no entity's source. Without the rebuild the
+        # command would return success over a stale graph (codex re-review
+        # BLOCKER on #165).
+        if diff_names is not None:
+            paths = [Path(n) for n in diff_names]
+            config_touched = any(
+                p.name in _GRAPH_AFFECTING_CONFIGS for p in paths
+            )
+            source_touched = any(
+                p.suffix in SUPPORTED_SOURCE_EXTS for p in paths
+            )
+            if config_touched:
+                config_rebuild = True
+                click.echo(
+                    "       Graph-affecting config changed — full rebuild.",
+                    err=True,
+                )
+            elif not source_touched:
+                # Nothing in the diff can affect the graph (docs/shell/CI
+                # only — an empty diff is the degenerate case).
+                click.echo(
+                    "       No supported-language files in diff — skipping update.",
+                    err=True,
+                )
+                output_success({
+                    "skipped": True,
+                    "reason": "no_supported_source_files_in_diff",
+                    "since": since,
+                    "workspace": get_auto_workspace(workspace),
+                })
+                return
+            # else: source-only diff → normal incremental path below.
+
     # Step 2: Run codeindex graph-export (whole tree)
     click.echo("[2/3] Exporting whole tree with codeindex graph-export...", err=True)
     try:
@@ -286,6 +383,10 @@ def update(
         err=True,
     )
     # Surface codeindex partial-graph warnings (#108) — same as `index`.
+    # The zero-export safety gate below consumes the RAW warnings: a user
+    # silence pattern must not degrade the 0-entity diagnosis (codex review).
+    raw_warnings = warnings
+    warnings = _silence_warnings(warnings)
     for line in warnings:
         click.echo(f"⚠️  {line}", err=True)
 
@@ -293,7 +394,7 @@ def update(
     # mismatch. Letting it through to ingest_incremental would GC the changed
     # files' symbols (treated as "removed"); letting it through to the whole-
     # tree upsert writes an empty graph. Hard-stop with a diagnosis instead.
-    safe, zero_warning = assess_export(summary, warnings)
+    safe, zero_warning = assess_export(summary, raw_warnings)
     if not safe:
         click.echo(f"⚠️  WARNING: {zero_warning}", err=True)
         # #141: a 0-entity export is a config/grammar mismatch, not a success —
@@ -308,7 +409,10 @@ def update(
     click.echo("[3/3] Updating knowledge graph...", err=True)
     try:
         result = asyncio.run(
-            _async_update(entities, relations, workspace, repo, since, forced_whole_tree)
+            _async_update(
+                entities, relations, workspace, repo, since,
+                forced_whole_tree, config_rebuild=config_rebuild,
+            )
         )
     except Exception as e:
         output_error(
@@ -335,9 +439,14 @@ async def _async_update(
     repo: Path,
     since: str,
     forced_whole_tree: bool,
+    config_rebuild: bool = False,
 ) -> dict[str, Any]:
     """Branch update into per-file incremental (git) or whole-tree upsert.
 
+    - ``config_rebuild`` (graph-affecting config in the diff, #165): a CLEAR
+      rebuild — languages changes reshape the whole graph, and the
+      incremental path would ingest nothing (a config file is no entity's
+      source_id).
     - git repo and not ``forced_whole_tree``: ``ingest_incremental`` over the
       ``get_changed_files(since)`` subset (路 B).
     - otherwise: ``ingest(clear=False)`` whole-tree upsert (non-git fallback,
@@ -354,8 +463,12 @@ async def _async_update(
             err=True,
         )
 
-    use_incremental = (not forced_whole_tree) and is_git_repository(repo)
-    if use_incremental:
+    if config_rebuild:
+        result = await ingest(
+            entities, relations, store, clear=True, on_progress=_progress
+        )
+        result["mode"] = "config_rebuild"
+    elif (not forced_whole_tree) and is_git_repository(repo):
         changed_paths = get_changed_files(since=since, repo_path=repo)
         changed_files = {p.as_posix() for p in changed_paths}
         result = await ingest_incremental(

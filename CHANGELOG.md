@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — first external-project dogfood batch (HEXFORCE-RN / BlueHawkLock)
+- `hooks install -w <name>` bakes the workspace into the post-commit hook so
+  it updates the db the user actually indexed; previously the hook's bare
+  `loomgraph update` auto-detected `<repo>:<branch>` — a different workspace
+  than a fixed-name `index -w` db (#160).
+- `hooks install` on a husky v9 repo (core.hooksPath=`.husky/_`) writes
+  `.husky/post-commit` instead of a shim inside the regenerable `_` dir,
+  where npm prepare silently deleted it and overwriting broke husky's chain
+  (#164). The hook's sync path now also reports the real `update` exit code
+  (`${PIPESTATUS[0]}` — `$?` was tee's).
+- `update` short-circuits before the whole-tree export when the git diff
+  touches no parsable source file — docs/config/shell-only commits no longer
+  pay the multi-second export via the post-commit hook (#165).
+- `-q` placed after the subcommand (`loomgraph find x -q`) now gets a usage
+  hint pointing at the global-flag form instead of a bare
+  `No such option '-q'` (#163, #166).
+- Recurring export warnings (e.g. the partial-graph language hint) can be
+  silenced per substring via `warnings.silence` in `.loomgraph.yaml` (#166).
+
 ## [0.18.0] - 2026-08-16
 
 ### Added — built-in zero-config embedding: CodeRankEmbed-137M int8 ONNX (#158)
