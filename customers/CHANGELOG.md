@@ -4,9 +4,13 @@
 
 ---
 
+## [Unreleased]
+
 ---
 
-## [Unreleased]
+## [0.19.1] - 2026-08-17
+
+> **更新方式**: `pipx upgrade loomgraph`(已装 `[embed]` extra 的用 `pipx upgrade loomgraph --include-extra`)。本版为 bug 修复版,无破坏性变更。
 
 ### 修复 — `loomgraph impact` 的 direct/indirect callers 不再恒为空(#173)
 
@@ -17,6 +21,8 @@
   匹配永远对不上。现在用文件路径反推模块前缀拼成全限定名再查。**对实际
   使用影响大**:impact 的调用链分析此前完全失效,现在能真正报出受影响调用方。
   loomgraph 自仓实测:`impact ecc0e81` 从 0/0 调用方 → 21 direct / 12 indirect。
+
+### 修复 — `loomgraph status` 现在报告 loomgraph 实际调用的 codeindex
 
 - 之前 `status` 通过 PATH 查找 `codeindex`,可能命中一个与 `index` 实际使用
   不同的安装(例如 pipx 上的 0.37.0 vs venv 钉住的版本)。现在改用与

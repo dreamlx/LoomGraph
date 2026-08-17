@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.1] - 2026-08-17
+
 ### Fixed — `loomgraph impact` direct/indirect callers always empty (#173)
 - `_find_callers` now qualifies the changed symbol's bare parse name with its
   file's module path before the exact-equality match against the graph's
