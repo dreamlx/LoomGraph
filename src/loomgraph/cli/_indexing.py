@@ -325,6 +325,7 @@ def update(
     # #165: short-circuit before the whole-tree export when the diff touches
     # no parsable source file — the export is the multi-second bulk of update,
     # and the post-commit hook pays it on every docs/config/CI-only commit.
+    config_rebuild = False
     if not forced_whole_tree:
         diff_names = _diff_names_with_deletions(since, repo)
         # A diff is skippable only when NOTHING in it can affect the graph.
@@ -335,7 +336,6 @@ def update(
         # and a config file is no entity's source. Without the rebuild the
         # command would return success over a stale graph (codex re-review
         # BLOCKER on #165).
-        config_rebuild = False
         if diff_names is not None:
             paths = [Path(n) for n in diff_names]
             config_touched = any(
