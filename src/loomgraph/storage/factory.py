@@ -27,7 +27,15 @@ def _resolve_db_path(template: str, workspace: str | None) -> Path:
     becomes undiscoverable (workspace list scans top-level ``*.db`` only).
     """
     expanded = Path(template).expanduser()
-    if "{workspace}" in str(expanded) and workspace:
+    if "{workspace}" in str(expanded):
+        if not workspace:
+            # #176: fail loud — silently proceeding created a literal
+            # ~/.loomgraph/{workspace}.db shared by every None-caller.
+            raise ValueError(
+                "db_path template contains {workspace} but no workspace "
+                "name was given — resolve the workspace (e.g. "
+                "get_auto_workspace) before creating the store"
+            )
         safe_workspace = workspace.replace("\\", "/").replace("/", "-")
         expanded = Path(str(expanded).replace("{workspace}", safe_workspace))
     return expanded
@@ -42,6 +50,19 @@ async def create_graph_store(workspace: str | None = None) -> GraphStore:
     `SqliteDimensionMismatch`.
     """
     settings = get_settings()
+    if workspace is None:
+        # Discovery handle (#176): in-memory store whose workspace_root is
+        # the template's directory — list_workspaces() scans *.db without
+        # ever creating a literal {workspace}.db file on disk.
+        root = Path(settings.storage.db_path).expanduser().parent
+        root.mkdir(parents=True, exist_ok=True)
+        store = SqliteGraphStore(
+            db_path=":memory:",
+            workspace_root=root,
+            dimension=settings.embedding.dimension,
+        )
+        await store.initialize()
+        return store
     path = _resolve_db_path(settings.storage.db_path, workspace)
     path.parent.mkdir(parents=True, exist_ok=True)
     store = SqliteGraphStore(

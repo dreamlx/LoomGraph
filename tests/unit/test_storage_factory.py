@@ -61,6 +61,17 @@ class TestDBPathResolution:
         resolved = _resolve_db_path(template, "loomgraph:main")
         assert resolved == tmp_path / "loomgraph:main.db"
 
+    def test_placeholder_without_workspace_raises(self, tmp_path: Path) -> None:
+        """#176: a falsy workspace with a {workspace} placeholder in the
+        template must fail loud — silently proceeding created a literal
+        ~/.loomgraph/{workspace}.db that every None-caller would silently
+        share (and which then pollutes `workspace list`)."""
+        template = str(tmp_path / "{workspace}.db")
+        with pytest.raises(ValueError, match="workspace"):
+            _resolve_db_path(template, None)
+        with pytest.raises(ValueError, match="workspace"):
+            _resolve_db_path(template, "")
+
 
 class TestGraphStoreFactory:
     async def test_sqlite_backend_default(
@@ -76,6 +87,21 @@ class TestGraphStoreFactory:
             assert await store.get_all_entities() == []
         finally:
             await store.close()
+
+    async def test_discovery_handle_creates_no_db_file(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """#176: workspace=None is the discovery pattern (`workspace list`,
+        `similar`) — it must not create a literal {workspace}.db on disk."""
+        monkeypatch.setenv(
+            "LOOMGRAPH_STORAGE__DB_PATH", str(tmp_path / "{workspace}.db")
+        )
+        store = await create_graph_store(workspace=None)
+        try:
+            assert await store.list_workspaces() == []
+        finally:
+            await store.close()
+        assert list(tmp_path.glob("*.db")) == []
 
     async def test_sqlite_creates_parent_dir(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
