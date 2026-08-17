@@ -78,8 +78,9 @@ def _embedding_off(monkeypatch: pytest.MonkeyPatch) -> None:
 class _FakeProc:
     """Minimal stand-in for a subprocess.Popen result."""
 
-    def __init__(self, *, stdout: str = "", stderr: str = "", returncode: int = 0,
-                 timeout: bool = False) -> None:
+    def __init__(
+        self, *, stdout: str = "", stderr: str = "", returncode: int = 0, timeout: bool = False
+    ) -> None:
         self._stdout = stdout
         self._stderr = stderr
         self.returncode = returncode
@@ -103,9 +104,7 @@ class _FakeProc:
 
 def test_run_graph_export_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     proc = _FakeProc(stdout=_ndjson([META, E1, E2, EDGE]))
-    monkeypatch.setattr(
-        "loomgraph.core.graph_export_ingest.Popen", lambda *a, **kw: proc
-    )
+    monkeypatch.setattr("loomgraph.core.graph_export_ingest.Popen", lambda *a, **kw: proc)
     entities, relations, summary, _ = run_graph_export(tmp_path)
     assert len(entities) == 2
     assert [e.entity_name for e in entities] == ["pkg.a.handle", "pkg.b.handle"]
@@ -131,9 +130,7 @@ def test_run_graph_export_returns_stderr_warnings(
             "`languages:` to capture them\n"
         ),
     )
-    monkeypatch.setattr(
-        "loomgraph.core.graph_export_ingest.Popen", lambda *a, **kw: proc
-    )
+    monkeypatch.setattr("loomgraph.core.graph_export_ingest.Popen", lambda *a, **kw: proc)
     entities, relations, summary, warnings = run_graph_export(tmp_path)
     assert len(entities) == 1
     assert len(warnings) == 1
@@ -146,9 +143,7 @@ def test_run_graph_export_no_warnings_when_stderr_clean(
 ) -> None:
     """A clean export returns an empty warnings list (not None)."""
     proc = _FakeProc(stdout=_ndjson([META, E1]), stderr="")
-    monkeypatch.setattr(
-        "loomgraph.core.graph_export_ingest.Popen", lambda *a, **kw: proc
-    )
+    monkeypatch.setattr("loomgraph.core.graph_export_ingest.Popen", lambda *a, **kw: proc)
     _, _, _, warnings = run_graph_export(tmp_path)
     assert warnings == []
 
@@ -174,9 +169,7 @@ def test_run_graph_export_surfaces_parser_library_not_installed(
             "WARNING: no indexable directories found.\n"
         ),
     )
-    monkeypatch.setattr(
-        "loomgraph.core.graph_export_ingest.Popen", lambda *a, **kw: proc
-    )
+    monkeypatch.setattr("loomgraph.core.graph_export_ingest.Popen", lambda *a, **kw: proc)
     _, _, _, warnings = run_graph_export(tmp_path)
     # The parser-missing diagnostic is surfaced exactly once (deduped)…
     parser_lines = [w for w in warnings if "Parser library not installed" in w]
@@ -184,6 +177,45 @@ def test_run_graph_export_surfaces_parser_library_not_installed(
     assert "tree-sitter-swift" in parser_lines[0]
     # …alongside the regular WARNING line.
     assert any("no indexable directories" in w for w in warnings)
+
+
+def test_run_graph_export_parser_warning_dedups_per_language(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """#178: the parser-missing dedup key is the LANGUAGE, not a global flag.
+    codeindex emits one line per missing grammar per file; #118's boolean
+    dedup collapsed *different* languages too, so a multi-language repo
+    surfaced one missing grammar per index round (dogfood: 3 rounds to
+    discover typescript→java→javascript). Each language must appear exactly
+    once, all languages in one run.
+    """
+    proc = _FakeProc(
+        stdout=_ndjson([META]),
+        stderr=(
+            "Parser library not installed for typescript: tree-sitter-typescript "
+            "is not installed. Install it with: pip install tree-sitter-typescript "
+            "(tests/fixtures/typescript/service.ts)\n"
+            "Parser library not installed for java: tree-sitter-java is not "
+            "installed. Install it with: pip install tree-sitter-java "
+            "(tests/fixtures/cli_parse/Service.java)\n"
+            "Parser library not installed for javascript: tree-sitter-javascript "
+            "is not installed. Install it with: pip install tree-sitter-javascript "
+            "(tests/fixtures/typescript/app.js)\n"
+            "Parser library not installed for typescript: tree-sitter-typescript "
+            "is not installed. Install it with: pip install tree-sitter-typescript "
+            "(tests/fixtures/typescript/component.tsx)\n"
+        ),
+    )
+    monkeypatch.setattr("loomgraph.core.graph_export_ingest.Popen", lambda *a, **kw: proc)
+    _, _, _, warnings = run_graph_export(tmp_path)
+    parser_lines = [w for w in warnings if "Parser library not installed" in w]
+    # All three languages surfaced in ONE run…
+    assert len(parser_lines) == 3
+    langs = {line.split(" for ")[1].split(":")[0] for line in parser_lines}
+    assert langs == {"typescript", "java", "javascript"}
+    # …and per-language repetition (typescript appears twice in stderr) deduped.
+    ts_lines = [ln for ln in parser_lines if "for typescript" in ln]
+    assert len(ts_lines) == 1
 
 
 def test_run_graph_export_invokes_codeindex_graph_export(
@@ -241,9 +273,7 @@ def test_run_graph_export_nonzero_exit_raises(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     proc = _FakeProc(returncode=1, stderr="codeindex blew up")
-    monkeypatch.setattr(
-        "loomgraph.core.graph_export_ingest.Popen", lambda *a, **kw: proc
-    )
+    monkeypatch.setattr("loomgraph.core.graph_export_ingest.Popen", lambda *a, **kw: proc)
     with pytest.raises(GraphExportError, match="codeindex blew up"):
         run_graph_export(tmp_path)
 
@@ -252,9 +282,7 @@ def test_run_graph_export_timeout_kills_and_raises(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     proc = _FakeProc(timeout=True)
-    monkeypatch.setattr(
-        "loomgraph.core.graph_export_ingest.Popen", lambda *a, **kw: proc
-    )
+    monkeypatch.setattr("loomgraph.core.graph_export_ingest.Popen", lambda *a, **kw: proc)
     with pytest.raises(GraphExportError, match="timed out"):
         run_graph_export(tmp_path, timeout=5)
     assert proc.killed is True
@@ -318,9 +346,7 @@ async def test_ingest_progress_callback_fires_clear() -> None:
     def _cb(phase: str, n_entities: int, n_relations: int) -> None:
         phases.append(phase)
 
-    await ingest(
-        _sample_entities(), _sample_relations(), store, clear=True, on_progress=_cb
-    )
+    await ingest(_sample_entities(), _sample_relations(), store, clear=True, on_progress=_cb)
     assert phases == ["clear", "embed", "insert"]
 
 
@@ -332,9 +358,7 @@ async def test_ingest_progress_callback_fires_no_clear() -> None:
     def _cb(phase: str, n_entities: int, n_relations: int) -> None:
         phases.append(phase)
 
-    await ingest(
-        _sample_entities(), _sample_relations(), store, clear=False, on_progress=_cb
-    )
+    await ingest(_sample_entities(), _sample_relations(), store, clear=False, on_progress=_cb)
     assert phases == ["embed", "insert"]
 
 
@@ -345,9 +369,7 @@ class _FakeStoreIncremental:
     """Store stub for ingest_incremental: dict-backed, tracks symbol-level
     diff calls (get_source_ids / get_entities_by_source / delete_entities)."""
 
-    def __init__(
-        self, entities_by_source: dict[str, list[dict]] | None = None
-    ) -> None:
+    def __init__(self, entities_by_source: dict[str, list[dict]] | None = None) -> None:
         self._entities: dict[str, dict[str, Any]] = {}
         for ents in (entities_by_source or {}).values():
             for e in ents:
@@ -355,9 +377,7 @@ class _FakeStoreIncremental:
         self.deleted_entity_names: list[str] = []
         self.deleted_source_ids: list[str] = []  # legacy delete_by_source tracker
         self.insert_custom_kg = AsyncMock()
-        self.get_graph_stats = AsyncMock(
-            return_value={"entities": 1, "relations": 0}
-        )
+        self.get_graph_stats = AsyncMock(return_value={"entities": 1, "relations": 0})
 
     async def get_source_ids(self, source_prefix: str | None = None) -> list[str]:
         sids = {e.get("source_id") for e in self._entities.values()}
@@ -378,25 +398,17 @@ class _FakeStoreIncremental:
     async def delete_by_source(self, source_ids: list[str]) -> None:
         sids = set(source_ids)
         self.deleted_source_ids.extend(source_ids)
-        self._entities = {
-            k: v
-            for k, v in self._entities.items()
-            if v.get("source_id") not in sids
-        }
+        self._entities = {k: v for k, v in self._entities.items() if v.get("source_id") not in sids}
 
 
-def _ent(
-    name: str, source_id: str, content_hash: str | None = None
-) -> EntityData:
+def _ent(name: str, source_id: str, content_hash: str | None = None) -> EntityData:
     return EntityData(
         entity_name=name,
         entity_data={"source_id": source_id, "content_hash": content_hash},
     )
 
 
-def _store_ent(
-    name: str, source_id: str, content_hash: str | None = None
-) -> dict[str, Any]:
+def _store_ent(name: str, source_id: str, content_hash: str | None = None) -> dict[str, Any]:
     """An entity as get_entities_by_source returns it (store-side old state)."""
     return {"entity_name": name, "source_id": source_id, "content_hash": content_hash}
 
@@ -405,13 +417,11 @@ async def test_ingest_incremental_only_touches_changed_files() -> None:
     """Only changed-file entities are processed; unchanged-file entities are
     filtered out. Within a changed file, hash-matched symbols are skipped (#90)."""
     store = _FakeStoreIncremental(
-        entities_by_source={
-            "pkg/a.py": [_store_ent("pkg.a.handle", "pkg/a.py:1", "h1-old")]
-        }
+        entities_by_source={"pkg/a.py": [_store_ent("pkg.a.handle", "pkg/a.py:1", "h1-old")]}
     )
     entities = [
         _ent("pkg.a.handle", "pkg/a.py:1", "h1-new"),  # changed file, mismatch → re-embed
-        _ent("pkg.b.handle", "pkg/b.py:1", "h2"),        # unchanged file — filtered out
+        _ent("pkg.b.handle", "pkg/b.py:1", "h2"),  # unchanged file — filtered out
     ]
 
     result = await ingest_incremental(entities, [], store, changed_files={"pkg/a.py"})
@@ -456,7 +466,7 @@ async def test_ingest_incremental_reembeds_hash_mismatch() -> None:
     )
     entities = [
         _ent("pkg.a.handle", "pkg/a.py:1", "h1-new"),  # changed
-        _ent("pkg.b.handle", "pkg/a.py:2", "h2"),        # unchanged
+        _ent("pkg.b.handle", "pkg/a.py:2", "h2"),  # unchanged
     ]
 
     await ingest_incremental(entities, [], store, changed_files={"pkg/a.py"})
@@ -469,9 +479,7 @@ async def test_ingest_incremental_reembeds_hash_mismatch() -> None:
 async def test_ingest_incremental_inserts_new_symbol() -> None:
     """Symbol in new export but absent from store → inserted."""
     store = _FakeStoreIncremental(
-        entities_by_source={
-            "pkg/a.py": [_store_ent("pkg.a.handle", "pkg/a.py:1", "h1")]
-        }
+        entities_by_source={"pkg/a.py": [_store_ent("pkg.a.handle", "pkg/a.py:1", "h1")]}
     )
     entities = [
         _ent("pkg.a.handle", "pkg/a.py:1", "h1"),
@@ -506,9 +514,7 @@ async def test_ingest_incremental_null_hash_falls_back_to_reembed() -> None:
     """content_hash=None (no-span entity / sv0 artifact) → always re-embed
     (file-level fallback). Skip only when BOTH old and new carry a hash."""
     store = _FakeStoreIncremental(
-        entities_by_source={
-            "pkg/a.py": [_store_ent("pkg.a.handle", "pkg/a.py:1", None)]
-        }
+        entities_by_source={"pkg/a.py": [_store_ent("pkg.a.handle", "pkg/a.py:1", None)]}
     )
     entities = [_ent("pkg.a.handle", "pkg/a.py:1", None)]
 
@@ -544,9 +550,7 @@ async def test_ingest_incremental_garbage_collects_deleted_symbol() -> None:
 
 
 def _summary(entity_count: int, relation_count: int = 0) -> ImportSummary:
-    return ImportSummary(
-        entity_count=entity_count, relation_count=relation_count
-    )
+    return ImportSummary(entity_count=entity_count, relation_count=relation_count)
 
 
 def test_assess_export_non_empty_is_safe_no_warning() -> None:
@@ -620,13 +624,15 @@ class TestIncrementalRatioOverFullGraph:
     @staticmethod
     def _mk(name, source_id, content_hash="h1"):
         from loomgraph.core.models import EntityData
-        return EntityData(entity_name=name,
-                          entity_data={"source_id": source_id,
-                                       "content_hash": content_hash})
+
+        return EntityData(
+            entity_name=name, entity_data={"source_id": source_id, "content_hash": content_hash}
+        )
 
     @staticmethod
     def _rel(s, t):
         from loomgraph.core.models import RelationData
+
         return RelationData(src_id=s, tgt_id=t, edge_data={})
 
     async def test_zero_change_update_keeps_ratio(self, tmp_path):
@@ -661,7 +667,6 @@ class TestIncrementalRatioOverFullGraph:
 
         # change one symbol; subset contains only its edge, full graph is 0.5
         ents2 = [self._mk("A", "a.py", "h2"), self._mk("B", "b.py")]
-        result = await ingest_incremental(ents2, rels, store,
-                                          changed_files={"a.py"})
+        result = await ingest_incremental(ents2, rels, store, changed_files={"a.py"})
         assert result["resolved_ratio"] == 0.5
         await store.close()

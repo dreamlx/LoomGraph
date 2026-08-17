@@ -44,9 +44,7 @@ class GraphExportEmptyError(RuntimeError):
     """
 
 
-def assess_export(
-    summary: ImportSummary, warnings: list[str]
-) -> tuple[bool, str | None]:
+def assess_export(summary: ImportSummary, warnings: list[str]) -> tuple[bool, str | None]:
     """Gate a graph-export result before any write path touches the store (#120).
 
     Returns ``(is_safe_to_write, warning)``:
@@ -112,31 +110,30 @@ def run_graph_export(
     except TimeoutExpired:
         proc.kill()
         proc.communicate()  # drain to avoid resource warnings
-        raise GraphExportError(
-            f"codeindex graph-export timed out after {timeout}s"
-        ) from None
+        raise GraphExportError(f"codeindex graph-export timed out after {timeout}s") from None
 
     if proc.returncode != 0:
-        raise GraphExportError(
-            f"codeindex graph-export exited {proc.returncode}: {stderr.strip()}"
-        )
+        raise GraphExportError(f"codeindex graph-export exited {proc.returncode}: {stderr.strip()}")
 
     # codeindex writes partial-graph diagnostics to stderr on a 0-exit (#131);
     # surface those lines so callers don't see a silent success on a
     # misconfigured repo (#108). Non-WARNING stderr (progress noise) is ignored.
-    warnings = [
-        line for line in stderr.splitlines() if line.strip().startswith("WARNING:")
-    ]
+    warnings = [line for line in stderr.splitlines() if line.strip().startswith("WARNING:")]
     # #118: codeindex also emits per-file ``Parser library not installed for
     # <lang>`` lines (no ``WARNING:`` prefix) when a tree-sitter grammar is
     # missing. These carry the real root cause + fix (``pip install
     # tree-sitter-<lang>``) for a 0-entity export; without them a missing-grammar
-    # repo looks like a config problem. Dedupe (one line per file → first only).
-    seen_parser = False
+    # repo looks like a config problem. Dedupe per LANGUAGE (one line per
+    # file → first per lang): a global flag collapsed different languages too,
+    # so multi-language repos surfaced one missing grammar per index round
+    # (#178).
+    seen_parser_langs: set[str] = set()
     for line in stderr.splitlines():
-        if "Parser library not installed" in line and not seen_parser:
-            warnings.append(line.strip())
-            seen_parser = True
+        if "Parser library not installed" in line:
+            lang = line.split(" for ")[1].split(":")[0] if " for " in line else line
+            if lang not in seen_parser_langs:
+                warnings.append(line.strip())
+                seen_parser_langs.add(lang)
 
     fd, tmp_path = tempfile.mkstemp(suffix=".ndjson")
     try:
@@ -178,12 +175,8 @@ async def ingest(
         _emit(on_progress, "clear", len(entities), len(relations))
         await store.delete_all()
 
-    entity_dicts = [
-        {"entity_name": e.entity_name, **e.entity_data} for e in entities
-    ]
-    relation_dicts = [
-        {"src_id": r.src_id, "tgt_id": r.tgt_id, **r.edge_data} for r in relations
-    ]
+    entity_dicts = [{"entity_name": e.entity_name, **e.entity_data} for e in entities]
+    relation_dicts = [{"src_id": r.src_id, "tgt_id": r.tgt_id, **r.edge_data} for r in relations]
 
     _emit(on_progress, "embed", len(entity_dicts), len(relation_dicts))
     embedded = await maybe_embed_entities(entity_dicts, store)
@@ -220,9 +213,7 @@ def compute_resolved_ratio(
         return None
     names = {d["entity_name"] for d in entity_dicts}
     resolved = sum(
-        1
-        for r in relation_dicts
-        if r.get("src_id") in names and r.get("tgt_id") in names
+        1 for r in relation_dicts if r.get("src_id") in names and r.get("tgt_id") in names
     )
     return round(resolved / len(relation_dicts), 4)
 
@@ -285,9 +276,7 @@ async def ingest_incremental(
         }
 
         new_in_file = [
-            e
-            for e in entities
-            if _file_of(str(e.entity_data.get("source_id", ""))) == f
+            e for e in entities if _file_of(str(e.entity_data.get("source_id", ""))) == f
         ]
         new_names: set[str] = set()
         for e in new_in_file:
@@ -305,9 +294,7 @@ async def ingest_incremental(
                 to_delete.append(name)
 
     changed_relations = [
-        r
-        for r in relations
-        if _file_of(str(r.edge_data.get("source_id", ""))) in changed_files
+        r for r in relations if _file_of(str(r.edge_data.get("source_id", ""))) in changed_files
     ]
 
     # GC removed symbols first (relations + vectors cascade in store).
@@ -316,12 +303,9 @@ async def ingest_incremental(
         await store.delete_entities(to_delete)
 
     # Embed + upsert the new/changed subset (mirrors `ingest`).
-    entity_dicts = [
-        {"entity_name": e.entity_name, **e.entity_data} for e in to_embed
-    ]
+    entity_dicts = [{"entity_name": e.entity_name, **e.entity_data} for e in to_embed]
     relation_dicts = [
-        {"src_id": r.src_id, "tgt_id": r.tgt_id, **r.edge_data}
-        for r in changed_relations
+        {"src_id": r.src_id, "tgt_id": r.tgt_id, **r.edge_data} for r in changed_relations
     ]
 
     _emit(on_progress, "embed", len(entity_dicts), len(relation_dicts))
