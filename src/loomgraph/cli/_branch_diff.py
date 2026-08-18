@@ -52,6 +52,27 @@ _CODEGRAPH_MAX_FILES_ENV = "LOOMGRAPH_CODEGRAPH_MAX_FILES"
 _CODEGRAPH_TIMEOUT_SECONDS = 30 * 60
 
 
+class BranchDiffBackendUnavailableError(GraphExportError):
+    """Selected branch-diff backend cannot be used in this environment."""
+
+
+def ensure_branch_diff_backend(backend: str) -> None:
+    """Apply branch-diff's shared backend availability rule.
+
+    Provisioning, cache identity, and codegraph's cost gates already live in
+    ``_provision_ref``. This small boundary keeps its only pre-provision
+    dependency check identical for CLI and MCP callers.
+    """
+    if backend not in SUPPORTED_BACKENDS:
+        raise ValueError(
+            f"unsupported backend {backend!r}; choose one of {SUPPORTED_BACKENDS}"
+        )
+    if backend == "codeindex" and not check_codeindex().get("installed"):
+        raise BranchDiffBackendUnavailableError(
+            "codeindex not found in the loomgraph environment"
+        )
+
+
 def _parse_ref_range(value: str) -> tuple[str, str] | None:
     """``A..B`` → (base, head);恰好一个 ``..`` 且两侧非空。
 
@@ -346,15 +367,15 @@ def branch_diff(ref_range: str, backend: str) -> None:
         return
     base_ref, head_ref = parsed
 
-    if backend == "codeindex":
-        codeindex_status = check_codeindex()
-        if not codeindex_status.get("installed"):
-            output_error(
-                code=ErrorCode.CODEINDEX_NOT_FOUND,
-                message="codeindex not found in the loomgraph environment",
-                suggestion="Install codeindex: pip install ai-codeindex",
-            )
-            return
+    try:
+        ensure_branch_diff_backend(backend)
+    except BranchDiffBackendUnavailableError as e:
+        output_error(
+            code=ErrorCode.CODEINDEX_NOT_FOUND,
+            message=str(e),
+            suggestion="Install codeindex: pip install ai-codeindex",
+        )
+        return
 
     try:
         base_sha = resolve_ref(repo, base_ref)

@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from loomgraph.cli import _branch_diff as c_branch_diff
 from loomgraph.mcp.tools import branch_diff as t_branch_diff
 
 
@@ -42,7 +43,7 @@ async def test_branch_diff_provisions_both_refs_and_returns_cli_shape(
     with (
         patch.object(t_branch_diff, "is_git_repository", return_value=True),
         patch.object(
-            t_branch_diff,
+            c_branch_diff,
             "check_codeindex",
             return_value={"installed": True, "version": "0.37.0"},
         ),
@@ -98,6 +99,26 @@ async def test_branch_diff_wraps_provisioning_errors() -> None:
     assert payload["success"] is False
     assert payload["error"]["code"] == "BRANCH_DIFF_FAILED"
     assert "unknown ref" in payload["error"]["message"]
+
+
+@pytest.mark.asyncio
+async def test_branch_diff_missing_codeindex_stays_structured_error(
+    tmp_path: Path,
+) -> None:
+    with (
+        patch.object(t_branch_diff, "is_git_repository", return_value=True),
+        patch.object(
+            c_branch_diff, "check_codeindex", return_value={"installed": False}
+        ),
+    ):
+        contents = await t_branch_diff.handle(
+            {"base_ref": "main", "head_ref": "feature", "repo_path": str(tmp_path)}
+        )
+
+    payload = json.loads(contents[0].text)
+    assert payload["success"] is False
+    assert payload["error"]["code"] == "BRANCH_DIFF_FAILED"
+    assert "codeindex not found" in payload["error"]["message"]
 
 
 def test_branch_diff_tool_registered() -> None:

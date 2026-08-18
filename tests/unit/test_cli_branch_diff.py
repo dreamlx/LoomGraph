@@ -8,15 +8,20 @@ fallback 名 `<名>-<sha[:7]>`,永不 clobber 非 tag 的库。
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
+from click.testing import CliRunner
 
 from loomgraph.cli._branch_diff import (
+    BranchDiffBackendUnavailableError,
     _codegraph_file_limit,
     _decide_workspace,
     _parse_ref_range,
+    ensure_branch_diff_backend,
 )
+from loomgraph.cli.main import main
 from loomgraph.core.config import reset_settings
 from loomgraph.core.graph_export_ingest import GraphExportError
 from loomgraph.storage.factory import create_graph_store
@@ -158,6 +163,36 @@ def test_codegraph_file_limit_is_positive(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setenv("LOOMGRAPH_CODEGRAPH_MAX_FILES", "0")
     with pytest.raises(GraphExportError, match="positive integer"):
         _codegraph_file_limit()
+
+
+def test_backend_availability_only_checks_codeindex(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from loomgraph.cli import _branch_diff
+
+    monkeypatch.setattr(
+        _branch_diff, "check_codeindex", lambda: {"installed": False}
+    )
+    with pytest.raises(BranchDiffBackendUnavailableError, match="codeindex not found"):
+        ensure_branch_diff_backend("codeindex")
+
+    ensure_branch_diff_backend("codegraph")
+
+
+def test_cli_missing_codeindex_keeps_typed_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from loomgraph.cli import _branch_diff
+
+    monkeypatch.setattr(_branch_diff, "is_git_repository", lambda _repo: True)
+    monkeypatch.setattr(
+        _branch_diff, "check_codeindex", lambda: {"installed": False}
+    )
+
+    result = CliRunner().invoke(main, ["branch-diff", "main..feature"])
+
+    assert result.exit_code == 1
+    assert json.loads(result.stdout)["error"]["code"] == "CODEINDEX_NOT_FOUND"
 
 
 async def test_ref_slash_sanitized_in_candidate(
