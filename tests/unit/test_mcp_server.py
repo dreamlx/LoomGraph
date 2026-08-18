@@ -44,6 +44,7 @@ EXPECTED_TOOLS = {
     "loomgraph_git_metrics",
     "loomgraph_workspace_list",
     "loomgraph_workspace_info",
+    "loomgraph_branch_diff",
 }
 
 

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — MCP `loomgraph_branch_diff` composite (#191)
+- Exposes the branch-diff provisioning + directional analyzer as one MCP
+  call with the same nested `data` shape as the CLI.
+- First calls are transparently long-running cold snapshots; unchanged refs
+  reuse their workspaces and moved refs rebuild them. The v1 surface is
+  codeindex-only and returns structured `BRANCH_DIFF_FAILED` envelopes.
+
 ### Added — `loomgraph index --at-ref <ref>` historical snapshot command (#190)
 - Reuses branch-diff's detached-worktree + cold-index provisioning kernel to
   materialize a tag/branch/commit as an isolated, queryable workspace.

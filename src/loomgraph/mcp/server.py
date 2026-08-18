@@ -24,6 +24,7 @@ from mcp.server.stdio import stdio_server
 from mcp.types import CallToolResult, ListToolsResult, TextContent, Tool
 
 from loomgraph import __version__
+from loomgraph.mcp.tools import branch_diff as t_branch_diff
 from loomgraph.mcp.tools import check as t_check
 from loomgraph.mcp.tools import debt as t_debt
 from loomgraph.mcp.tools import debt_audit as t_debt_audit
@@ -69,8 +70,9 @@ _register(t_overview.TOOL_SPEC, t_overview.handle)
 _register(t_debt.TOOL_SPEC, t_debt.handle)
 _register(t_check.TOOL_SPEC, t_check.handle)
 _register(t_git_metrics.TOOL_SPEC, t_git_metrics.handle)
-# Write tool (first MCP-exposed write surface; see ADR-014)
+# Write tools (see ADR-014 and EPIC-016 #191)
 _register(t_refresh.TOOL_SPEC, t_refresh.handle)
+_register(t_branch_diff.TOOL_SPEC, t_branch_diff.handle)
 _register(t_workspace.LIST_SPEC, t_workspace.list_handle)
 _register(t_workspace.INFO_SPEC, t_workspace.info_handle)
 # Composite tools (v0.12.1) — multi-dimension reports
