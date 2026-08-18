@@ -6,6 +6,13 @@
 
 ## [Unreleased]
 
+### 新增 — MCP `loomgraph_branch_diff` 复合工具（#191）
+
+- Agent 可一次调用两个 git ref 的结构性 diff，返回与 CLI
+  `loomgraph branch-diff A..B` 相同的结构化结果。
+- 首次缺失快照会进行冷索引（大仓库可能耗时较长）；同 ref 重试复用，
+  ref 移动则自动重建，错误统一返回 MCP envelope。
+
 ### 新增 — `loomgraph index --at-ref <ref>` 历史版本快照（#190）
 
 - 可将 tag、branch 或 commit 固定成独立 workspace：`loomgraph index --at-ref v1.2`。

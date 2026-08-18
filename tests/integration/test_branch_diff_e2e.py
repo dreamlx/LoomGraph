@@ -14,6 +14,7 @@ Skipped when codeindex is not importable in the venv(CI runs unit+contract only)
 
 from __future__ import annotations
 
+import asyncio
 import importlib.util
 import json
 import subprocess
@@ -25,6 +26,7 @@ from click.testing import CliRunner
 
 from loomgraph.cli.main import main
 from loomgraph.core.config import reset_settings
+from loomgraph.mcp.tools import branch_diff as t_mcp_branch_diff
 
 pytestmark = pytest.mark.integration
 
@@ -185,3 +187,26 @@ def test_index_at_ref_e2e_provisions_queryable_snapshot(bd_env: Path) -> None:
     assert find_res.exit_code == 0, find_res.output
     find_data = json.loads(find_res.stdout)["data"]
     assert any(match["entity"] == "mod_a.foo" for match in find_data["matches"])
+
+
+@requires_codeindex
+def test_mcp_branch_diff_e2e_matches_cli_data_shape(bd_env: Path) -> None:
+    """#191: MCP orchestration returns the same nested diff payload as CLI."""
+    base_branch = _git(bd_env, "rev-parse", "--abbrev-ref", "HEAD").strip()
+
+    contents = asyncio.run(
+        t_mcp_branch_diff.handle(
+            {
+                "base_ref": base_branch,
+                "head_ref": "feature",
+                "repo_path": str(bd_env),
+            }
+        )
+    )
+    payload = json.loads(contents[0].text)
+
+    assert payload["success"] is True
+    data = payload["data"]
+    assert data["base"]["workspace"] == f"repo:{base_branch}"
+    assert data["head"]["workspace"] == "repo:feature"
+    assert "broken_chains" in data["diff"]

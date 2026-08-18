@@ -45,9 +45,8 @@ subprocess overhead alone is ~7.5s. MCP makes that vanish.
 
 ## Tool reference
 
-All tools follow the same response envelope — 12 read tools plus the
-`loomgraph_refresh` write tool (ADR-014, the first MCP-exposed write
-surface):
+All tools follow the same response envelope — read tools plus the
+`loomgraph_refresh` and `loomgraph_branch_diff` write tools:
 
 ```jsonc
 // success
@@ -59,12 +58,12 @@ surface):
 
 ### `loomgraph_refresh` (write — ADR-014)
 
-First write-capable MCP tool. Reactive working-tree re-index (pull-mode):
+Write-capable MCP tool. Reactive working-tree re-index (pull-mode):
 an agent that just edited a file (uncommitted, incl. untracked) can
 re-index it on demand instead of waiting for a commit. Complementary to
 the commit-driven git-hook `update`. Shells `codeindex graph-export`, so
 ai-codeindex must be installed (query-only deployments still work without
-it — refresh is the only tool that needs codeindex). Returns
+it). Returns
 `{"mode": "noop"}` on a clean tree with no `path`.
 
 | arg | type | default | desc |
@@ -72,6 +71,32 @@ it — refresh is the only tool that needs codeindex). Returns
 | `path` | string | — | file/dir prefix to refresh (omit = all working-tree changes) |
 | `force_full` | boolean | false | cold whole-tree rebuild (clear + re-ingest) |
 | `workspace` | string | server default | per-call workspace override |
+
+### `loomgraph_branch_diff` (write — EPIC-016 #191)
+
+Provision two git refs as isolated snapshot workspaces and return the same
+`data` payload as `loomgraph branch-diff A..B`. It is intentionally a
+long-running, transparent operation: the first call cold-indexes each missing
+ref (large repositories may take minutes), while reruns reuse unchanged
+snapshots and moved refs are rebuilt. The tool requires `codeindex`; its
+provisioning is idempotent and never uses the active query workspace.
+
+| arg | type | default | desc |
+|---|---|---|---|
+| `base_ref` | string | required | base branch, tag, commit, or `HEAD` |
+| `head_ref` | string | required | head branch, tag, commit, or `HEAD` |
+| `repo_path` | string | `.` | git repository path; resolved from the MCP server cwd |
+
+The response shape matches the CLI:
+
+```jsonc
+{
+  "base": {"ref": "main", "workspace": "repo:main", "provisioned": "reused"},
+  "head": {"ref": "feature", "workspace": "repo:feature", "provisioned": "created"},
+  "diff": {"entities_added": [], "entities_removed": []},
+  "duration_seconds": 0.42
+}
+```
 
 ### `loomgraph_find`
 
@@ -165,8 +190,8 @@ MCP caller rarely has — use `loomgraph debt --codeindex-data` CLI for that).
 
 ## Composite tools (v0.12.1)
 
-In addition to the 11 primitive read tools above, three **composite
-tools** were added in v0.12.1 to subsume the legacy workflow skills
+In addition to the primitive read tools above, three **analysis composites**
+were added in v0.12.1 to subsume the legacy workflow skills
 (`/loomgraph-debt-radar`, `/loomgraph-evolution`,
 `/loomgraph-sync-advisor` — these skills were **removed in v0.15.0**,
 see #64). Each composite fans out across multiple primitives in parallel
@@ -238,20 +263,21 @@ as long as ≥1 dimension produces data.
 
 ## What's NOT exposed (and why)
 
-`index`, `update`, `import-export` are **CLI-only by design**:
+`index`, `update`, `import-export` remain **CLI-only by design**:
 
 1. **They're slow.** Index time on the dogfood codeindex fixture is
    ~0.93s — orders of magnitude longer than a query. Conversational
    tool use isn't the right surface for it.
-2. **They mutate state.** Write semantics in an MCP tool are easy to
-   misuse by agents that don't realize a tool destroys data.
+2. **They mutate state.** The two narrowly-scoped write tools above have
+   explicit, idempotent contracts; arbitrary index/update/import flows do not.
 3. **They require codeindex.** `index` / `update` invoke `codeindex
    scan` as a subprocess. Keeping them out of MCP means the MCP
    server runtime tree doesn't need `ai-codeindex` installed.
 
-If you want index-from-Claude, run `loomgraph index .` in the shell
-once (or from a CI/CD job, or a `git-hook`). Then queries through MCP
-work against the existing workspace.
+For working-tree indexing, run `loomgraph index .` in the shell once (or
+from a CI/CD job or a `git-hook`). For historical refs, use
+`loomgraph_branch_diff` or the CLI `loomgraph index --at-ref`. Then queries
+through MCP work against the resulting workspace.
 
 This split lets us ship **two install profiles**:
 
