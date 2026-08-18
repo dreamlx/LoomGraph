@@ -123,6 +123,15 @@ _FINGERPRINT_SKIP_DIRS = {
 _FINGERPRINT_MIN_FILES = 10
 
 
+def _is_partial_graph_warning(w: str) -> bool:
+    """#184: 「图缺符号」类 warning(parser-missing / language-fingerprint)。
+
+    区别于 advisory 类(resolved_ratio hint、test 污染提示是质量信号,图不缺
+    符号)——它们照常进 `warning` 字段,但不置 `partial`。
+    """
+    return "Parser library not installed" in w or w.startswith("language fingerprint:")
+
+
 def _effective_languages(repo: Path) -> set[str]:
     """codeindex 的生效 languages:无 `.codeindex.yaml`(或缺 languages 键)→ python。"""
     for name in (".codeindex.yaml", ".codeindex.yml"):
@@ -342,6 +351,9 @@ def index(
 
     if warnings:
         result["warning"] = "; ".join(warnings)
+    # #184: machine-readable partial flag — post-silence warnings (a silenced
+    # pattern must not keep `partial` True: silencing = user said "I know").
+    result["partial"] = any(_is_partial_graph_warning(w) for w in warnings)
 
     output_success(result)
 
@@ -797,6 +809,7 @@ def update(
 
     if warnings:
         result["warning"] = "; ".join(warnings)
+    result["partial"] = any(_is_partial_graph_warning(w) for w in warnings)  # #184
 
     output_success(result)
 
@@ -940,6 +953,12 @@ async def _async_refresh(
         result = await ingest(entities, relations, store, clear=True)
         result["mode"] = "cold_rebuild"
         result["workspace"] = ws
+        # #184: MCP has no stderr contract — partial-graph warnings must ride
+        # the result or they're dropped entirely (silent partial on the
+        # primary agent surface). Same `warning`/`partial` fields as the CLI.
+        if warnings:
+            result["warning"] = "; ".join(warnings)
+        result["partial"] = any(_is_partial_graph_warning(w) for w in warnings)
         return result
 
     # Determine the changed-files set + strategy.
@@ -977,6 +996,9 @@ async def _async_refresh(
         result["mode"] = "whole_tree_upsert"
 
     result["workspace"] = ws
+    if warnings:  # #184: same treatment as the force_full leg above
+        result["warning"] = "; ".join(warnings)
+    result["partial"] = any(_is_partial_graph_warning(w) for w in warnings)
     return result
 
 

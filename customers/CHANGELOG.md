@@ -6,6 +6,17 @@
 
 ## [Unreleased]
 
+### 新增 — `index`/`update`/MCP `refresh` 成功输出带 `partial` 字段(#184)
+
+- `partial: true` = **图缺符号**(有 tree-sitter grammar 没装,或 repo 主语言不在
+  索引配置里)。exit code 不变(缺 1 门语言的图仍好过没有图),但 agent 现在检查
+  一个布尔字段即可判断,不用解析 warning 文本。
+- 顺手修了 MCP `refresh` 的真·静默问题:之前 refresh 在部分语言解析失败时返回
+  `success: true` 且**没有任何字段**携带告警(warning 喂完 0-entity gate 后被丢弃)——
+  MCP 是 agent 的主消费面,这是实打实的静默部分成功。现在 refresh 结果带 `warning`
+  + `partial`,与 CLI 输出同构。
+- 被 `warnings.silence` 静默的告警不再置 `partial: true`(静默 = 你已知晓)。
+
 ---
 
 ## [0.19.2] - 2026-08-17

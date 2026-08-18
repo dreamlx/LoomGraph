@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — machine-readable `partial` flag on write-path success payloads (#184)
+- Decision (option 2, revised): exit code stays 0 — a graph missing 1 of 5
+  languages is still better than no graph, and the #93/#142 fail-loud boundary
+  deliberately sits at `entity_count == 0`. But `index` / `update` / MCP
+  `refresh` success payloads now carry `partial: true|false` — true iff a
+  partial-graph-class warning fired (parser grammar missing, or the #161
+  language fingerprint), distinguishing "graph is missing symbols" from the
+  advisory warnings (resolved_ratio hint, test pollution) that also populate
+  `warning`. Agents check one boolean instead of substring-matching `warning`;
+  a `warnings.silence` pattern also clears `partial` (silencing = the user
+  said "I know").
+- **Fixed en route — MCP `refresh` silently dropped partial-graph warnings.**
+  `_async_refresh` fed warnings to the 0-entity gate and discarded them on any
+  export with `entity_count > 0` — on the primary agent surface (ADR-014's
+  whole purpose) a partial export returned `success: true` with zero signal,
+  not even a `warning` field. The refresh result now carries `warning`
+  (joined string, same shape as the CLI payloads) + `partial`. The issue's
+  premise ("agents discard stderr, so CLI exit 0 is operationally silent")
+  was in fact backwards: the CLI payloads already carried `warning` in stdout
+  JSON since #108; the MCP path was the real silent one.
+- Documented in `docs/guides/index-output.md` (field table). codegraph
+  refresh keeps no flag — `run_codegraph_export` structurally cannot emit
+  partial-class warnings (resolved-edges-only, no `.codeindex.yaml` gate).
+
 ## [0.19.2] - 2026-08-17
 
 ### Fixed — `update` silently skipped unstaged source edits (#175)

@@ -37,6 +37,7 @@
 | `store_stats.intra_module_relations` | 同上口径,同模块的数量 |
 | `store_stats.coupling_density` | `cross / (cross + intra)` —— 参与模块统计的边里跨模块的占比 |
 | `warning` | 汇总的告警(partial-graph / 语言指纹 / 极低 resolve),可配 `warnings.silence` 静默 |
+| `partial` | **`true` = 图缺符号**(有 parser grammar 缺失,或 repo 主语言不在索引语言里)。区别于 `warning` 里的质量 advisory(resolved_ratio / test 污染提示——图不缺符号,只是解读要打折)。`index`/`update`/MCP `refresh` 的成功 payload 都带此字段;被 `warnings.silence` 静默的告警不再置 true。exit code 不变——缺 1 门语言的图仍好过没有图,修复方式见 warning 文本(装 extra / 补 `languages:` 配置) |
 
 ## 三个常见"对不上"
 
