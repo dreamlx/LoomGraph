@@ -32,7 +32,10 @@ async def test_branch_diff_provisions_both_refs_and_returns_cli_shape(
         },
     }
 
-    def fake_provision(_repo: Path, _repo_dir: str, ref: str, sha: str):
+    def fake_provision(
+        _repo: Path, _repo_dir: str, ref: str, sha: str, *, backend: str
+    ):
+        assert backend == "codeindex"
         assert sha == provisioned[ref]["sha"]
         return provisioned[ref]
 

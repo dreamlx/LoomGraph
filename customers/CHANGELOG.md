@@ -11,14 +11,29 @@
 - Agent 可一次调用两个 git ref 的结构性 diff，返回与 CLI
   `loomgraph branch-diff A..B` 相同的结构化结果。
 - 首次缺失快照会进行冷索引（大仓库可能耗时较长）；同 ref 重试复用，
-  ref 移动则自动重建，错误统一返回 MCP envelope。
+  ref 移动则自动重建；可选 `backend` 与 CLI 一致（默认 codeindex，也支持
+  codegraph），错误统一返回 MCP envelope。
 
 ### 新增 — `loomgraph index --at-ref <ref>` 历史版本快照（#190）
 
 - 可将 tag、branch 或 commit 固定成独立 workspace：`loomgraph index --at-ref v1.2`。
 - 快照沿用 `branch-diff` 的临时 worktree + 冷索引内核，完成后可用
   `find`、`graph`、`topology` 查询；`-w` 可指定 workspace 名。
-- v1 仅支持 codeindex，始终冷重建；codegraph 快照另见 #189。
+- 该模式始终使用 codeindex 冷重建；需要 codegraph 历史快照时使用
+  `branch-diff --backend codegraph`。
+
+### 新增 — `loomgraph branch-diff --backend codegraph`（#189）
+
+- `branch-diff` 默认仍使用 codeindex；显式指定 `--backend codegraph` 后，
+  loomgraph 会在每个 detached worktree 中调用本机 npm `codegraph` CLI，读取
+  `.codegraph/codegraph.db` 再生成同形状的结构 diff。新 worktree 先 `init`，已有
+  数据库才执行 `sync`。
+- 快照会记录 extraction backend，codeindex 与 codegraph 不会互相误复用。由于
+  codegraph 没有 codeindex 的 `content_hash`，共享实体计入
+  `content_hash_missing`，不会伪报 `content_changed`。
+- 这是显式成本选择：默认最多 10,000 个 tracked 文件、单个 worktree 最长 30 分钟；
+  可用 `LOOMGRAPH_CODEGRAPH_MAX_FILES` 调整文件上限。CLI 缺失、超限或失败返回
+  `CODEGRAPH_FAILED`。
 
 ## [0.20.0] - 2026-08-18
 
@@ -45,7 +60,8 @@
   重建(rebuilt);你手动建的 workspace 永不被碰。未提交的工作区改动不会漏进
   ref diff(两侧都按 commit 快照取)。
 - **典型用法**:PR 审查 `branch-diff main..HEAD`;回归定位
-  `branch-diff v1.2..HEAD`。v1 仅 codeindex backend(codegraph 见 #185 跟进)。
+  `branch-diff v1.2..HEAD`。默认 codeindex；需要更高连接覆盖时可显式指定
+  `--backend codegraph`（见 #189）。
 
 ### 修复 — GitHub Action 集成的 reusable workflow 不再裸调 PATH 上的 codeindex(#183)
 

@@ -78,14 +78,18 @@ Provision two git refs as isolated snapshot workspaces and return the same
 `data` payload as `loomgraph branch-diff A..B`. It is intentionally a
 long-running, transparent operation: the first call cold-indexes each missing
 ref (large repositories may take minutes), while reruns reuse unchanged
-snapshots and moved refs are rebuilt. The tool requires `codeindex`; its
-provisioning is idempotent and never uses the active query workspace.
+snapshots and moved refs are rebuilt. The optional `backend` selects
+`codeindex` (default) or `codegraph`; the latter invokes the locally installed
+npm CLI for each detached worktree and is subject to the same file-count and
+wall-clock safety gates as the CLI. Provisioning is idempotent and never uses
+the active query workspace.
 
 | arg | type | default | desc |
 |---|---|---|---|
 | `base_ref` | string | required | base branch, tag, commit, or `HEAD` |
 | `head_ref` | string | required | head branch, tag, commit, or `HEAD` |
 | `repo_path` | string | `.` | git repository path; resolved from the MCP server cwd |
+| `backend` | string | `codeindex` | extraction backend; `codegraph` requires the npm CLI and may be substantially slower |
 
 The response shape matches the CLI:
 

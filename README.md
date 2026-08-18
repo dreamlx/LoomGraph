@@ -234,7 +234,7 @@ summary mode) calls the LLM; `--no-summary` skips it entirely.
 | `loomgraph overview` | Module summaries | LLM (or `--no-summary`) |
 | `loomgraph workspace ...` | Multi-workspace management | none |
 | `loomgraph compare / similar` | Cross-workspace diff / near-duplicates | none |
-| `loomgraph branch-diff A..B` | Structural diff between two git refs — auto-provisions snapshot workspaces (worktree + cold index), reports added/removed entities+edges, broken/new call chains, content_hash changes, module coupling delta | codeindex (local), on first run per ref |
+| `loomgraph branch-diff A..B [--backend codeindex|codegraph]` | Structural diff between two git refs — auto-provisions snapshot workspaces (worktree + cold index), reports added/removed entities+edges, broken/new call chains, content_hash changes, module coupling delta | codeindex (local) by default; codegraph uses the local npm CLI on first run per ref |
 | `loomgraph embed-backfill` | Vectors for an un-embedded workspace | embedding provider |
 | `loomgraph hooks` | Git hooks for auto-update on commit | none |
 | `loomgraph codeindex <cmd>` | Run any codeindex command in loomgraph's pinned env | local |
