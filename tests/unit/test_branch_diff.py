@@ -31,6 +31,9 @@ def _edge(src: str, tgt: str, kind: str = "CALLS") -> dict:
 def _analyzer(
     base_entities: list[dict], base_relations: list[dict],
     head_entities: list[dict], head_relations: list[dict],
+    *,
+    base_backend: str = "codeindex",
+    head_backend: str = "codeindex",
 ) -> BranchDiffAnalyzer:
     base = AsyncMock()
     base.get_all_entities = AsyncMock(return_value=base_entities)
@@ -38,7 +41,12 @@ def _analyzer(
     head = AsyncMock()
     head.get_all_entities = AsyncMock(return_value=head_entities)
     head.get_all_relations = AsyncMock(return_value=head_relations)
-    return BranchDiffAnalyzer(base_store=base, head_store=head)
+    return BranchDiffAnalyzer(
+        base_store=base,
+        head_store=head,
+        base_backend=base_backend,
+        head_backend=head_backend,
+    )
 
 
 @pytest.mark.asyncio
@@ -49,11 +57,12 @@ async def test_identical_graphs_all_zero() -> None:
 
     assert result.summary["entities_added_total"] == 0
     assert result.summary["broken_chains_total"] == 0
-    assert result.summary["content_hash_missing"] == 0
     assert result.entities_added == [] and result.entities_removed == []
     assert result.edges_added == [] and result.edges_removed == []
     assert result.broken_chains == [] and result.new_chains == []
-    assert result.content_changed == [] and result.module_delta == []
+    assert result.content_comparison["status"] == "available"
+    assert result.content_comparison["changed"] == []
+    assert result.module_delta == []
 
 
 @pytest.mark.asyncio
@@ -133,8 +142,8 @@ async def test_unresolved_edges_excluded_but_counted() -> None:
 
 
 @pytest.mark.asyncio
-async def test_content_changed_vs_hash_missing() -> None:
-    """L2:同名实体 hash 不同 → content_changed;一侧 None → 只计数。"""
+async def test_content_comparison_is_partial_when_only_some_hashes_exist() -> None:
+    """L2 only reports confirmed changes when codeindex hashes are partial."""
     result = await _analyzer(
         [_entity("changed", h="h1"), _entity("nohash", h=None), _entity("same", h="h3")],
         [],
@@ -142,8 +151,52 @@ async def test_content_changed_vs_hash_missing() -> None:
         [],
     ).analyze()
 
-    assert [c["name"] for c in result.content_changed] == ["changed"]
-    assert result.summary["content_hash_missing"] == 1  # nohash 两侧 None/值 → 不可比
+    content = result.content_comparison
+    assert content["status"] == "partial"
+    assert [c["name"] for c in content["changed"]] == ["changed"]
+    assert content["changes_total"] == 1
+    assert content["comparable_shared"] == 2
+    assert content["uncomparable_shared"] == 1
+
+
+@pytest.mark.asyncio
+async def test_content_comparison_is_unavailable_for_codegraph() -> None:
+    """No codegraph L2 result may masquerade as an empty change list."""
+    result = await _analyzer(
+        [_entity("same", h=None)], [],
+        [_entity("same", h=None)], [],
+        base_backend="codegraph",
+        head_backend="codegraph",
+    ).analyze()
+
+    assert result.content_comparison == {
+        "version": 1,
+        "status": "unavailable",
+        "scope": "same_backend_only",
+        "base_backend": "codegraph",
+        "head_backend": "codegraph",
+        "comparable_shared": 0,
+        "uncomparable_shared": 1,
+        "changes_total": None,
+        "changed": None,
+        "reason": "backend_has_no_per_entity_content_hash",
+    }
+
+
+@pytest.mark.asyncio
+async def test_content_comparison_rejects_cross_backend_hashes() -> None:
+    """Equal-looking hash strings from different extractors are not comparable."""
+    result = await _analyzer(
+        [_entity("same", h="same")], [],
+        [_entity("same", h="changed")], [],
+        base_backend="codeindex",
+        head_backend="codegraph",
+    ).analyze()
+
+    content = result.content_comparison
+    assert content["status"] == "unavailable"
+    assert content["changed"] is None
+    assert content["reason"] == "cross_backend_comparison_not_supported"
 
 
 @pytest.mark.asyncio
@@ -197,6 +250,8 @@ async def test_to_dict_round_trip() -> None:
     assert d["graph_sizes"]["head_entities"] == 1
     assert d["entities_removed"][0]["name"] == "b"
     assert d["broken_chains"][0]["tgt"] == "b"
+    assert "content_changed" not in d
+    assert d["content_comparison"]["status"] == "available"
 
 
 @pytest.mark.asyncio

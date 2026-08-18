@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — explicit L2 content-comparison contract (#201)
+- `branch-diff` now returns one versioned `content_comparison` object instead
+  of a top-level `content_changed` list and `summary` counters. Its
+  `status` is `available`, `partial`, or `unavailable`; only available/partial
+  comparisons expose a `changed` list. `unavailable` returns `changed: null`,
+  so an empty list can never masquerade as proof that bodies did not change.
+- Comparison is same-backend-only. codeindex graph-export schema v1 uses its
+  per-symbol hash; legacy/missing hashes yield `partial`. codegraph and
+  mixed-backend snapshots report why content comparison is unavailable while
+  retaining the L0/L1 structural diff.
+- `compare` remains structural-only and makes no L2 source-content claim.
+
 ### Added — MCP `loomgraph_branch_diff` composite (#191)
 - Exposes the branch-diff provisioning + directional analyzer as one MCP
   call with the same nested `data` shape as the CLI.
@@ -29,8 +41,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   detached ref worktree is initialized (or synced when it already contains a
   codegraph database) before loomgraph snapshots `.codegraph/codegraph.db`.
 - Provisioned caches record their extraction backend, so a codeindex snapshot
-  is never reused as codegraph (or vice versa). Codegraph diffs report shared
-  entities as `content_hash_missing`, not false `content_changed` results.
+  is never reused as codegraph (or vice versa). See #201 for the explicit L2
+  result contract used when codegraph content cannot be compared.
 - The explicit backend has a 10,000 tracked-file default cap and 30-minute
   per-worktree timeout. `LOOMGRAPH_CODEGRAPH_MAX_FILES` overrides the file cap;
   missing/failed CLI and cost-gate failures return `CODEGRAPH_FAILED`.

@@ -1,7 +1,8 @@
-"""Cross-workspace comparison.
+"""Cross-workspace structural comparison.
 
-Compares entities and relations between two workspaces using
-entity name matching (Phase 1).
+Compares entities and relations using name matching (Phase 1). It deliberately
+does not make a source-content claim: any future L2 comparison must use the
+versioned content-comparability contract from ``branch_diff``.
 """
 
 from __future__ import annotations
