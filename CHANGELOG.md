@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-08-18
+
 ### Changed — explicit L2 content-comparison contract (#201)
 - `branch-diff` now returns one versioned `content_comparison` object instead
   of a top-level `content_changed` list and `summary` counters. Its
@@ -1725,6 +1727,7 @@ infrastructure was added.
 - Project roadmap, epics, and feature definitions
 
 [Unreleased]: https://github.com/dreamlx/LoomGraph/compare/v0.20.0...HEAD
+[0.21.0]: https://github.com/dreamlx/LoomGraph/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/dreamlx/LoomGraph/compare/v0.19.2...v0.20.0
 [0.19.2]: https://github.com/dreamlx/LoomGraph/compare/v0.19.1...v0.19.2
 [0.19.1]: https://github.com/dreamlx/LoomGraph/compare/v0.19.0...v0.19.1

@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-08-18
+
 ### 变更 — L2 内容可比性显式契约（#201）
 
 - `branch-diff` 现在返回唯一、带版本的 `content_comparison` 对象，不再把
