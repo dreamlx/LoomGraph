@@ -181,6 +181,9 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 asyncio_mode = "auto"
 addopts = "-v --tb=short"
+filterwarnings = [
+    "error::pytest.PytestUnraisableExceptionWarning",
+]
 markers = [
     "unit: Unit tests",
     "integration: Integration tests (require DB)",
