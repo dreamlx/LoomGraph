@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -123,6 +124,14 @@ _FINGERPRINT_SKIP_DIRS = {
 # Below this many files a language isn't "the repo's main language missed by
 # config" — just stray tool scripts. Keeps small repos warning-free.
 _FINGERPRINT_MIN_FILES = 10
+_PARSER_MISSING_RE = re.compile(r"Parser library not installed for ([^:\s]+):")
+_GRAMMAR_EXTRAS = {
+    "typescript": "typescript",
+    "javascript": "javascript",
+    "swift": "swift",
+    "java": "java",
+    "objc": "objc",
+}
 
 
 def _is_partial_graph_warning(w: str) -> bool:
@@ -132,6 +141,39 @@ def _is_partial_graph_warning(w: str) -> bool:
     符号)——它们照常进 `warning` 字段,但不置 `partial`。
     """
     return "Parser library not installed" in w or w.startswith("language fingerprint:")
+
+
+def _grammar_remediation_hints(warnings: list[str]) -> list[str]:
+    """Return one copyable LoomGraph install hint per missing parser language."""
+    hints: list[str] = []
+    seen: set[str] = set()
+    for warning in warnings:
+        match = _PARSER_MISSING_RE.search(warning)
+        if match is None:
+            continue
+        language = match.group(1)
+        if language in seen:
+            continue
+        seen.add(language)
+        extra = _GRAMMAR_EXTRAS.get(language)
+        if extra is not None:
+            hints.append(
+                f'Install support: pipx install "loomgraph[{extra}]"; then add '
+                f'`{language}` to `languages:` in .codeindex.yaml.'
+            )
+        else:
+            hints.append(
+                f"Install the required tree-sitter grammar for `{language}`; then add "
+                f"`{language}` to `languages:` in .codeindex.yaml."
+            )
+    return hints
+
+
+def _append_grammar_remediation(message: str, warnings: list[str]) -> str:
+    hints = _grammar_remediation_hints(warnings)
+    if not hints:
+        return message
+    return f"{message.rstrip('.')}. {' '.join(hints)}"
 
 
 def _effective_languages(repo: Path) -> set[str]:
@@ -331,7 +373,9 @@ def index(
     # indexed with default languages:[python] yields a few stray entities and
     # a "WARNING: partial graph" line. Surface it so a misconfigured repo
     # doesn't index as a silent success (#108).
-    raw_warnings = warnings
+    raw_warnings = list(warnings)
+    warnings = _silence_warnings(warnings)
+    warnings.extend(_grammar_remediation_hints(warnings))
     # #161: >0 entities can still be a partial graph (stray .py only) — the
     # language fingerprint names the dominant language the config missed.
     # Appended BEFORE silence so it's filterable like codeindex's own warnings.
@@ -354,6 +398,7 @@ def index(
         _zero_entities_warning(repo, raw_warnings) if summary.entity_count == 0 else None
     )
     if zero_warning is not None:
+        zero_warning = _append_grammar_remediation(zero_warning, raw_warnings)
         click.echo(f"⚠️  WARNING: {zero_warning}", err=True)
         output_error(
             code=ErrorCode.GRAPH_EXPORT_EMPTY,
@@ -878,7 +923,9 @@ def update(
     # Surface codeindex partial-graph warnings (#108) — same as `index`.
     # The zero-export safety gate below consumes the RAW warnings: a user
     # silence pattern must not degrade the 0-entity diagnosis (codex review).
-    raw_warnings = warnings
+    raw_warnings = list(warnings)
+    warnings = _silence_warnings(warnings)
+    warnings.extend(_grammar_remediation_hints(warnings))
     # #161: language fingerprint (same treatment as `index`).
     if summary.entity_count > 0:
         fingerprint = _language_fingerprint_warning(repo)
@@ -894,6 +941,9 @@ def update(
     # tree upsert writes an empty graph. Hard-stop with a diagnosis instead.
     safe, zero_warning = assess_export(summary, raw_warnings)
     if not safe:
+        zero_warning = _append_grammar_remediation(
+            zero_warning or "graph-export returned 0 entities", raw_warnings
+        )
         click.echo(f"⚠️  WARNING: {zero_warning}", err=True)
         # #141: a 0-entity export is a config/grammar mismatch, not a success —
         # fail loud (exit 1) so the post-commit hook / CI detect the graph was
@@ -1063,11 +1113,15 @@ async def _async_refresh(
         # #120: a 0-entity export is almost always a languages/grammar mismatch
         # — clearing on top of it would silently wipe the whole workspace.
         # Hard-stop before ingest(clear=True); surface the diagnosis instead.
-        safe, warning = assess_export(summary, warnings)
+        raw_warnings = list(warnings)
+        warnings.extend(_grammar_remediation_hints(raw_warnings))
+        safe, warning = assess_export(summary, raw_warnings)
         if not safe:
             # #141: surface as an error (CLI exit 1 / MCP error envelope), not
             # a silent success. assess_export's warning carries the root cause.
-            raise GraphExportEmptyError(warning or "graph-export returned 0 entities")
+            raise GraphExportEmptyError(_append_grammar_remediation(
+                warning or "graph-export returned 0 entities", raw_warnings
+            ))
         result = await ingest(entities, relations, store, clear=True)
         result["mode"] = "cold_rebuild"
         result["workspace"] = ws
@@ -1099,11 +1153,15 @@ async def _async_refresh(
     # #120: same gate on the incremental/whole-tree path — ingest_incremental's
     # symbol GC would treat a 0-entity export as "all symbols removed" and
     # delete them. Hard-stop before any write.
-    safe, warning = assess_export(summary, warnings)
+    raw_warnings = list(warnings)
+    warnings.extend(_grammar_remediation_hints(raw_warnings))
+    safe, warning = assess_export(summary, raw_warnings)
     if not safe:
         # #141: surface as an error (CLI exit 1 / MCP error envelope), not a
         # silent success. assess_export's warning carries the root cause.
-        raise GraphExportEmptyError(warning or "graph-export returned 0 entities")
+        raise GraphExportEmptyError(_append_grammar_remediation(
+            warning or "graph-export returned 0 entities", raw_warnings
+        ))
     if strategy == "incremental":
         result = await ingest_incremental(
             entities, relations, store, changed_files=changed_files
