@@ -14,6 +14,9 @@ from loomgraph.core.git import (
     get_staged_files,
     get_working_tree_files,
     is_git_repository,
+    resolve_ref,
+    worktree_add,
+    worktree_remove,
 )
 
 
@@ -352,3 +355,108 @@ class TestGetWorkingTreeFiles:
         result = get_working_tree_files(repo_path=tmp_path, include_untracked=False)
         assert Path("a.py") in result
         assert Path("new.py") not in result
+
+
+def _init_repo_with_commits(repo: Path, files_per_commit: list[dict[str, str]]) -> str:
+    """Init a git repo + one commit per dict; returns HEAD's full sha."""
+    subprocess.run(["git", "init", "-q"], cwd=repo, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "t@t"], cwd=repo, capture_output=True, check=True
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "t"], cwd=repo, capture_output=True, check=True
+    )
+    for files in files_per_commit:
+        for name, content in files.items():
+            p = repo / name
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(content)
+        subprocess.run(["git", "add", "-A"], cwd=repo, capture_output=True, check=True)
+        subprocess.run(
+            ["git", "commit", "-q", "-m", "c"],
+            cwd=repo, capture_output=True, check=True,
+        )
+    out = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=repo, capture_output=True, text=True, check=True
+    )
+    return out.stdout.strip()
+
+
+class TestResolveRef:
+    """EPIC-016 (#185) branch-diff 前置:任意 ref → 完整 commit sha。"""
+
+    def test_branch_ref_returns_full_sha(self, tmp_path: Path) -> None:
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        sha = _init_repo_with_commits(repo, [{"a.py": "x = 1\n"}])
+
+        assert resolve_ref(repo, "HEAD") == sha
+        assert resolve_ref(repo, get_current_branch(repo)) == sha  # init 默认分支名不定
+
+    def test_short_sha_and_annotated_tag_peel_to_commit(self, tmp_path: Path) -> None:
+        """short sha 与 annotated tag 都要剥到 commit sha(^{commit})。"""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        sha = _init_repo_with_commits(repo, [{"a.py": "x = 1\n"}])
+        subprocess.run(
+            ["git", "tag", "-a", "v1", "-m", "tag"],
+            cwd=repo, capture_output=True, check=True,
+        )
+
+        assert resolve_ref(repo, sha[:8]) == sha
+        assert resolve_ref(repo, "v1") == sha
+
+    def test_unknown_ref_raises_with_ref_in_message(self, tmp_path: Path) -> None:
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        _init_repo_with_commits(repo, [{"a.py": "x = 1\n"}])
+
+        with pytest.raises(GitError, match="nope-ref"):
+            resolve_ref(repo, "nope-ref")
+
+
+class TestWorktree:
+    """EPIC-016 (#185):worktree add --detach / remove。"""
+
+    def test_add_detaches_at_sha_and_remove_cleans(self, tmp_path: Path) -> None:
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        sha = _init_repo_with_commits(repo, [{"a.py": "x = 1\n"}])
+        wt = tmp_path / "wt"
+
+        worktree_add(repo, wt, sha)
+        # detach 到指定 sha:文件在、HEAD 是该 sha、无分支名
+        assert (wt / "a.py").exists()
+        head = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=wt, capture_output=True, text=True
+        )
+        assert head.stdout.strip() == sha
+
+        worktree_remove(repo, wt)
+        assert not wt.exists()
+        # worktree 元数据也清掉(list 只剩主 worktree)
+        listing = subprocess.run(
+            ["git", "worktree", "list"], cwd=repo, capture_output=True, text=True
+        )
+        assert str(wt) not in listing.stdout
+
+    def test_add_at_currently_checked_out_branch_succeeds(self, tmp_path: Path) -> None:
+        """--detach 是承重墙:base ref 常是主 worktree 已 checkout 的分支,
+        不 detach git 会拒绝 "already checked out"。"""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        _init_repo_with_commits(repo, [{"a.py": "x = 1\n"}])
+        branch = get_current_branch(repo)
+        sha = resolve_ref(repo, branch)
+        wt = tmp_path / "wt2"
+
+        worktree_add(repo, wt, sha)  # 不 raise 即通过
+        worktree_remove(repo, wt)
+
+    def test_add_bad_sha_raises(self, tmp_path: Path) -> None:
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        _init_repo_with_commits(repo, [{"a.py": "x = 1\n"}])
+
+        with pytest.raises(GitError):
+            worktree_add(repo, tmp_path / "wt3", "deadbeef")
