@@ -299,6 +299,10 @@ artifacts (81-85% relation coverage vs direct index). Larger fixture
 benchmarks (Django/FastAPI-scale) are still pending and are an honest
 gap in the README's earlier claims. See [CHANGELOG.md](CHANGELOG.md).
 
+For the separate agent-use evaluation boundary, see
+[docs/evals/evaluation-v1.md](docs/evals/evaluation-v1.md). It reports
+capability and evidence fields per task; it is not a pooled solve-rate claim.
+
 ## License
 
 [MIT](LICENSE)

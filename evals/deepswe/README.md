@@ -41,6 +41,23 @@ Each output directory contains Pier's result plus:
 - `artifacts/agent/omp.txt` — agent trace and tool calls;
 - `artifacts/model.patch` and verifier data — task-side evidence only.
 
-Do not pool these smoke runs into a benchmark or compare task rewards.  A
-future Evaluation v1 run must use the reviewed task set and human-adjudicated
-candidate targets defined in LoomGraph issue #206.
+## Evaluation v1 target set
+
+The frozen 12-task target set is `target-manifest.json`; its protocol is
+documented in [`docs/evals/evaluation-v1.md`](../../docs/evals/evaluation-v1.md).
+To regenerate it from the pinned local DeepSWE checkout:
+
+```bash
+python evals/deepswe/build-target-manifest.py \
+  --deep-swe-root /path/to/deep-swe \
+  --output evals/deepswe/target-manifest.json
+```
+
+The generator reads patch headers and records patch hashes, but never copies
+gold patch contents into the agent image. Do not mount the manifest, solution,
+or verifier patch into an agent run. `target_hit@5` is only valid after the
+codegraph installation/index gate passes for its two codegraph strata.
+
+Do not pool the smoke runs into a benchmark or compare task rewards. The smoke
+validates the adapter and artifact chain; the independent target set is the
+boundary for the later orientation-quality measurement.

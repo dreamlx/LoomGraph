@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LoomGraph Evaluation v1 run record",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "task_id",
+    "condition",
+    "trial_id",
+    "agent",
+    "environment",
+    "packet",
+    "verifier"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "task_id": {"type": "string"},
+    "condition": {"enum": ["baseline", "treatment"]},
+    "trial_id": {"type": "string"},
+    "agent": {
+      "type": "object",
+      "required": ["name", "model"],
+      "properties": {
+        "name": {"type": "string"},
+        "model": {"type": "string"},
+        "version": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "environment": {
+      "type": "object",
+      "required": ["image", "architecture"],
+      "properties": {
+        "image": {"type": "string"},
+        "image_digest": {"type": "string"},
+        "architecture": {"enum": ["linux/amd64", "linux/arm64"]},
+        "backend": {"enum": ["codeindex", "codegraph"]},
+        "limits": {"type": "object"}
+      },
+      "additionalProperties": false
+    },
+    "packet": {
+      "type": "object",
+      "required": ["status", "source_clean", "response_format"],
+      "properties": {
+        "status": {"type": "string"},
+        "source_clean": {"type": "boolean"},
+        "response_format": {"enum": ["raw_json", "markdown_fenced", "invalid"]},
+        "semantic_packet": {"type": "boolean"},
+        "candidate_paths": {"type": "array", "items": {"type": "string"}},
+        "target_hit_at_5": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
+    "loomgraph": {"type": "object"},
+    "verifier": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": {"enum": ["disabled", "not_run", "pass", "fail", "error"]},
+        "reward": {}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
