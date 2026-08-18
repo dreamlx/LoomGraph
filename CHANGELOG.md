@@ -11,16 +11,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Exposes the branch-diff provisioning + directional analyzer as one MCP
   call with the same nested `data` shape as the CLI.
 - First calls are transparently long-running cold snapshots; unchanged refs
-  reuse their workspaces and moved refs rebuild them. The v1 surface is
-  codeindex-only and returns structured `BRANCH_DIFF_FAILED` envelopes.
+  reuse their workspaces and moved refs rebuild them. The optional backend
+  matches the CLI (`codeindex` by default, or `codegraph`) and returns
+  structured `BRANCH_DIFF_FAILED` envelopes.
 
 ### Added — `loomgraph index --at-ref <ref>` historical snapshot command (#190)
 - Reuses branch-diff's detached-worktree + cold-index provisioning kernel to
   materialize a tag/branch/commit as an isolated, queryable workspace.
 - `REPO_PATH` now defaults to the current directory for this form; `-w` still
   explicitly selects the destination workspace. The mode is intentionally
-  codeindex-only and always cold (`--no-clear` is rejected); codegraph
-  provisioning remains tracked by #189.
+  codeindex-only and always cold (`--no-clear` is rejected); use
+  `branch-diff --backend codegraph` for historical codegraph snapshots.
+
+### Added — `loomgraph branch-diff --backend codegraph` (#189)
+- The branch-diff provisioning kernel now supports the installed npm
+  `codegraph` CLI in addition to the default `codeindex` backend. Each
+  detached ref worktree is initialized (or synced when it already contains a
+  codegraph database) before loomgraph snapshots `.codegraph/codegraph.db`.
+- Provisioned caches record their extraction backend, so a codeindex snapshot
+  is never reused as codegraph (or vice versa). Codegraph diffs report shared
+  entities as `content_hash_missing`, not false `content_changed` results.
+- The explicit backend has a 10,000 tracked-file default cap and 30-minute
+  per-worktree timeout. `LOOMGRAPH_CODEGRAPH_MAX_FILES` overrides the file cap;
+  missing/failed CLI and cost-gate failures return `CODEGRAPH_FAILED`.
 
 ## [0.20.0] - 2026-08-18
 
@@ -82,8 +95,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New git primitives in `core/git.py`: `resolve_ref` (`^{commit}` peels
   annotated tags), `worktree_add --detach` (detach is load-bearing: the base
   ref is often the checked-out branch), `worktree_remove --force`. Zero new
-  ErrorCodes. Follow-ups tracked in #185: codegraph backend provisioning,
-  `index --at-ref`, MCP composite.
+  ErrorCodes. Follow-ups tracked in #185: `index --at-ref` and MCP composite
+  (both now landed; codegraph provisioning is #189).
 
 ### Fixed — CI workflow's last bare `codeindex` PATH lookup (#183)
 - `.github/workflows/incremental-update.yml` invoked `codeindex affected` via

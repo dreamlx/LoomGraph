@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 import json
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -33,6 +34,10 @@ pytestmark = pytest.mark.integration
 requires_codeindex = pytest.mark.skipif(
     importlib.util.find_spec("codeindex") is None,
     reason="codeindex not installed in this venv",
+)
+requires_codegraph = pytest.mark.skipif(
+    shutil.which("codegraph") is None,
+    reason="codegraph CLI not installed in this environment",
 )
 
 
@@ -210,3 +215,20 @@ def test_mcp_branch_diff_e2e_matches_cli_data_shape(bd_env: Path) -> None:
     assert data["base"]["workspace"] == f"repo:{base_branch}"
     assert data["head"]["workspace"] == "repo:feature"
     assert "broken_chains" in data["diff"]
+
+
+@requires_codegraph
+def test_branch_diff_codegraph_e2e_has_hash_missing_not_content_changed(
+    bd_env: Path,
+) -> None:
+    """#189: codegraph provisioning is real and L2 stays non-comparable."""
+    base_branch = _git(bd_env, "rev-parse", "--abbrev-ref", "HEAD").strip()
+
+    res = CliRunner().invoke(
+        main,
+        ["branch-diff", f"{base_branch}..feature", "--backend", "codegraph"],
+    )
+    assert res.exit_code == 0, res.output
+    diff = json.loads(res.stdout)["data"]["diff"]
+    assert diff["content_changed"] == []
+    assert diff["summary"]["content_hash_missing"] == diff["summary"]["entities_shared"]

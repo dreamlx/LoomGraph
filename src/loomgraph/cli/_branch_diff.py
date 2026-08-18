@@ -14,7 +14,9 @@ provisioned workspace 是一次性 cache(#185 决策表):meta 打标
 from __future__ import annotations
 
 import asyncio
+import os
 import shutil
+import subprocess
 import tempfile
 import time
 from collections.abc import Iterator
@@ -26,7 +28,11 @@ import click
 
 from loomgraph.cli._common import ErrorCode, output_error, output_success
 from loomgraph.cli._deps_check import check_codeindex
-from loomgraph.cli._indexing import _async_index, _run_export
+from loomgraph.cli._indexing import (
+    SUPPORTED_BACKENDS,
+    _async_index,
+    _run_export,
+)
 from loomgraph.cli.main import main
 from loomgraph.core.git import (
     GitError,
@@ -40,6 +46,10 @@ from loomgraph.core.graph_export_ingest import (
     GraphExportError,
     assess_export,
 )
+
+_CODEGRAPH_MAX_FILES = 10_000
+_CODEGRAPH_MAX_FILES_ENV = "LOOMGRAPH_CODEGRAPH_MAX_FILES"
+_CODEGRAPH_TIMEOUT_SECONDS = 30 * 60
 
 
 def _parse_ref_range(value: str) -> tuple[str, str] | None:
@@ -73,7 +83,13 @@ def _worktree_at(repo: Path, sha: str) -> Iterator[Path]:
             shutil.rmtree(tmp, ignore_errors=True)
 
 
-async def _decide_workspace(repo_dir: str, ref: str, sha: str) -> tuple[str, str]:
+async def _decide_workspace(
+    repo_dir: str,
+    ref: str,
+    sha: str,
+    *,
+    backend: str = "codeindex",
+) -> tuple[str, str]:
     """provisioning 决策表(#185):返回 (workspace 名, created|reused|rebuilt)。
 
     先试候选名 ``<repo>:<ref>``(db-path 同款 sanitize),被占则试 fallback
@@ -89,15 +105,18 @@ async def _decide_workspace(repo_dir: str, ref: str, sha: str) -> tuple[str, str
         try:
             get_meta = getattr(store, "get_meta", None)
             stats = await store.get_graph_stats()
-            by = tagged_ref = None
+            by = tagged_ref = tagged_backend = None
             if get_meta is not None:
                 by = await get_meta("provisioned_by")
                 tagged_ref = await get_meta("provisioned_ref")
                 tagged_sha = await get_meta("provisioned_sha")
+                tagged_backend = await get_meta("extraction_backend")
             if by == "branch-diff":
-                if tagged_ref == ref:
+                recorded_backend = tagged_backend or "codeindex"
+                if tagged_ref == ref and recorded_backend == backend:
                     return name, ("reused" if tagged_sha == sha else "rebuilt")
-                # 我们另一个 ref 的 cache(sanitize 碰撞)→ 不互相 clobber,试 fallback
+                # 另一个 ref 或 backend 的 cache(sanitize 碰撞)→不互相
+                # clobber,试 fallback
             elif stats.get("entity_count", 0) == 0:
                 # 非 tag 且空:fresh(本调用刚开出来)或中断残留 → 认领
                 return name, "created"
@@ -112,6 +131,111 @@ async def _decide_workspace(repo_dir: str, ref: str, sha: str) -> tuple[str, str
     )
 
 
+def _codegraph_executable() -> str:
+    """Locate and validate the user-installed npm `codegraph` CLI."""
+    executable = shutil.which("codegraph")
+    if executable is None:
+        raise GraphExportError(
+            "codegraph executable not found in PATH; install "
+            "@colbymchenry/codegraph with npm and retry"
+        )
+    try:
+        result = subprocess.run(
+            [executable, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise GraphExportError(
+            f"codegraph executable could not be verified: {exc}"
+        ) from exc
+    if result.returncode != 0:
+        raise GraphExportError(
+            "codegraph executable failed --version: "
+            f"{result.stderr.strip() or result.stdout.strip() or result.returncode}"
+        )
+    return executable
+
+
+def _codegraph_file_limit() -> int:
+    raw = os.environ.get(_CODEGRAPH_MAX_FILES_ENV)
+    if raw is None:
+        return _CODEGRAPH_MAX_FILES
+    try:
+        limit = int(raw)
+    except ValueError:
+        raise GraphExportError(
+            f"{_CODEGRAPH_MAX_FILES_ENV} must be a positive integer"
+        ) from None
+    if limit <= 0:
+        raise GraphExportError(
+            f"{_CODEGRAPH_MAX_FILES_ENV} must be a positive integer"
+        )
+    return limit
+
+
+def _tracked_file_count(repo: Path) -> int:
+    """Count the commit's tracked files before paying codegraph's full scan."""
+    try:
+        result = subprocess.run(
+            ["git", "ls-files", "-z"],
+            cwd=str(repo),
+            capture_output=True,
+            timeout=30,
+            check=True,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise GraphExportError(
+            f"could not count tracked files for codegraph cost gate: {exc}"
+        ) from exc
+    return len([name for name in result.stdout.split(b"\0") if name])
+
+
+def _sync_codegraph_worktree(worktree: Path) -> None:
+    """Build a codegraph DB inside a detached worktree.
+
+    A fresh git worktree has no `.codegraph` DB, so `init` is required on
+    the first pass; if a DB is already present, `sync` is the cheaper and
+    correct incremental command. Both paths are bounded by the same explicit
+    file-count and wall-clock gates.
+    """
+    executable = _codegraph_executable()
+    file_count = _tracked_file_count(worktree)
+    limit = _codegraph_file_limit()
+    if file_count > limit:
+        raise GraphExportError(
+            f"codegraph provisioning refused: {file_count} tracked files "
+            f"exceeds the safety limit {limit} "
+            f"({_CODEGRAPH_MAX_FILES_ENV}={limit} to override)"
+        )
+
+    db_path = worktree / ".codegraph" / "codegraph.db"
+    command = (
+        [executable, "sync", "--quiet", str(worktree)]
+        if db_path.exists()
+        else [executable, "init", "--no-color", str(worktree)]
+    )
+    try:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=_CODEGRAPH_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise GraphExportError(
+            f"codegraph provisioning exceeded {_CODEGRAPH_TIMEOUT_SECONDS}s"
+        ) from exc
+    except OSError as exc:
+        raise GraphExportError(f"codegraph provisioning failed to start: {exc}") from exc
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or f"exit {result.returncode}"
+        raise GraphExportError(f"codegraph provisioning failed: {detail}")
+
+
 def _provision_ref(
     repo: Path,
     repo_dir: str,
@@ -119,6 +243,7 @@ def _provision_ref(
     sha: str,
     *,
     workspace_name: str | None = None,
+    backend: str = "codeindex",
 ) -> dict[str, Any]:
     """Provision 一个 ref 的快照 workspace;reused 时零成本短路。
 
@@ -128,7 +253,9 @@ def _provision_ref(
     """
     start = time.time()
     if workspace_name is None:
-        name, action = asyncio.run(_decide_workspace(repo_dir, ref, sha))
+        name, action = asyncio.run(
+            _decide_workspace(repo_dir, ref, sha, backend=backend)
+        )
     else:
         name, action = workspace_name, "rebuilt"
     info: dict[str, Any] = {
@@ -137,14 +264,16 @@ def _provision_ref(
     if action == "reused":
         return info
     with _worktree_at(repo, sha) as wt:
-        entities, relations, summary, warnings = _run_export("codeindex", wt)
+        if backend == "codegraph":
+            _sync_codegraph_worktree(wt)
+        entities, relations, summary, warnings = _run_export(backend, wt)
         safe, warning = assess_export(summary, warnings)
         if not safe:
             raise GraphExportEmptyError(
                 warning or f"graph-export returned 0 entities for ref {ref!r}"
             )
         asyncio.run(_async_index(
-            entities, relations, name, clear=True, backend="codeindex",
+            entities, relations, name, clear=True, backend=backend,
             summary=summary,
             extra_meta={
                 "provisioned_by": "branch-diff",
@@ -180,7 +309,17 @@ async def _async_branch_diff(base_ws: str, head_ws: str) -> dict[str, Any]:
 
 @main.command()
 @click.argument("ref_range")
-def branch_diff(ref_range: str) -> None:
+@click.option(
+    "--backend",
+    type=click.Choice(SUPPORTED_BACKENDS),
+    default="codeindex",
+    show_default=True,
+    help=(
+        "Extraction backend. codegraph provisions each detached worktree "
+        "with the npm CLI and is substantially more expensive."
+    ),
+)
+def branch_diff(ref_range: str, backend: str) -> None:
     """Structural diff between two git refs (REF_RANGE = "base..head").
 
     Auto-provisions snapshot workspaces for missing refs (worktree + cold
@@ -207,14 +346,15 @@ def branch_diff(ref_range: str) -> None:
         return
     base_ref, head_ref = parsed
 
-    codeindex_status = check_codeindex()
-    if not codeindex_status.get("installed"):
-        output_error(
-            code=ErrorCode.CODEINDEX_NOT_FOUND,
-            message="codeindex not found in the loomgraph environment",
-            suggestion="Install codeindex: pip install ai-codeindex",
-        )
-        return
+    if backend == "codeindex":
+        codeindex_status = check_codeindex()
+        if not codeindex_status.get("installed"):
+            output_error(
+                code=ErrorCode.CODEINDEX_NOT_FOUND,
+                message="codeindex not found in the loomgraph environment",
+                suggestion="Install codeindex: pip install ai-codeindex",
+            )
+            return
 
     try:
         base_sha = resolve_ref(repo, base_ref)
@@ -228,11 +368,15 @@ def branch_diff(ref_range: str) -> None:
         click.echo(
             f"[1/2] Provisioning base '{base_ref}' ({base_sha[:7]})...", err=True
         )
-        base_info = _provision_ref(repo, repo_dir, base_ref, base_sha)
+        base_info = _provision_ref(
+            repo, repo_dir, base_ref, base_sha, backend=backend
+        )
         click.echo(
             f"[2/2] Provisioning head '{head_ref}' ({head_sha[:7]})...", err=True
         )
-        head_info = _provision_ref(repo, repo_dir, head_ref, head_sha)
+        head_info = _provision_ref(
+            repo, repo_dir, head_ref, head_sha, backend=backend
+        )
         click.echo("Diffing snapshots...", err=True)
         diff = asyncio.run(
             _async_branch_diff(base_info["workspace"], head_info["workspace"])
@@ -248,7 +392,14 @@ def branch_diff(ref_range: str) -> None:
         )
         return
     except GraphExportError as e:
-        output_error(code=ErrorCode.CODEINDEX_FAILED, message=str(e))
+        output_error(
+            code=(
+                ErrorCode.CODEGRAPH_FAILED
+                if backend == "codegraph"
+                else ErrorCode.CODEINDEX_FAILED
+            ),
+            message=str(e),
+        )
         return
     except GitError as e:
         output_error(code=ErrorCode.GIT_ERROR, message=str(e))

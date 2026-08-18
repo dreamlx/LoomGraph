@@ -12,8 +12,13 @@ from pathlib import Path
 
 import pytest
 
-from loomgraph.cli._branch_diff import _decide_workspace, _parse_ref_range
+from loomgraph.cli._branch_diff import (
+    _codegraph_file_limit,
+    _decide_workspace,
+    _parse_ref_range,
+)
 from loomgraph.core.config import reset_settings
+from loomgraph.core.graph_export_ingest import GraphExportError
 from loomgraph.storage.factory import create_graph_store
 
 SHA = "a" * 40
@@ -123,6 +128,36 @@ async def test_tagged_different_ref_falls_back(
 
     name, action = await _decide_workspace("repo", "feature-x", SHA2)
     assert (name, action) == (f"repo:feature-x-{SHA2[:7]}", "created")
+
+
+async def test_tagged_other_backend_does_not_reuse(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A codeindex cache must never be treated as a codegraph snapshot."""
+    _storage_at(tmp_path, monkeypatch)
+    store = await create_graph_store(workspace="repo:main")
+    await store.set_meta("provisioned_by", "branch-diff")
+    await store.set_meta("provisioned_ref", "main")
+    await store.set_meta("provisioned_sha", SHA)
+    await store.set_meta("extraction_backend", "codeindex")
+    await store.insert_custom_kg(
+        [{"entity_name": "a.b", "entity_type": "function"}], [], []
+    )
+    await store.close()
+
+    name, action = await _decide_workspace(
+        "repo", "main", SHA, backend="codegraph"
+    )
+    assert (name, action) == (f"repo:main-{SHA[:7]}", "created")
+
+
+def test_codegraph_file_limit_is_positive(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LOOMGRAPH_CODEGRAPH_MAX_FILES", "12")
+    assert _codegraph_file_limit() == 12
+
+    monkeypatch.setenv("LOOMGRAPH_CODEGRAPH_MAX_FILES", "0")
+    with pytest.raises(GraphExportError, match="positive integer"):
+        _codegraph_file_limit()
 
 
 async def test_ref_slash_sanitized_in_candidate(

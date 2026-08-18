@@ -16,6 +16,7 @@ from mcp.types import TextContent, Tool
 
 from loomgraph.cli._branch_diff import _async_branch_diff, _provision_ref
 from loomgraph.cli._deps_check import check_codeindex
+from loomgraph.cli._indexing import SUPPORTED_BACKENDS
 from loomgraph.core.git import is_git_repository, resolve_ref
 from loomgraph.mcp.tools._common import (
     error_response,
@@ -32,7 +33,9 @@ TOOL_SPEC = Tool(
         "and module coupling delta. The first call may take minutes on a "
         "large repository because each missing ref is cold-indexed; reruns "
         "reuse unchanged snapshots and are fast. This is a write-capable "
-        "MCP tool and requires codeindex. Provisioning is idempotent: a "
+        "MCP tool and defaults to codeindex; set backend=codegraph to use "
+        "the locally installed npm CLI (with file-count and wall-clock safety "
+        "gates). Provisioning is idempotent: a "
         "moved ref is rebuilt so stale diffs are never returned."
     ),
     inputSchema={
@@ -51,6 +54,15 @@ TOOL_SPEC = Tool(
                 "description": "Git repository path. Defaults to the MCP server cwd.",
                 "default": ".",
             },
+            "backend": {
+                "type": "string",
+                "enum": list(SUPPORTED_BACKENDS),
+                "description": (
+                    "Extraction backend. codegraph provisions each worktree "
+                    "with the npm CLI and is substantially more expensive."
+                ),
+                "default": "codeindex",
+            },
         },
         "required": ["base_ref", "head_ref"],
     },
@@ -58,19 +70,27 @@ TOOL_SPEC = Tool(
 
 
 async def _run_branch_diff(
-    base_ref: str, head_ref: str, repo_path: str = "."
+    base_ref: str,
+    head_ref: str,
+    repo_path: str = ".",
+    backend: str = "codeindex",
 ) -> dict[str, Any]:
     """Run branch-diff's provisioning + analyzer kernels off the MCP loop."""
     repo = Path(repo_path).resolve()
     if not is_git_repository(repo):
         raise ValueError(f"Not a git repository: {repo}")
 
-    codeindex_status = await asyncio.to_thread(check_codeindex)
-    if not codeindex_status.get("installed"):
-        raise RuntimeError(
-            "codeindex not found in the loomgraph environment; "
-            "install ai-codeindex before calling loomgraph_branch_diff"
+    if backend not in SUPPORTED_BACKENDS:
+        raise ValueError(
+            f"unsupported backend {backend!r}; choose one of {SUPPORTED_BACKENDS}"
         )
+    if backend == "codeindex":
+        codeindex_status = await asyncio.to_thread(check_codeindex)
+        if not codeindex_status.get("installed"):
+            raise RuntimeError(
+                "codeindex not found in the loomgraph environment; "
+                "install ai-codeindex before calling loomgraph_branch_diff"
+            )
 
     start = time.time()
     base_sha, head_sha = await asyncio.gather(
@@ -85,10 +105,10 @@ async def _run_branch_diff(
     # MCP handler. Sequential provisioning avoids two cold SQLite writers
     # competing for the same storage directory.
     base_info = await asyncio.to_thread(
-        _provision_ref, repo, repo_dir, base_ref, base_sha
+        _provision_ref, repo, repo_dir, base_ref, base_sha, backend=backend
     )
     head_info = await asyncio.to_thread(
-        _provision_ref, repo, repo_dir, head_ref, head_sha
+        _provision_ref, repo, repo_dir, head_ref, head_sha, backend=backend
     )
     diff = await _async_branch_diff(
         base_info["workspace"], head_info["workspace"]
@@ -110,11 +130,13 @@ async def handle(arguments: dict[str, Any]) -> list[TextContent]:
             message="base_ref and head_ref are required.",
         )
     repo_path = str(arguments.get("repo_path") or ".")
+    backend = str(arguments.get("backend") or "codeindex")
     return await safe_call(
-        lambda: _run_branch_diff(base_ref, head_ref, repo_path),
+        lambda: _run_branch_diff(base_ref, head_ref, repo_path, backend),
         failure_code="BRANCH_DIFF_FAILED",
         failure_hint=(
-            "Check that both refs exist and codeindex is installed; "
+            "Check that both refs exist and the selected extraction backend is "
+            "installed; "
             "rerun after the first cold snapshot completes."
         ),
     )
