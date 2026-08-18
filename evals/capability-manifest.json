@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "purpose": "machine-readable capability assertions; no aggregate score",
+  "fixtures": [
+    {
+      "id": "codeindex-l2-available",
+      "test": "tests/unit/test_branch_diff.py::test_identical_graphs_all_zero",
+      "backend_pair": ["codeindex", "codeindex"],
+      "expected": {
+        "content_comparison.status": "available",
+        "content_comparison.changed": []
+      }
+    },
+    {
+      "id": "codeindex-l2-partial",
+      "test": "tests/unit/test_branch_diff.py::test_content_comparison_is_partial_when_only_some_hashes_exist",
+      "backend_pair": ["codeindex", "codeindex"],
+      "expected": {
+        "content_comparison.status": "partial",
+        "content_comparison.changed_is_not_null": true,
+        "content_comparison.uncomparable_shared": 1
+      }
+    },
+    {
+      "id": "codegraph-l2-unavailable",
+      "test": "tests/unit/test_branch_diff.py::test_content_comparison_is_unavailable_for_codegraph",
+      "backend_pair": ["codegraph", "codegraph"],
+      "expected": {
+        "content_comparison.status": "unavailable",
+        "content_comparison.changed": null,
+        "content_comparison.reason": "backend_has_no_per_entity_content_hash"
+      }
+    },
+    {
+      "id": "cross-backend-l2-unavailable",
+      "test": "tests/unit/test_branch_diff.py::test_content_comparison_rejects_cross_backend_hashes",
+      "backend_pair": ["codeindex", "codegraph"],
+      "expected": {
+        "content_comparison.status": "unavailable",
+        "content_comparison.changed": null,
+        "content_comparison.reason": "cross_backend_comparison_not_supported"
+      }
+    }
+  ]
+}

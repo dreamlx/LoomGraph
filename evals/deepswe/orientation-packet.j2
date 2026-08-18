@@ -1,0 +1,43 @@
+You are running an orientation-only phase, not an implementation task. Use at
+most five tool calls to locate the relevant production code, then stop. Do not
+modify repository files, create a branch, commit, run tests, or access the
+network. Your final response must be exactly one raw JSON object (no Markdown
+or prose) with this shape:
+
+```json
+{
+  "schema_version": 1,
+  "status": "complete",
+  "pre_edit": true,
+  "candidates": [
+    {"path": "relative/source/path", "symbol": "optional.symbol", "reason": "short"}
+  ],
+  "evidence": [
+    {"kind": "command|source|test", "detail": "short", "path": "optional/path"}
+  ],
+  "tooling": {
+    "loomgraph": {
+      "used": false,
+      "commands": [],
+      "workspace": null,
+      "backend": null,
+      "trust": null
+    }
+  }
+}
+```
+
+Task to orient:
+
+{{ instruction }}
+
+Rules:
+
+- `candidates` contains at most five production-code files or symbols. Do not
+  list test or documentation files as candidates.
+- Record only evidence actually observed. Do not include credentials, complete
+  environment variables, or unbounded command output.
+- If you use LoomGraph, set `tooling.loomgraph.used` to true and record the
+  command, workspace/backend when known, and any trust signal you relied on
+  (for example `resolved_ratio`, `partial`, or content-comparison status).
+- End the session after emitting the JSON object.

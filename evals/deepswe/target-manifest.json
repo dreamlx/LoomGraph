@@ -1,0 +1,321 @@
+{
+  "schema_version": 2,
+  "dataset": {
+    "name": "datacurve/deep-swe-1-1",
+    "manifest_sha256": "546dc070d1f4349c08d8cf8e616e2488c5dbe212f8cc02eb7f50207cbe10f4b2"
+  },
+  "selection": {
+    "seed": 20260818,
+    "tasks_per_stratum": 4,
+    "max_production_targets": 6,
+    "unique_repository_per_stratum": true,
+    "excluded_tasks": {
+      "textual-richlog-follow-state": "prompt names the target classes and API"
+    }
+  },
+  "tasks": [
+    {
+      "task_id": "vulture-persistent-analysis-cache",
+      "stratum": "codeindex-python",
+      "language": "python",
+      "backend": "codeindex",
+      "l2_content_hash": "available",
+      "repository_url": "https://github.com/jendrikseipp/vulture",
+      "base_commit_hash": "1eb212f0a0707ad6f4c720bb2010c2b7517cf0f9",
+      "dataset_task_digest": "sha256:51ef1c5544b82ea07809d5a6741a61283ea45a9fbca9151ad40d889e87a73fa3",
+      "solution_patch_sha256": "77c66982cfd975463308c104d07eef99543c5868337ca193ff556e2c15ecc940",
+      "verifier_patch_sha256": "a81a7404ea92b40a82c6f4d79f153635db21cf7e385a258af5fc527927b82259",
+      "gold_production_paths": [
+        "vulture/cache.py",
+        "vulture/config.py",
+        "vulture/core.py"
+      ],
+      "gold_existing_production_paths": [
+        "vulture/config.py",
+        "vulture/core.py"
+      ],
+      "gold_new_production_paths": [
+        "vulture/cache.py"
+      ]
+    },
+    {
+      "task_id": "psd-tools-blend-range-api",
+      "stratum": "codeindex-python",
+      "language": "python",
+      "backend": "codeindex",
+      "l2_content_hash": "available",
+      "repository_url": "https://github.com/psd-tools/psd-tools",
+      "base_commit_hash": "c5e03189188daa3c5589326a9d74506d7dc48bc9",
+      "dataset_task_digest": "sha256:a139b020512ede1f77a8a53101852b86527a3edd769d45adec589305249f72fd",
+      "solution_patch_sha256": "7823a1812505d67d61c8f8197e7385afff836f2754e34fb1415612569ca612c9",
+      "verifier_patch_sha256": "4816d794589fa15547ba819f591d8211b0a1d1f7f9fd6902d985ab74565ede9c",
+      "gold_production_paths": [
+        "src/psd_tools/api/blend_range.py",
+        "src/psd_tools/api/layers.py",
+        "src/psd_tools/composite/composite.py",
+        "src/psd_tools/psd/layer_and_mask.py"
+      ],
+      "gold_existing_production_paths": [
+        "src/psd_tools/api/layers.py",
+        "src/psd_tools/composite/composite.py",
+        "src/psd_tools/psd/layer_and_mask.py"
+      ],
+      "gold_new_production_paths": [
+        "src/psd_tools/api/blend_range.py"
+      ]
+    },
+    {
+      "task_id": "cattrs-partial-structuring-recovery",
+      "stratum": "codeindex-python",
+      "language": "python",
+      "backend": "codeindex",
+      "l2_content_hash": "available",
+      "repository_url": "https://github.com/python-attrs/cattrs",
+      "base_commit_hash": "6bc4708fb9b2ac52d9a18997e923da6a58916102",
+      "dataset_task_digest": "sha256:5cf8e8069f2288323445b1b1a53cdfed97f0c130b4807c8fa3051ff19aed7f21",
+      "solution_patch_sha256": "6050a6735eee8de72939d81ead6274658915dc4512d5d2995280a9a9fdafb1b5",
+      "verifier_patch_sha256": "50154d90fca5e57254affc3a5378082a6782cb4d7e27182a7860a5827b8afef9",
+      "gold_production_paths": [
+        "src/cattrs/__init__.py",
+        "src/cattrs/converters.py",
+        "src/cattrs/partial.py"
+      ],
+      "gold_existing_production_paths": [
+        "src/cattrs/__init__.py",
+        "src/cattrs/converters.py"
+      ],
+      "gold_new_production_paths": [
+        "src/cattrs/partial.py"
+      ]
+    },
+    {
+      "task_id": "sqlite-utils-safe-import-checkpoints",
+      "stratum": "codeindex-python",
+      "language": "python",
+      "backend": "codeindex",
+      "l2_content_hash": "available",
+      "repository_url": "https://github.com/simonw/sqlite-utils",
+      "base_commit_hash": "8d74ffc93292c604d5827e2b44fffedca0c28c19",
+      "dataset_task_digest": "sha256:caeb9ca0abc995c8cd2181bab9c258b0b6c703e3af8d12ea647638e87ab66eb0",
+      "solution_patch_sha256": "bd0ebf9938e9b8314a95be46ade85f903caea488d4c9280ba358a5d410528538",
+      "verifier_patch_sha256": "a36f34c653177d27a0ba19264576fd5cc823ce0b01f5b67164a413ef4342352a",
+      "gold_production_paths": [
+        "sqlite_utils/__init__.py",
+        "sqlite_utils/cli.py",
+        "sqlite_utils/db.py"
+      ],
+      "gold_existing_production_paths": [
+        "sqlite_utils/__init__.py",
+        "sqlite_utils/cli.py",
+        "sqlite_utils/db.py"
+      ],
+      "gold_new_production_paths": []
+    },
+    {
+      "task_id": "ts-pattern-match-each",
+      "stratum": "codegraph-js-ts",
+      "language": "typescript",
+      "backend": "codegraph",
+      "l2_content_hash": "unavailable",
+      "repository_url": "https://github.com/gvergnaud/ts-pattern",
+      "base_commit_hash": "f66fc061fde4f764b113ededa09be63dae564159",
+      "dataset_task_digest": "sha256:7b3016149ea35e321f59a0c83ee13348bc64b2d7c63ff046863f8ae680520add",
+      "solution_patch_sha256": "33e84d6ce53a5e4375412cf2b12e9a8df6e88064987096e4cbfaf5bf2e726c47",
+      "verifier_patch_sha256": "6638df983f8d1dd49b0c38afe0a8026a778151931889e9fc5253c5fb1f6b319c",
+      "gold_production_paths": [
+        "src/index.ts",
+        "src/internals/helpers.ts",
+        "src/match.ts",
+        "src/types/Match.ts",
+        "src/match-each.ts"
+      ],
+      "gold_existing_production_paths": [
+        "src/index.ts",
+        "src/internals/helpers.ts",
+        "src/match.ts",
+        "src/types/Match.ts"
+      ],
+      "gold_new_production_paths": [
+        "src/match-each.ts"
+      ]
+    },
+    {
+      "task_id": "ofetch-per-origin-circuit-breaker",
+      "stratum": "codegraph-js-ts",
+      "language": "typescript",
+      "backend": "codegraph",
+      "l2_content_hash": "unavailable",
+      "repository_url": "https://github.com/unjs/ofetch",
+      "base_commit_hash": "dfbe3ca4ef8a22fc023fca5a5ef530e525f5e523",
+      "dataset_task_digest": "sha256:b66f02c7563c515310550c2d7e12152e38942ba08ce719819dde367599cddd57",
+      "solution_patch_sha256": "a4dad53494d4d061af11531d76a35d923781ca1d378a235554efaae4c150bf4b",
+      "verifier_patch_sha256": "757b924819aba7f6e7e557021a7fccfb9b3d46c5b8fadc40892b7b0a8f11d307",
+      "gold_production_paths": [
+        "src/fetch.ts",
+        "src/types.ts",
+        "src/circuit.ts"
+      ],
+      "gold_existing_production_paths": [
+        "src/fetch.ts",
+        "src/types.ts"
+      ],
+      "gold_new_production_paths": [
+        "src/circuit.ts"
+      ]
+    },
+    {
+      "task_id": "awilix-async-container-initialization",
+      "stratum": "codegraph-js-ts",
+      "language": "typescript",
+      "backend": "codegraph",
+      "l2_content_hash": "unavailable",
+      "repository_url": "https://github.com/jeffijoe/awilix",
+      "base_commit_hash": "82ac179c1de4c216c4e333093044fac643303f0c",
+      "dataset_task_digest": "sha256:8bee8b0a7bfeec927b2be05946451029ca38c0b3e0eacf0b240f1be2a585f1f3",
+      "solution_patch_sha256": "7132cba436d0648a0ecc6d77078ffcf6bdae5a0d69b6cabaf52a9275ad6c2b48",
+      "verifier_patch_sha256": "21387269b2484e1c89419bb04fda51bd60e220e4571bd1bbabe450fdb3c16e04",
+      "gold_production_paths": [
+        "src/awilix.ts",
+        "src/container.ts",
+        "src/errors.ts",
+        "src/resolvers.ts"
+      ],
+      "gold_existing_production_paths": [
+        "src/awilix.ts",
+        "src/container.ts",
+        "src/errors.ts",
+        "src/resolvers.ts"
+      ],
+      "gold_new_production_paths": []
+    },
+    {
+      "task_id": "claude-code-by-agents-recursive-delegation",
+      "stratum": "codegraph-js-ts",
+      "language": "typescript",
+      "backend": "codegraph",
+      "l2_content_hash": "unavailable",
+      "repository_url": "https://github.com/baryhuang/claude-code-by-agents",
+      "base_commit_hash": "5e0a2247d446c49a9951a06bb83b6e956dc7eb41",
+      "dataset_task_digest": "sha256:402024039e3e2f6933cd0020fa4e358307e5f64c62ab11d1a00ff879e635031c",
+      "solution_patch_sha256": "2e502354ec5a44ccd360e979dc11294a0b28db2e8d9f9df59d1c9f06bbd807d5",
+      "verifier_patch_sha256": "55461bb04560e038ea9aebd02df39b3c94eda33ecba5b806f8b7bdcde0e27149",
+      "gold_production_paths": [
+        "backend/handlers/multiAgentChat.ts",
+        "backend/providers/anthropic.ts",
+        "backend/providers/registry.ts",
+        "backend/providers/types.ts"
+      ],
+      "gold_existing_production_paths": [
+        "backend/handlers/multiAgentChat.ts",
+        "backend/providers/anthropic.ts",
+        "backend/providers/registry.ts",
+        "backend/providers/types.ts"
+      ],
+      "gold_new_production_paths": []
+    },
+    {
+      "task_id": "pest-character-class-coalescing",
+      "stratum": "codegraph-go-rust",
+      "language": "rust",
+      "backend": "codegraph",
+      "l2_content_hash": "unavailable",
+      "repository_url": "https://github.com/pest-parser/pest",
+      "base_commit_hash": "79dd30d11aab6f0fba3cd79bd48f456209b966b3",
+      "dataset_task_digest": "sha256:1f3d8d6ebd3575dddd71d330697b40bf9c138c7dd92864afb906760262e97265",
+      "solution_patch_sha256": "5dcf463f6de9f9aaa2729c0e7fb521fa933de3e76154da22aa9e38e0fa281886",
+      "verifier_patch_sha256": "e415499694272a9e232b8e824306093996cae3a6d8783656464f1c4eedfdc9d5",
+      "gold_production_paths": [
+        "generator/src/generator.rs",
+        "grammars/src/lib.rs",
+        "meta/src/optimizer/coalescer.rs",
+        "meta/src/optimizer/mod.rs",
+        "vm/src/lib.rs"
+      ],
+      "gold_existing_production_paths": [
+        "generator/src/generator.rs",
+        "grammars/src/lib.rs",
+        "meta/src/optimizer/mod.rs",
+        "vm/src/lib.rs"
+      ],
+      "gold_new_production_paths": [
+        "meta/src/optimizer/coalescer.rs"
+      ]
+    },
+    {
+      "task_id": "yaegi-go-embed-directives",
+      "stratum": "codegraph-go-rust",
+      "language": "go",
+      "backend": "codegraph",
+      "l2_content_hash": "unavailable",
+      "repository_url": "https://github.com/traefik/yaegi",
+      "base_commit_hash": "fcb76d1ece0c3edc2548c39aa5b170475d2261bb",
+      "dataset_task_digest": "sha256:aaf26f34a76ab6b043e52b4e8ba43017b973eacd6b4ffa5979a34618f5116ec3",
+      "solution_patch_sha256": "cda60587b551a81b8a09d713a047e7b65685ecda3473dacd5e52004f591148e2",
+      "verifier_patch_sha256": "917fb54b0ce49fb922fb95f69c4f24ef58e2b45ba7a583964ff52dff9877d545",
+      "gold_production_paths": [
+        "interp/embed.go",
+        "interp/interp.go",
+        "interp/program.go"
+      ],
+      "gold_existing_production_paths": [
+        "interp/interp.go",
+        "interp/program.go"
+      ],
+      "gold_new_production_paths": [
+        "interp/embed.go"
+      ]
+    },
+    {
+      "task_id": "abs-module-cache-flags",
+      "stratum": "codegraph-go-rust",
+      "language": "go",
+      "backend": "codegraph",
+      "l2_content_hash": "unavailable",
+      "repository_url": "https://github.com/abs-lang/abs",
+      "base_commit_hash": "cb1b3b671d0ee9fa9da9f7b02f86967953ffd10a",
+      "dataset_task_digest": "sha256:028e2a113e450b4fb40daab690d8b19faa7f022b2e8923eee774a96160a46bf3",
+      "solution_patch_sha256": "dbb0bc5ce090de7c6f1c172a620f400070714846e93b54943d981b7b496fc069",
+      "verifier_patch_sha256": "1f14443b836ad75b66975d9c8b6e735f675250136661dfc0a370d018ba4a97f9",
+      "gold_production_paths": [
+        "evaluator/functions.go",
+        "repl/repl.go",
+        "util/util.go",
+        "evaluator/module_loader.go"
+      ],
+      "gold_existing_production_paths": [
+        "evaluator/functions.go",
+        "repl/repl.go",
+        "util/util.go"
+      ],
+      "gold_new_production_paths": [
+        "evaluator/module_loader.go"
+      ]
+    },
+    {
+      "task_id": "actionlint-action-pinning-lint",
+      "stratum": "codegraph-go-rust",
+      "language": "go",
+      "backend": "codegraph",
+      "l2_content_hash": "unavailable",
+      "repository_url": "https://github.com/rhysd/actionlint",
+      "base_commit_hash": "0bdc95715fa58f64e3fd6e63b0f89be8733cbbab",
+      "dataset_task_digest": "sha256:77dbd655e1b29ec7173b5c6f6f97efe33088adb8747820a82fff3b954e5ff084",
+      "solution_patch_sha256": "e5be4578ca56f7a2e63c8fae53120ca15ed30b7718d097138e2eb30d81206ad4",
+      "verifier_patch_sha256": "608be125ea90894b68b06e664229b6de7911403695132fc0ff794ceefa39a856",
+      "gold_production_paths": [
+        "command.go",
+        "config.go",
+        "linter.go",
+        "rule_action_pinning.go"
+      ],
+      "gold_existing_production_paths": [
+        "command.go",
+        "config.go",
+        "linter.go"
+      ],
+      "gold_new_production_paths": [
+        "rule_action_pinning.go"
+      ]
+    }
+  ]
+}

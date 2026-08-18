@@ -135,6 +135,24 @@ def test_index_codegraph_backend_dispatches_reader(
     assert data["entities_created"] == 1
 
 
+def test_index_codegraph_backend_skips_codeindex_language_fingerprint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """CodeGraph coverage is independent of codeindex's language config."""
+    from loomgraph.cli import _indexing
+
+    repo = _codegraph_repo(tmp_path)
+    _wire_store(monkeypatch)
+
+    def _fingerprint_should_not_run(repo: Path) -> str:
+        raise AssertionError("codeindex language fingerprint must not run")
+
+    monkeypatch.setattr(_indexing, "_language_fingerprint_warning", _fingerprint_should_not_run)
+
+    res = CliRunner().invoke(main, ["index", str(repo), "--backend", "codegraph"])
+    assert res.exit_code == 0, res.output
+
+
 def test_index_codegraph_missing_db_fails_loud(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
