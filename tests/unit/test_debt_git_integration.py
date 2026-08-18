@@ -20,6 +20,10 @@ def mock_store():
     client.get_all_relations = AsyncMock(return_value=[])
     client.get_orphans = AsyncMock(return_value=[])
     client.get_graph_stats = AsyncMock(return_value={"entity_count": 0, "relation_count": 0})
+    # This lightweight store doubles only the client-side topology fallback.
+    # MagicMock would otherwise fabricate a server-side API and leave the
+    # other gather() coroutines unawaited when that fabricated call fails.
+    client.get_orphan_entities.side_effect = NotImplementedError
     return client
 
 

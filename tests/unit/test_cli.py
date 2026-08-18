@@ -1058,7 +1058,7 @@ class TestUpdateCommand:
 class TestFindCommand:
     """Tests for the find command."""
 
-    @patch("loomgraph.cli._search.asyncio.run")
+    @patch("loomgraph.cli._search._async_find")
     def test_find_basic(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test basic find command."""
         mock_run.return_value = {
@@ -1076,7 +1076,7 @@ class TestFindCommand:
         assert data["data"]["query"] == "user login"
         assert data["data"]["matches_count"] == 1
 
-    @patch("loomgraph.cli._search.asyncio.run")
+    @patch("loomgraph.cli._search._async_find")
     def test_find_with_options(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test find with type filter and limit."""
         mock_run.return_value = {
@@ -1104,7 +1104,7 @@ class TestSearchCommandSemantic:
     redirected to `find`) is gone — `search` and `find` are now peers:
     find = name fuzzy match, search = meaning (embedding KNN)."""
 
-    @patch("loomgraph.cli._search.asyncio.run")
+    @patch("loomgraph.cli._search._async_search")
     def test_search_returns_semantic_matches(self, mock_run: MagicMock, runner: CliRunner) -> None:
         mock_run.return_value = {
             "query": "where are hotspots computed",
@@ -1125,7 +1125,7 @@ class TestSearchCommandSemantic:
         assert data["data"]["mode"] == "semantic"
         assert data["data"]["matches_count"] == 2
 
-    @patch("loomgraph.cli._search.asyncio.run")
+    @patch("loomgraph.cli._search._async_search")
     def test_search_not_indexed_returns_typed_error(
         self, mock_run: MagicMock, runner: CliRunner
     ) -> None:
@@ -1160,7 +1160,7 @@ class TestQueryCommandRemoved:
 class TestGraphCommand:
     """Tests for the graph command."""
 
-    @patch("loomgraph.cli._search.asyncio.run")
+    @patch("loomgraph.cli._search._async_graph_query")
     def test_graph_basic(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test basic graph query."""
         mock_run.return_value = {
@@ -1180,7 +1180,7 @@ class TestGraphCommand:
         assert "callers" in data["data"]
         assert "callees" in data["data"]
 
-    @patch("loomgraph.cli._search.asyncio.run")
+    @patch("loomgraph.cli._search._async_graph_query")
     def test_graph_callers_only(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test graph query for callers only."""
         mock_run.return_value = {
@@ -1199,7 +1199,7 @@ class TestGraphCommand:
         assert "callers" in data["data"]
         assert "callees" not in data["data"]
 
-    @patch("loomgraph.cli._search.asyncio.run")
+    @patch("loomgraph.cli._search._async_graph_query")
     def test_graph_with_relation_type(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test graph query with relation type filter."""
         mock_run.return_value = {
@@ -1304,7 +1304,7 @@ class TestCLIHelp:
 class TestWorkspaceListCommand:
     """Tests for the workspace list command."""
 
-    @patch("loomgraph.cli._workspace.asyncio.run")
+    @patch("loomgraph.cli._workspace._async_workspace_list")
     def test_workspace_list_basic(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test basic workspace list command."""
         mock_run.return_value = {
@@ -1320,7 +1320,7 @@ class TestWorkspaceListCommand:
         assert data["data"]["workspaces"] == ["cust-backend", "cust-gateway"]
         assert data["data"]["count"] == 2
 
-    @patch("loomgraph.cli._workspace.asyncio.run")
+    @patch("loomgraph.cli._workspace._async_workspace_list")
     def test_workspace_list_empty(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test workspace list when no workspaces exist."""
         mock_run.return_value = {
@@ -1336,7 +1336,7 @@ class TestWorkspaceListCommand:
         assert data["data"]["workspaces"] == []
         assert data["data"]["count"] == 0
 
-    @patch("loomgraph.cli._workspace.asyncio.run")
+    @patch("loomgraph.cli._workspace._async_workspace_list")
     def test_workspace_list_error(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test workspace list error handling."""
         mock_run.side_effect = Exception("Connection refused")
@@ -1351,7 +1351,7 @@ class TestWorkspaceListCommand:
 class TestWorkspaceInfoCommand:
     """Tests for the workspace info command."""
 
-    @patch("loomgraph.cli._workspace.asyncio.run")
+    @patch("loomgraph.cli._workspace._async_workspace_info")
     def test_workspace_info_basic(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test workspace info with explicit name."""
         mock_run.return_value = {
@@ -1373,7 +1373,7 @@ class TestWorkspaceInfoCommand:
         assert "entity_types" in data["data"]
         assert "relation_types" in data["data"]
 
-    @patch("loomgraph.cli._workspace.asyncio.run")
+    @patch("loomgraph.cli._workspace._async_workspace_info")
     def test_workspace_info_auto_detect(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test workspace info with auto-detect (no name argument)."""
         mock_run.return_value = {
@@ -1391,7 +1391,7 @@ class TestWorkspaceInfoCommand:
         assert data["success"] is True
         assert data["data"]["entities"] == 50
 
-    @patch("loomgraph.cli._workspace.asyncio.run")
+    @patch("loomgraph.cli._workspace._async_workspace_info")
     def test_workspace_info_with_workspace_option(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test workspace info with -w option."""
         mock_run.return_value = {
@@ -1409,7 +1409,7 @@ class TestWorkspaceInfoCommand:
         assert data["success"] is True
         assert data["data"]["name"] == "custom-ws"
 
-    @patch("loomgraph.cli._workspace.asyncio.run")
+    @patch("loomgraph.cli._workspace._async_workspace_info")
     def test_workspace_info_error(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test workspace info error handling."""
         mock_run.side_effect = Exception("Connection refused")
@@ -1424,7 +1424,7 @@ class TestWorkspaceInfoCommand:
 class TestWorkspaceDeleteCommand:
     """Tests for the workspace delete command."""
 
-    @patch("loomgraph.cli._workspace.asyncio.run")
+    @patch("loomgraph.cli._workspace._async_workspace_delete")
     def test_workspace_delete_success(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test workspace delete with --yes flag."""
         mock_run.return_value = {
@@ -1449,7 +1449,7 @@ class TestWorkspaceDeleteCommand:
         assert data["error"]["code"] == ErrorCode.INVALID_INPUT
         assert "--yes" in data["error"]["suggestion"]
 
-    @patch("loomgraph.cli._workspace.asyncio.run")
+    @patch("loomgraph.cli._workspace._async_workspace_delete")
     def test_workspace_delete_error(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test workspace delete error handling."""
         mock_run.side_effect = Exception("Connection refused")
@@ -1493,7 +1493,7 @@ class TestWorkspaceHelp:
 class TestDepsCommand:
     """Tests for the deps command."""
 
-    @patch("loomgraph.cli._analysis.asyncio.run")
+    @patch("loomgraph.cli._analysis._async_deps")
     def test_deps_basic(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test basic deps command."""
         mock_run.return_value = {
@@ -1512,7 +1512,7 @@ class TestDepsCommand:
         assert "src/cli" in data["data"]["modules"]
         assert len(data["data"]["dependencies"]) == 1
 
-    @patch("loomgraph.cli._analysis.asyncio.run")
+    @patch("loomgraph.cli._analysis._async_deps")
     def test_deps_with_depth(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test deps command with --depth option."""
         mock_run.return_value = {
@@ -1527,7 +1527,7 @@ class TestDepsCommand:
         data = json.loads(result.stdout)
         assert data["success"] is True
 
-    @patch("loomgraph.cli._analysis.asyncio.run")
+    @patch("loomgraph.cli._analysis._async_deps")
     def test_deps_error(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test deps command error handling."""
         mock_run.side_effect = Exception("Connection refused")
@@ -1549,7 +1549,7 @@ class TestDepsCommand:
 class TestOverviewCommand:
     """Tests for the overview command."""
 
-    @patch("loomgraph.cli._analysis.asyncio.run")
+    @patch("loomgraph.cli._analysis._async_overview")
     def test_overview_basic(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test basic overview command."""
         mock_run.return_value = {
@@ -1578,7 +1578,7 @@ class TestOverviewCommand:
         assert len(data["data"]["modules"]) == 1
         assert data["data"]["modules"][0]["name"] == "src/core"
 
-    @patch("loomgraph.cli._analysis.asyncio.run")
+    @patch("loomgraph.cli._analysis._async_overview")
     def test_overview_no_summary(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test overview with --no-summary flag."""
         mock_run.return_value = {
@@ -1607,7 +1607,7 @@ class TestOverviewCommand:
 class TestIndexProgressFeedback:
     """Tests that index command outputs progress to stderr."""
 
-    @patch("loomgraph.cli._indexing.asyncio.run")
+    @patch("loomgraph.cli._indexing._async_index")
     @patch("loomgraph.cli._indexing.run_graph_export")
     @patch("loomgraph.cli._indexing.check_codeindex")
     def test_index_progress_messages(
@@ -2015,7 +2015,7 @@ class TestFindWithRelations:
         assert "callers" not in match
         assert "callees" not in match
 
-    @patch("loomgraph.cli._search.asyncio.run")
+    @patch("loomgraph.cli._search._async_find")
     def test_find_with_relations_cli(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test find --with-relations via CLI invocation."""
         mock_run.return_value = {
@@ -2086,7 +2086,7 @@ class TestBfsCollect:
 class TestTopologyCommand:
     """Tests for the topology command."""
 
-    @patch("loomgraph.cli._analysis.asyncio.run")
+    @patch("loomgraph.cli._analysis._async_topology")
     def test_topology_basic(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test basic topology command."""
         mock_run.return_value = {
@@ -2115,7 +2115,7 @@ class TestTopologyCommand:
         assert data["data"]["summary"]["topology_score"] == 85
         assert len(data["data"]["orphans"]) == 1
 
-    @patch("loomgraph.cli._analysis.asyncio.run")
+    @patch("loomgraph.cli._analysis._async_topology")
     def test_topology_with_module(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test topology command with --module option."""
         mock_run.return_value = {
@@ -2133,7 +2133,7 @@ class TestTopologyCommand:
         data = json.loads(result.stdout)
         assert data["success"] is True
 
-    @patch("loomgraph.cli._analysis.asyncio.run")
+    @patch("loomgraph.cli._analysis._async_topology")
     def test_topology_error(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test topology command error handling."""
         mock_run.side_effect = Exception("Connection refused")
@@ -2157,7 +2157,7 @@ class TestTopologyCommand:
 class TestCheckCommand:
     """Tests for the check command."""
 
-    @patch("loomgraph.cli._analysis.asyncio.run")
+    @patch("loomgraph.cli._analysis._async_check")
     def test_check_basic(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test basic check command."""
         mock_run.return_value = {
@@ -2180,7 +2180,7 @@ class TestCheckCommand:
         assert data["success"] is True
         assert data["data"]["freshness"]["stale"] == 2
 
-    @patch("loomgraph.cli._analysis.asyncio.run")
+    @patch("loomgraph.cli._analysis._async_check")
     def test_check_all_fresh(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test check when all entries are fresh."""
         mock_run.return_value = {
@@ -2196,7 +2196,7 @@ class TestCheckCommand:
         assert data["success"] is True
         assert data["data"]["freshness"]["freshness_ratio"] == 1.0
 
-    @patch("loomgraph.cli._analysis.asyncio.run")
+    @patch("loomgraph.cli._analysis._async_check")
     def test_check_error(self, mock_run: MagicMock, runner: CliRunner) -> None:
         """Test check command error handling."""
         mock_run.side_effect = Exception("API error")
