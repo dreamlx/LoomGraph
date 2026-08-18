@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — copyable missing-grammar remediation (#210)
+- Parser-missing warnings now retain codeindex's original diagnostic and add
+  one deduplicated LoomGraph install command plus the required `languages:`
+  configuration step. Zero-entity failures use the same exact known-language
+  command; unknown languages remain explicit rather than guessing a package.
+
 ### Added — Evaluation v1 orientation pilot harness (#206)
 - Added a reproducible DeepSWE/Pier orientation protocol, frozen target
   manifest, raw-packet schema, and separate codeindex/codegraph setup gates.

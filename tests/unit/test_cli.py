@@ -572,6 +572,7 @@ class TestIndexCommand:
         assert data["success"] is False
         assert data["error"]["code"] == "GRAPH_EXPORT_EMPTY"
         assert "tree-sitter-swift" in data["error"]["message"]
+        assert 'pipx install "loomgraph[swift]"' in data["error"]["message"]
 
     @patch("loomgraph.storage.factory.create_graph_store")
     @patch("loomgraph.cli._indexing.run_graph_export")

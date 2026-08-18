@@ -109,6 +109,27 @@ async def test_refresh_passes_untracked_through_to_incremental(
     assert fakes.incr.call_args.kwargs["changed_files"] == {"brand_new.py"}
 
 
+async def test_refresh_includes_copyable_missing_grammar_remediation(
+    fakes: types.SimpleNamespace, tmp_path: Path
+) -> None:
+    from loomgraph.io.export_reader import ImportSummary
+
+    fakes.worktree.return_value = [Path("src/app.java")]
+    fakes.export.return_value = (
+        [object()],
+        [],
+        ImportSummary(entity_count=1),
+        ["Parser library not installed for java: missing binding"],
+    )
+
+    result = await _async_refresh(
+        workspace="ws", repo=tmp_path, path=None, force_full=False
+    )
+
+    assert result["partial"] is True
+    assert 'pipx install "loomgraph[java]"' in result["warning"]
+
+
 async def test_refresh_force_full_clears_and_rebuilds(
     fakes: types.SimpleNamespace, tmp_path: Path
 ) -> None:
@@ -164,10 +185,11 @@ async def test_refresh_force_full_zero_entities_does_not_clear(
         ],
     )
 
-    with pytest.raises(GraphExportEmptyError, match="tree-sitter-swift"):
+    with pytest.raises(GraphExportEmptyError, match="tree-sitter-swift") as error:
         await _async_refresh(
             workspace="ws", repo=tmp_path, path=None, force_full=True
         )
+    assert 'pipx install "loomgraph[swift]"' in str(error.value)
     fakes.ingest.assert_not_called()  # raise before ingest (no delete_all)
     fakes.incr.assert_not_called()
 

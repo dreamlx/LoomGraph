@@ -87,6 +87,23 @@ class TestIndexPartialFlag:
         assert res.exit_code == 0, res.output
         data = json.loads(res.stdout)["data"]
         assert data["partial"] is True, data
+        assert 'pipx install "loomgraph[java]"' in data["warning"]
+
+    def test_parser_missing_adds_copyable_grammar_remediation(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        repo = _make_repo(tmp_path)
+        _patch_index_env(monkeypatch, repo, [PARSER_MISSING])
+
+        res = CliRunner().invoke(main, ["index", str(repo)])
+
+        assert res.exit_code == 0, res.output
+        warning = json.loads(res.stdout)["data"]["warning"]
+        assert PARSER_MISSING in warning
+        assert (
+            'Install support: pipx install "loomgraph[java]"; then add '
+            '`java` to `languages:` in .codeindex.yaml.'
+        ) in warning
 
     def test_true_on_fingerprint(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -151,6 +168,45 @@ class TestIndexPartialFlag:
         data = json.loads(res.stdout)["data"]
         assert not data.get("warning"), data.get("warning")
         assert data["partial"] is False, data
+
+    def test_silencing_parser_missing_also_silences_its_remediation(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from loomgraph.core.config import get_settings
+
+        repo = _make_repo(tmp_path)
+        _patch_index_env(monkeypatch, repo, [PARSER_MISSING])
+        monkeypatch.setattr(
+            get_settings().warnings, "silence", ["parser library not installed"],
+        )
+
+        res = CliRunner().invoke(main, ["index", str(repo)])
+
+        assert res.exit_code == 0, res.output
+        data = json.loads(res.stdout)["data"]
+        assert not data.get("warning"), data.get("warning")
+        assert data["partial"] is False, data
+
+
+def test_missing_grammar_remediation_dedupes_known_and_keeps_unknown_generic() -> None:
+    from loomgraph.cli._indexing import _grammar_remediation_hints
+
+    hints = _grammar_remediation_hints([
+        "Parser library not installed for typescript: missing binding",
+        "Parser library not installed for typescript: another file",
+        "Parser library not installed for rust: missing binding",
+    ])
+
+    assert hints == [
+        (
+            'Install support: pipx install "loomgraph[typescript]"; then add '
+            '`typescript` to `languages:` in .codeindex.yaml.'
+        ),
+        (
+            "Install the required tree-sitter grammar for `rust`; then add "
+            "`rust` to `languages:` in .codeindex.yaml."
+        ),
+    ]
 
 
 # ─── CLI update ──────────────────────────────────────────────────────────────
