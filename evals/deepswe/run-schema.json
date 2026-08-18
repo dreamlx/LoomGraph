@@ -6,6 +6,7 @@
     "schema_version",
     "task_id",
     "condition",
+    "use_mode",
     "trial_id",
     "agent",
     "environment",
@@ -16,6 +17,7 @@
     "schema_version": {"const": 1},
     "task_id": {"type": "string"},
     "condition": {"enum": ["baseline", "treatment"]},
+    "use_mode": {"enum": ["voluntary", "assisted"]},
     "trial_id": {"type": "string"},
     "agent": {
       "type": "object",
@@ -68,7 +70,12 @@
         "new_path_nominated_at_5": {"type": ["boolean", "null"]},
         "loomgraph_invoked": {"type": "boolean"},
         "loomgraph_retrieval_used": {"type": "boolean"},
-        "loomgraph_index_only": {"type": "boolean"}
+        "loomgraph_index_only": {"type": "boolean"},
+        "tool_call_count": {"type": "integer", "minimum": 0},
+        "tool_call_budget": {"type": "integer", "minimum": 1},
+        "tool_call_budget_overrun": {"type": "boolean"},
+        "retrieval_required": {"type": "boolean"},
+        "retrieval_requirement_met": {"type": ["boolean", "null"]}
       },
       "additionalProperties": false
     },

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — distinguish guided retrieval from setup-only evaluation use (#209)
+- DeepSWE orientation runs are labelled `voluntary` or `assisted`; assisted
+  treatment requires and reports one structural retrieval separately from
+  availability, setup indexing, or target quality. Backend-aware guidance now
+  tells codegraph treatment to query its setup-ready graph instead of indexing
+  again, while codeindex may index once before retrieval.
+
 ### Fixed — copyable missing-grammar remediation (#210)
 - Parser-missing warnings now retain codeindex's original diagnostic and add
   one deduplicated LoomGraph install command plus the required `languages:`

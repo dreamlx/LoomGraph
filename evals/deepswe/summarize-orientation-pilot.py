@@ -72,7 +72,9 @@ def score_packet(packet: dict[str, Any], target: dict[str, Any] | None) -> dict[
     tool = tooling.get("loomgraph") if isinstance(tooling, dict) else None
     commands = _string_list(tool.get("commands")) if isinstance(tool, dict) else []
     use = classify_loomgraph_use(commands)
+    tool_call_count = packet.get("tool_call_count")
     result: dict[str, object] = {
+        "orientation_mode": packet.get("orientation_mode"),
         "semantic_packet": valid,
         "source_clean_model_phase": packet.get("pre_edit") is True,
         "response_format": packet.get("response_format"),
@@ -85,6 +87,11 @@ def score_packet(packet: dict[str, Any], target: dict[str, Any] | None) -> dict[
         "loomgraph_invoked": use["invoked"],
         "loomgraph_retrieval_used": use["retrieval_used"],
         "loomgraph_index_only": use["index_only"],
+        "tool_call_count": tool_call_count if isinstance(tool_call_count, int) else None,
+        "tool_call_budget": packet.get("tool_call_budget"),
+        "tool_call_budget_overrun": packet.get("tool_call_budget_overrun"),
+        "retrieval_required": packet.get("retrieval_required"),
+        "retrieval_requirement_met": packet.get("retrieval_requirement_met"),
         "target_hit_at_5": None,
         "existing_target_recall_at_5": None,
         "new_path_nominated_at_5": None,
@@ -115,7 +122,17 @@ def _infer_task_id(path: Path, output_dir: Path) -> str | None:
     for part in path.relative_to(output_dir).parts:
         if "__" in part:
             return part.split("__", 1)[0]
-        match = re.match(r"loomgraph-eval-(?:baseline|treatment)-(.+)$", part)
+        match = re.match(
+            r"loomgraph-eval-(?:baseline|treatment)-(?:voluntary|assisted)-(.+)$", part
+        )
+        if match:
+            return match.group(1)
+    return None
+
+
+def _infer_use_mode(path: Path, output_dir: Path) -> str | None:
+    for part in path.relative_to(output_dir).parts:
+        match = re.search(r"(?:^|-)(voluntary|assisted)(?:-|$)", part)
         if match:
             return match.group(1)
     return None
@@ -156,6 +173,7 @@ def summarize(output_dir: Path, targets: dict[str, dict[str, Any]]) -> list[dict
         row = {
             "task_id": task_id,
             "condition": condition,
+            "use_mode": _infer_use_mode(path, output_dir),
             "run": str(path.relative_to(output_dir)),
             **score_packet(packet, targets.get(task_id)),
         }
@@ -195,12 +213,19 @@ def main() -> int:
     fields = (
         "task_id",
         "condition",
+        "use_mode",
+        "orientation_mode",
         "semantic_packet",
         "source_clean_model_phase",
         "instrumentation_cache_paths",
         "loomgraph_invoked",
         "loomgraph_retrieval_used",
         "loomgraph_index_only",
+        "tool_call_count",
+        "tool_call_budget",
+        "tool_call_budget_overrun",
+        "retrieval_required",
+        "retrieval_requirement_met",
         "loomgraph_backend",
         "loomgraph_trust",
         "target_hit_at_5",

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 from typing import Any
 
 from omp_pier import Omp
@@ -13,12 +14,18 @@ from pier.models.agent.context import AgentContext
 
 _PACKET_PATH = "/logs/artifacts/orientation.json"
 _READ_ONLY_TOOLS = "read,grep,glob,lsp,bash"
+_TOOL_CALL_BUDGET = 5
+_LOOMGRAPH_RETRIEVAL = re.compile(
+    r"(?:^|[\s;&|])(?:[^\s;&|]*/)?loomgraph\s+"
+    r"(?:find|graph|search|deps|impact|topology|overview)\b"
+)
 _TRACE_SUMMARY_COMMAND = r'''python3 - <<'PY'
 import base64
 import json
 
 last_text = ""
 loomgraph_commands = []
+tool_call_count = 0
 with open("/logs/agent/omp.txt", encoding="utf-8", errors="replace") as trace:
     for raw in trace:
         try:
@@ -33,13 +40,20 @@ with open("/logs/agent/omp.txt", encoding="utf-8", errors="replace") as trace:
         for part in message.get("content") or []:
             if part.get("type") == "text" and isinstance(part.get("text"), str):
                 last_text = part["text"]
-            if part.get("type") != "toolCall" or part.get("name") != "bash":
+            if part.get("type") != "toolCall":
+                continue
+            tool_call_count += 1
+            if part.get("name") != "bash":
                 continue
             command = (part.get("arguments") or {}).get("command")
             if isinstance(command, str) and "loomgraph" in command:
                 loomgraph_commands.append(command)
 
-payload = {"response": last_text, "loomgraph_commands": loomgraph_commands}
+payload = {
+    "response": last_text,
+    "loomgraph_commands": loomgraph_commands,
+    "tool_call_count": tool_call_count,
+}
 print(base64.b64encode(json.dumps(payload).encode()).decode())
 PY'''
 
@@ -58,6 +72,14 @@ class OmpWithOrientation(Omp):
     @staticmethod
     def name() -> str:
         return "omp-orientation"
+
+    def __init__(
+        self, *args: object, orientation_use_mode: str = "voluntary", **kwargs: object
+    ) -> None:
+        if orientation_use_mode not in {"voluntary", "assisted"}:
+            raise ValueError("orientation_use_mode must be voluntary or assisted")
+        self._orientation_use_mode = orientation_use_mode
+        super().__init__(*args, **kwargs)
 
     async def run(
         self,
@@ -101,11 +123,19 @@ class OmpWithOrientation(Omp):
             trace = json.loads(base64.b64decode(encoded_trace.strip()))
             response, response_format = self._decode_response(trace["response"])
             commands = trace["loomgraph_commands"]
+            tool_call_count = trace.get("tool_call_count", 0)
         except (KeyError, TypeError, ValueError, json.JSONDecodeError):
             return self._missing_packet()
 
-        if not self._response_is_valid(response):
+        if (
+            not isinstance(commands, list)
+            or not all(isinstance(command, str) for command in commands)
+            or not isinstance(tool_call_count, int)
+            or tool_call_count < 0
+            or not self._response_is_valid(response)
+        ):
             return self._missing_packet()
+        retrieval_required, retrieval_requirement_met = self._retrieval_requirement(commands)
 
         return {
             "schema_version": 1,
@@ -114,6 +144,12 @@ class OmpWithOrientation(Omp):
             "source_clean_scope": "model_phase",
             "instrumentation_cache_paths": self._instrumentation_cache_paths(),
             "response_format": response_format,
+            "orientation_mode": getattr(self, "_orientation_use_mode", "voluntary"),
+            "tool_call_budget": _TOOL_CALL_BUDGET,
+            "tool_call_count": tool_call_count,
+            "tool_call_budget_overrun": tool_call_count > _TOOL_CALL_BUDGET,
+            "retrieval_required": retrieval_required,
+            "retrieval_requirement_met": retrieval_requirement_met,
             "candidates": response["candidates"],
             "evidence": response["evidence"],
             "tooling": {
@@ -157,6 +193,9 @@ class OmpWithOrientation(Omp):
             response.get("tooling", {}).get("loomgraph"), dict
         )
 
+    def _retrieval_requirement(self, commands: list[str]) -> tuple[bool, bool | None]:
+        return False, None
+
     def _missing_packet(self) -> dict[str, Any]:
         return {
             "schema_version": 1,
@@ -165,6 +204,12 @@ class OmpWithOrientation(Omp):
             "source_clean_scope": "model_phase",
             "instrumentation_cache_paths": self._instrumentation_cache_paths(),
             "response_format": "invalid",
+            "orientation_mode": getattr(self, "_orientation_use_mode", "voluntary"),
+            "tool_call_budget": _TOOL_CALL_BUDGET,
+            "tool_call_count": 0,
+            "tool_call_budget_overrun": False,
+            "retrieval_required": False,
+            "retrieval_requirement_met": None,
             "candidates": [],
             "evidence": [],
             "tooling": {"loomgraph": {"used": False, "commands": []}},

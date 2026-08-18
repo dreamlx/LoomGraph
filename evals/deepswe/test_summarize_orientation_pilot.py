@@ -13,11 +13,21 @@ _module = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(_module)
 
 
-def _packet(*, commands: list[str], paths: list[str]) -> dict[str, object]:
+def _packet(
+    *, commands: list[str], paths: list[str], tool_call_count: int = 0,
+    orientation_mode: str = "voluntary", retrieval_required: bool = False,
+    retrieval_requirement_met: bool | None = None,
+) -> dict[str, object]:
     return {
         "status": "complete",
         "pre_edit": True,
         "response_format": "raw_json",
+        "orientation_mode": orientation_mode,
+        "tool_call_count": tool_call_count,
+        "tool_call_budget": 5,
+        "tool_call_budget_overrun": tool_call_count > 5,
+        "retrieval_required": retrieval_required,
+        "retrieval_requirement_met": retrieval_requirement_met,
         "candidates": [{"path": path} for path in paths],
         "tooling": {"loomgraph": {"used": bool(commands), "commands": commands}},
     }
@@ -37,6 +47,26 @@ def test_loomgraph_use_distinguishes_invocation_from_retrieval() -> None:
     assert _module.classify_loomgraph_use(
         ["$HOME/.local/bin/loomgraph index . && $HOME/.local/bin/loomgraph find OptimizedExpr"]
     ) == {"invoked": True, "retrieval_used": True, "index_only": False}
+
+
+def test_score_records_observed_tool_budget_and_assisted_requirement() -> None:
+    score = _module.score_packet(
+        _packet(
+            commands=["loomgraph find Widget"],
+            paths=["src/widget.py"],
+            tool_call_count=6,
+            orientation_mode="assisted",
+            retrieval_required=True,
+            retrieval_requirement_met=True,
+        ),
+        None,
+    )
+
+    assert score["orientation_mode"] == "assisted"
+    assert score["tool_call_count"] == 6
+    assert score["tool_call_budget_overrun"] is True
+    assert score["retrieval_required"] is True
+    assert score["retrieval_requirement_met"] is True
 
 
 def test_target_metrics_separate_existing_navigation_from_new_file_planning() -> None:

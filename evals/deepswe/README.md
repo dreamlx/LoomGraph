@@ -29,6 +29,8 @@ credential to a repository file.
 evals/deepswe/run-omp-smoke.sh baseline textual-richlog-follow-state
 evals/deepswe/run-omp-smoke.sh treatment textual-richlog-follow-state
 evals/deepswe/run-orientation-pilot.sh textual-richlog-follow-state 3
+# Assisted-use is a separate treatment label; it requires one retrieval query.
+evals/deepswe/run-orientation-pilot.sh textual-richlog-follow-state 3 /tmp/assisted assisted
 ```
 
 The treatment builds a self-contained `linux/amd64` wheelhouse, uploads it to
@@ -54,6 +56,19 @@ the source-clean check begins only after setup. The bundle is intentionally
 kept outside the repository; the package version is controlled by
 `CODEGRAPH_VERSION` and defaults to `1.5.0`.
 
+## Use modes
+
+`voluntary` is the default: LoomGraph is available, but the model may choose
+not to retrieve. `assisted` is a separately labelled treatment mode: it must
+run one structural `find` or `graph` query before emitting its packet. They are
+never pooled as one treatment. The tool card is backend-aware: codegraph has
+already been indexed by setup and must not be indexed again; codeindex may be
+indexed once before retrieval.
+
+The adapter records observed `tool_call_count`, the five-call budget-overrun
+flag, and whether an assisted retrieval requirement was met. These are
+operational measurements, not target-hit penalties.
+
 Each output directory contains Pier's result plus:
 
 - `artifacts/orientation.json` — pre-edit navigation evidence;
@@ -67,10 +82,10 @@ evals/deepswe/summarize-orientation-pilot.py /tmp/loomgraph-orientation-pilot
 ```
 
 It writes `orientation-summary.json` alongside the run outputs and prints one
-row per task/condition. The rows separate invocation, structural retrieval, and
-index-only use; target-hit, existing-file recall, and new-path nomination are
-also distinct. The manifest remains host-only and is never mounted into the
-agent container.
+row per task/condition/use-mode. The rows separate invocation, structural
+retrieval, and index-only use; target-hit, existing-file recall, new-path
+nomination, tool-call budget, and assisted-use compliance are also distinct.
+The manifest remains host-only and is never mounted into the agent container.
 
 ## Evaluation v1 target set
 
