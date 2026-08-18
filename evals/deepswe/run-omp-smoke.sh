@@ -64,7 +64,11 @@ case "$condition" in
         exit 2
         ;;
     esac
-    codegraph_args=()
+    agent_args=(
+      --agent-import-path omp_loomgraph:OmpWithLoomGraph
+      --ak "loomgraph_wheelhouse=$wheelhouse"
+      --ak "loomgraph_backend=$backend"
+    )
     if [[ "$backend" == "codegraph" ]]; then
       codegraph_bundle=${CODEGRAPH_BUNDLE:-"$jobs_dir/codegraph-linux-x64.tar.gz"}
       if [[ -z ${CODEGRAPH_BUNDLE:-} ]]; then
@@ -74,14 +78,8 @@ case "$condition" in
         echo "codegraph bundle not found: $codegraph_bundle" >&2
         exit 2
       fi
-      codegraph_args=(--ak "codegraph_bundle=$codegraph_bundle")
+      agent_args+=(--ak "codegraph_bundle=$codegraph_bundle")
     fi
-    agent_args=(
-      --agent-import-path omp_loomgraph:OmpWithLoomGraph
-      --ak "loomgraph_wheelhouse=$wheelhouse"
-      --ak "loomgraph_backend=$backend"
-      "${codegraph_args[@]}"
-    )
     ;;
   *)
     echo "condition must be baseline or treatment" >&2
