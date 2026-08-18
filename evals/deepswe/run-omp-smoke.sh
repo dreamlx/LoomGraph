@@ -56,9 +56,31 @@ case "$condition" in
       echo "LoomGraph wheelhouse not found: $wheelhouse" >&2
       exit 2
     fi
+    backend=${LOOMGRAPH_BACKEND:-codeindex}
+    case "$backend" in
+      codeindex|codegraph) ;;
+      *)
+        echo "LOOMGRAPH_BACKEND must be codeindex or codegraph" >&2
+        exit 2
+        ;;
+    esac
+    codegraph_args=()
+    if [[ "$backend" == "codegraph" ]]; then
+      codegraph_bundle=${CODEGRAPH_BUNDLE:-"$jobs_dir/codegraph-linux-x64.tar.gz"}
+      if [[ -z ${CODEGRAPH_BUNDLE:-} ]]; then
+        "$repo_root/evals/deepswe/build-codegraph-bundle.sh" "$codegraph_bundle"
+      fi
+      if [[ ! -f "$codegraph_bundle" ]]; then
+        echo "codegraph bundle not found: $codegraph_bundle" >&2
+        exit 2
+      fi
+      codegraph_args=(--ak "codegraph_bundle=$codegraph_bundle")
+    fi
     agent_args=(
       --agent-import-path omp_loomgraph:OmpWithLoomGraph
       --ak "loomgraph_wheelhouse=$wheelhouse"
+      --ak "loomgraph_backend=$backend"
+      "${codegraph_args[@]}"
     )
     ;;
   *)

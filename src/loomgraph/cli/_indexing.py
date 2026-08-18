@@ -335,7 +335,7 @@ def index(
     # #161: >0 entities can still be a partial graph (stray .py only) — the
     # language fingerprint names the dominant language the config missed.
     # Appended BEFORE silence so it's filterable like codeindex's own warnings.
-    if summary.entity_count > 0:
+    if backend == "codeindex" and summary.entity_count > 0:
         fingerprint = _language_fingerprint_warning(repo)
         if fingerprint:
             warnings.append(fingerprint)

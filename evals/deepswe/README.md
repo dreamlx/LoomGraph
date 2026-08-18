@@ -35,6 +35,23 @@ the isolated agent container, installs it with `--no-index`, and verifies
 `loomgraph --version` before the agent starts.  On Apple Silicon this still
 uses Docker's `linux/amd64` emulation, matching the later x86 host shape.
 
+The default treatment backend is `codeindex`.  To exercise the separate
+codegraph capability gate, build the pinned Linux bundle and select it:
+
+```bash
+evals/deepswe/build-codegraph-bundle.sh /tmp/codegraph-linux-x64.tar.gz
+LOOMGRAPH_BACKEND=codegraph \
+CODEGRAPH_BUNDLE=/tmp/codegraph-linux-x64.tar.gz \
+evals/deepswe/run-omp-smoke.sh treatment ts-pattern-match-each
+```
+
+The runner installs the bundle as the agent user and verifies
+`codegraph --version` before OMP starts.  For the codegraph backend it also
+builds `.codegraph/codegraph.db` when absent and runs the LoomGraph index gate
+before OMP starts; these are ignored local indexes, not source edits.  The
+bundle is intentionally kept outside the repository; the package version
+is controlled by `CODEGRAPH_VERSION` and defaults to `1.5.0`.
+
 Each output directory contains Pier's result plus:
 
 - `artifacts/orientation.json` — pre-edit navigation evidence;
