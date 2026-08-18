@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 
+from omp_loomgraph import OmpWithLoomGraph
 from omp_orientation import OmpWithOrientation
 
 
@@ -32,6 +33,8 @@ def test_raw_json_is_a_semantic_packet_and_raw_json_compliant() -> None:
 
     assert packet["status"] == "complete"
     assert packet["response_format"] == "raw_json"
+    assert packet["source_clean_scope"] == "model_phase"
+    assert packet["instrumentation_cache_paths"] == []
 
 
 def test_single_json_fence_is_a_semantic_packet_but_not_raw_json_compliant() -> None:
@@ -67,3 +70,11 @@ def test_example_candidate_is_not_a_production_orientation_packet() -> None:
     )
 
     assert packet["status"] == "missing_or_invalid_agent_response"
+
+
+def test_codegraph_cache_is_declared_as_instrumentation_not_source_change() -> None:
+    adapter = OmpWithLoomGraph.__new__(OmpWithLoomGraph)
+    adapter._loomgraph_backend = "codegraph"
+
+    assert adapter._instrumentation_cache_paths() == [".codegraph/"]
+    assert adapter._missing_packet()["instrumentation_cache_paths"] == [".codegraph/"]

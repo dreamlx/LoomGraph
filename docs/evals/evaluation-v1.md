@@ -46,14 +46,21 @@ adapter smoke task.
 
 The reference target is the set of repository-relative paths changed by the
 gold `solution.patch`, after excluding `examples/`, `tests/`, `test/`, `docs/`,
-and snapshots. This is intentionally file-level for v1; symbol-level targets
-would add parser and reviewer judgment before the measurement is stable.
+and snapshots. The manifest retains that union as `gold_production_paths`, and
+also separates `gold_existing_production_paths` from
+`gold_new_production_paths` using only each patch header's `new file mode`.
+This is intentionally file-level for v1; symbol-level targets would add parser
+and reviewer judgment before the measurement is stable.
 
-The target generator reads only `diff --git` headers and records patch hashes.
-Gold patch contents, verifier patches, and the target manifest are not mounted
-into the agent container. The agent sees only the task instruction and the
-checked-out repository. If a future runner exposes the manifest to the agent,
-the run is invalid for target-hit measurement.
+Existing-file navigation and proposing a path that does not yet exist are
+different agent behaviours. They are reported separately, never collapsed into
+a single recall number.
+
+The target generator reads only diff headers, file-mode metadata, and patch
+hashes. Gold patch contents, verifier patches, and the target manifest are not
+mounted into the agent container. The agent sees only the task instruction and
+the checked-out repository. If a future runner exposes the manifest to the
+agent, the run is invalid for target-hit measurement.
 
 ## Controls and metrics
 
@@ -63,7 +70,8 @@ Treatment adds LoomGraph; it must not silently fall back to codeindex when the
 manifest requests codegraph. An unavailable backend is an infrastructure
 failure recorded per task and excluded from quality denominators.
 
-The primary metric is file-level `target_hit@5`:
+The primary metric is file-level `target_hit@5`, retained as a simple
+orientation success indicator:
 
 ```text
 target_hit@5 = valid, source-clean runs whose top-five candidate paths
@@ -71,11 +79,25 @@ target_hit@5 = valid, source-clean runs whose top-five candidate paths
                / valid, source-clean runs
 ```
 
-Report every task and miss. Do not pool strata into one score. Secondary
-descriptive fields are semantic packet rate, source-clean rate, raw-JSON
-compliance, LoomGraph-use rate, tool rounds, time, tokens/cost, and verifier
-status. A verifier result is evidence about task execution only; it is not the
-orientation metric.
+Report every task and miss. Do not pool strata into one score. The separate
+descriptive target metrics are `existing_target_recall@5` (unique candidates
+that intersect existing gold paths, divided by existing gold paths) and
+`new_path_nominated@5` (whether any gold-created production path was proposed).
+The latter is planning evidence, not navigation recall.
+
+Agent-use is also split from the trace, rather than trusting the model's own
+`used` field: `loomgraph_invoked`, `loomgraph_retrieval_used` (a structural
+query such as `find` or `graph`), and `loomgraph_index_only`. Indexing alone is
+setup/invocation evidence, not retrieval use. Other descriptive fields are
+semantic packet rate, source-clean rate, raw-JSON compliance, tool rounds,
+time, tokens/cost, and verifier status. A verifier result is evidence about
+task execution only; it is not the orientation metric.
+
+`source-clean` applies to the model phase only. The codegraph treatment may
+create the ignored `.codegraph/` instrumentation cache before that phase; its
+path is recorded in the adapter-owned packet and is not counted as an agent
+source edit. Cross-backend `resolved_ratio` values remain per-run trust context,
+not a pooled or ordinal quality metric.
 
 The run record contract is [run-schema.json](../../evals/deepswe/run-schema.json).
 The orientation packet remains adapter-owned and is collected even on timeout;

@@ -68,6 +68,33 @@ def _production_paths(patch: Path) -> list[str]:
     ]
 
 
+def _production_paths_by_kind(patch: Path) -> dict[str, list[str]]:
+    """Classify production targets from diff headers without reading patch hunks."""
+    paths = {"existing": [], "new": []}
+    current_path: str | None = None
+    current_is_new = False
+
+    def add_current() -> None:
+        if current_path is None or NON_PRODUCTION_PARTS.intersection(Path(current_path).parts):
+            return
+        kind = "new" if current_is_new else "existing"
+        if current_path not in paths[kind]:
+            paths[kind].append(current_path)
+
+    for line in patch.read_text(errors="replace").splitlines():
+        if line.startswith("diff --git a/"):
+            add_current()
+            try:
+                current_path = line.split(" b/", 1)[1]
+            except IndexError as exc:
+                raise ValueError(f"malformed diff header in {patch}: {line!r}") from exc
+            current_is_new = False
+        elif line.startswith("new file mode "):
+            current_is_new = True
+    add_current()
+    return paths
+
+
 def _task_digest(dataset: dict[str, Any], task_id: str) -> str:
     name = f"datacurve/{task_id}"
     for task in dataset.get("tasks", []):
@@ -87,6 +114,7 @@ def _eligible_tasks(root: Path) -> dict[str, list[dict[str, Any]]]:
         if not solution_patch.exists():
             continue
         targets = _production_paths(solution_patch)
+        targets_by_kind = _production_paths_by_kind(solution_patch)
         if not 1 <= len(targets) <= MAX_PRODUCTION_TARGETS:
             continue
         for stratum, spec in STRATA.items():
@@ -100,6 +128,7 @@ def _eligible_tasks(root: Path) -> dict[str, list[dict[str, Any]]]:
                         "task_dir": task_toml.parent,
                         "solution_patch": solution_patch,
                         "targets": targets,
+                        "targets_by_kind": targets_by_kind,
                     }
                 )
                 break
@@ -146,10 +175,12 @@ def build_manifest(root: Path) -> dict[str, Any]:
                 "solution_patch_sha256": _sha256(solution_patch),
                 "verifier_patch_sha256": _sha256(verifier_patch),
                 "gold_production_paths": row["targets"],
+                "gold_existing_production_paths": row["targets_by_kind"]["existing"],
+                "gold_new_production_paths": row["targets_by_kind"]["new"],
             }
         )
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "dataset": {
             "name": dataset["dataset"]["name"],
             "manifest_sha256": _sha256(dataset_path),

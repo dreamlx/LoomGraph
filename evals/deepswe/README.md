@@ -9,14 +9,15 @@ runs the same DeepSWE task with a fixed OMP model and budget in two conditions:
 
 The primary artifact is `artifacts/orientation.json`. A usable packet has
 `status: "complete"`, `pre_edit: true`, up to five production-code candidates,
-and records whether LoomGraph was used and its trust signals.  A task reward,
+and records observed LoomGraph commands and trust signals. A task reward,
 timeout, or patch is recorded separately and is never used as this harness's
 capability metric. The agent runs only the orientation phase and is bounded by
 OMP's `--max-time` (420 seconds by default). The adapter, rather than the
 model, validates the final JSON response and writes the packet. A single
 Markdown-fenced JSON object remains a semantic packet but is reported
-separately as raw-JSON protocol non-compliance. Source changes make a packet
-invalid.
+separately as raw-JSON protocol non-compliance. Source changes during the model
+phase make a packet invalid; any setup cache path is declared separately in the
+packet.
 
 ## Local run
 
@@ -46,17 +47,30 @@ evals/deepswe/run-omp-smoke.sh treatment ts-pattern-match-each
 ```
 
 The runner installs the bundle as the agent user and verifies
-`codegraph --version` before OMP starts.  For the codegraph backend it also
+`codegraph --version` before OMP starts. For the codegraph backend it also
 builds `.codegraph/codegraph.db` when absent and runs the LoomGraph index gate
-before OMP starts; these are ignored local indexes, not source edits.  The
-bundle is intentionally kept outside the repository; the package version
-is controlled by `CODEGRAPH_VERSION` and defaults to `1.5.0`.
+before OMP starts; this ignored local index is declared as instrumentation and
+the source-clean check begins only after setup. The bundle is intentionally
+kept outside the repository; the package version is controlled by
+`CODEGRAPH_VERSION` and defaults to `1.5.0`.
 
 Each output directory contains Pier's result plus:
 
 - `artifacts/orientation.json` — pre-edit navigation evidence;
 - `artifacts/agent/omp.txt` — agent trace and tool calls;
 - `artifacts/model.patch` and verifier data — task-side evidence only.
+
+Summarize a pilot with the frozen target manifest after all runs complete:
+
+```bash
+evals/deepswe/summarize-orientation-pilot.py /tmp/loomgraph-orientation-pilot
+```
+
+It writes `orientation-summary.json` alongside the run outputs and prints one
+row per task/condition. The rows separate invocation, structural retrieval, and
+index-only use; target-hit, existing-file recall, and new-path nomination are
+also distinct. The manifest remains host-only and is never mounted into the
+agent container.
 
 ## Evaluation v1 target set
 

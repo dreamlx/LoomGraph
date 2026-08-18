@@ -57,6 +57,9 @@ class OmpWithLoomGraph(OmpWithOrientation):
     def name() -> str:
         return "omp-loomgraph"
 
+    def _instrumentation_cache_paths(self) -> list[str]:
+        return [".codegraph/"] if self._loomgraph_backend == "codegraph" else []
+
     async def setup(self, environment: BaseEnvironment) -> None:
         if not self._loomgraph_wheelhouse.is_file():
             raise FileNotFoundError(

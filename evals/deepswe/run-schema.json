@@ -41,14 +41,34 @@
     },
     "packet": {
       "type": "object",
-      "required": ["status", "source_clean", "response_format"],
+      "required": [
+        "status",
+        "source_clean",
+        "source_clean_scope",
+        "instrumentation_cache_paths",
+        "response_format"
+      ],
       "properties": {
         "status": {"type": "string"},
         "source_clean": {"type": "boolean"},
+        "source_clean_scope": {"const": "model_phase"},
+        "instrumentation_cache_paths": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
         "response_format": {"enum": ["raw_json", "markdown_fenced", "invalid"]},
         "semantic_packet": {"type": "boolean"},
         "candidate_paths": {"type": "array", "items": {"type": "string"}},
-        "target_hit_at_5": {"type": "boolean"}
+        "target_hit_at_5": {"type": ["boolean", "null"]},
+        "existing_target_recall_at_5": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "new_path_nominated_at_5": {"type": ["boolean", "null"]},
+        "loomgraph_invoked": {"type": "boolean"},
+        "loomgraph_retrieval_used": {"type": "boolean"},
+        "loomgraph_index_only": {"type": "boolean"}
       },
       "additionalProperties": false
     },

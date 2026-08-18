@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "dataset": {
     "name": "datacurve/deep-swe-1-1",
     "manifest_sha256": "546dc070d1f4349c08d8cf8e616e2488c5dbe212f8cc02eb7f50207cbe10f4b2"
@@ -29,6 +29,13 @@
         "vulture/cache.py",
         "vulture/config.py",
         "vulture/core.py"
+      ],
+      "gold_existing_production_paths": [
+        "vulture/config.py",
+        "vulture/core.py"
+      ],
+      "gold_new_production_paths": [
+        "vulture/cache.py"
       ]
     },
     {
@@ -47,6 +54,14 @@
         "src/psd_tools/api/layers.py",
         "src/psd_tools/composite/composite.py",
         "src/psd_tools/psd/layer_and_mask.py"
+      ],
+      "gold_existing_production_paths": [
+        "src/psd_tools/api/layers.py",
+        "src/psd_tools/composite/composite.py",
+        "src/psd_tools/psd/layer_and_mask.py"
+      ],
+      "gold_new_production_paths": [
+        "src/psd_tools/api/blend_range.py"
       ]
     },
     {
@@ -63,6 +78,13 @@
       "gold_production_paths": [
         "src/cattrs/__init__.py",
         "src/cattrs/converters.py",
+        "src/cattrs/partial.py"
+      ],
+      "gold_existing_production_paths": [
+        "src/cattrs/__init__.py",
+        "src/cattrs/converters.py"
+      ],
+      "gold_new_production_paths": [
         "src/cattrs/partial.py"
       ]
     },
@@ -81,7 +103,13 @@
         "sqlite_utils/__init__.py",
         "sqlite_utils/cli.py",
         "sqlite_utils/db.py"
-      ]
+      ],
+      "gold_existing_production_paths": [
+        "sqlite_utils/__init__.py",
+        "sqlite_utils/cli.py",
+        "sqlite_utils/db.py"
+      ],
+      "gold_new_production_paths": []
     },
     {
       "task_id": "ts-pattern-match-each",
@@ -100,6 +128,15 @@
         "src/match.ts",
         "src/types/Match.ts",
         "src/match-each.ts"
+      ],
+      "gold_existing_production_paths": [
+        "src/index.ts",
+        "src/internals/helpers.ts",
+        "src/match.ts",
+        "src/types/Match.ts"
+      ],
+      "gold_new_production_paths": [
+        "src/match-each.ts"
       ]
     },
     {
@@ -116,6 +153,13 @@
       "gold_production_paths": [
         "src/fetch.ts",
         "src/types.ts",
+        "src/circuit.ts"
+      ],
+      "gold_existing_production_paths": [
+        "src/fetch.ts",
+        "src/types.ts"
+      ],
+      "gold_new_production_paths": [
         "src/circuit.ts"
       ]
     },
@@ -135,7 +179,14 @@
         "src/container.ts",
         "src/errors.ts",
         "src/resolvers.ts"
-      ]
+      ],
+      "gold_existing_production_paths": [
+        "src/awilix.ts",
+        "src/container.ts",
+        "src/errors.ts",
+        "src/resolvers.ts"
+      ],
+      "gold_new_production_paths": []
     },
     {
       "task_id": "claude-code-by-agents-recursive-delegation",
@@ -153,7 +204,14 @@
         "backend/providers/anthropic.ts",
         "backend/providers/registry.ts",
         "backend/providers/types.ts"
-      ]
+      ],
+      "gold_existing_production_paths": [
+        "backend/handlers/multiAgentChat.ts",
+        "backend/providers/anthropic.ts",
+        "backend/providers/registry.ts",
+        "backend/providers/types.ts"
+      ],
+      "gold_new_production_paths": []
     },
     {
       "task_id": "pest-character-class-coalescing",
@@ -172,6 +230,15 @@
         "meta/src/optimizer/coalescer.rs",
         "meta/src/optimizer/mod.rs",
         "vm/src/lib.rs"
+      ],
+      "gold_existing_production_paths": [
+        "generator/src/generator.rs",
+        "grammars/src/lib.rs",
+        "meta/src/optimizer/mod.rs",
+        "vm/src/lib.rs"
+      ],
+      "gold_new_production_paths": [
+        "meta/src/optimizer/coalescer.rs"
       ]
     },
     {
@@ -189,6 +256,13 @@
         "interp/embed.go",
         "interp/interp.go",
         "interp/program.go"
+      ],
+      "gold_existing_production_paths": [
+        "interp/interp.go",
+        "interp/program.go"
+      ],
+      "gold_new_production_paths": [
+        "interp/embed.go"
       ]
     },
     {
@@ -207,6 +281,14 @@
         "repl/repl.go",
         "util/util.go",
         "evaluator/module_loader.go"
+      ],
+      "gold_existing_production_paths": [
+        "evaluator/functions.go",
+        "repl/repl.go",
+        "util/util.go"
+      ],
+      "gold_new_production_paths": [
+        "evaluator/module_loader.go"
       ]
     },
     {
@@ -224,6 +306,14 @@
         "command.go",
         "config.go",
         "linter.go",
+        "rule_action_pinning.go"
+      ],
+      "gold_existing_production_paths": [
+        "command.go",
+        "config.go",
+        "linter.go"
+      ],
+      "gold_new_production_paths": [
         "rule_action_pinning.go"
       ]
     }

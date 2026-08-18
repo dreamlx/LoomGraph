@@ -111,6 +111,8 @@ class OmpWithOrientation(Omp):
             "schema_version": 1,
             "status": "invalid_source_mutation" if source_mutated else "complete",
             "pre_edit": not source_mutated,
+            "source_clean_scope": "model_phase",
+            "instrumentation_cache_paths": self._instrumentation_cache_paths(),
             "response_format": response_format,
             "candidates": response["candidates"],
             "evidence": response["evidence"],
@@ -155,14 +157,18 @@ class OmpWithOrientation(Omp):
             response.get("tooling", {}).get("loomgraph"), dict
         )
 
-    @staticmethod
-    def _missing_packet() -> dict[str, Any]:
+    def _missing_packet(self) -> dict[str, Any]:
         return {
             "schema_version": 1,
             "status": "missing_or_invalid_agent_response",
             "pre_edit": None,
+            "source_clean_scope": "model_phase",
+            "instrumentation_cache_paths": self._instrumentation_cache_paths(),
             "response_format": "invalid",
             "candidates": [],
             "evidence": [],
             "tooling": {"loomgraph": {"used": False, "commands": []}},
         }
+
+    def _instrumentation_cache_paths(self) -> list[str]:
+        return []
