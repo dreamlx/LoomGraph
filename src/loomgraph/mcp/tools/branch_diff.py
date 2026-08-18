@@ -14,8 +14,12 @@ from typing import Any
 
 from mcp.types import TextContent, Tool
 
-from loomgraph.cli._branch_diff import _async_branch_diff, _provision_ref
-from loomgraph.cli._deps_check import check_codeindex
+from loomgraph.cli._branch_diff import (
+    BranchDiffBackendUnavailableError,
+    _async_branch_diff,
+    _provision_ref,
+    ensure_branch_diff_backend,
+)
 from loomgraph.cli._indexing import SUPPORTED_BACKENDS
 from loomgraph.core.git import is_git_repository, resolve_ref
 from loomgraph.mcp.tools._common import (
@@ -80,17 +84,12 @@ async def _run_branch_diff(
     if not is_git_repository(repo):
         raise ValueError(f"Not a git repository: {repo}")
 
-    if backend not in SUPPORTED_BACKENDS:
-        raise ValueError(
-            f"unsupported backend {backend!r}; choose one of {SUPPORTED_BACKENDS}"
-        )
-    if backend == "codeindex":
-        codeindex_status = await asyncio.to_thread(check_codeindex)
-        if not codeindex_status.get("installed"):
-            raise RuntimeError(
-                "codeindex not found in the loomgraph environment; "
-                "install ai-codeindex before calling loomgraph_branch_diff"
-            )
+    try:
+        await asyncio.to_thread(ensure_branch_diff_backend, backend)
+    except BranchDiffBackendUnavailableError as e:
+        raise RuntimeError(
+            f"{e}; install ai-codeindex before calling loomgraph_branch_diff"
+        ) from e
 
     start = time.time()
     base_sha, head_sha = await asyncio.gather(
