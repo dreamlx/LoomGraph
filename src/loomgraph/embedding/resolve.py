@@ -48,7 +48,7 @@ async def probe_ollama() -> bool:
         base = base[: -len("/v1")]
     try:
         with urllib.request.urlopen(f"{base}/api/tags", timeout=2) as resp:
-            return resp.status == 200
+            return bool(resp.status == 200)
     except Exception:  # noqa: BLE001 — any failure means "not reachable"
         return False
 

@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — MCP `debt_audit` / `sync_advice` debt dimensions silently dead since v0.15
+- All three `_async_debt` call sites in `mcp/tools/debt_audit.py` /
+  `sync_advice.py` omitted the `scope` positional argument (#61 added it in
+  v0.15.0) — every call raised `TypeError` *before* `_safe` could even wrap
+  it, so both composites returned their debt dimension as an error envelope
+  and the advice summary silently degraded to compare-only. Invisible to
+  tests because every composite test mocks `_async_debt` wholesale. Surfaced
+  by the mypy `call-arg` backlog cleanup (117 → 0); regression test now
+  invokes the real binding (no mock).
+- `cli/_analysis.py` git-metrics error handler referenced the nonexistent
+  `ErrorCode.OPERATION_FAILED` (renamed away in 0.9.0-era cleanup, this call
+  site missed) and passed `output_error` args positionally in the wrong
+  order — any git-metrics failure raised `AttributeError` inside the except
+  branch, masking the original error. Now `STORAGE_ERROR` + keyword args,
+  regression-tested.
+
+### Changed — mypy backlog cleared (117 → 0) and gated in CI
+- `core/git_parser.py` (68 errors): the heterogeneous per-file aggregation
+  dict is now two `TypedDict`s (`_CommitData` / `_FileAcc`) — runtime shape
+  unchanged.
+- Mechanical: bare `dict`/`Counter` parameterized (18), cross-module
+  re-export imports redirected to defining modules (10), `Any`-returning
+  expressions wrapped (7), optional `[embed]` imports `type: ignore` (3),
+  annotation-only mismatches (4). `types-PyYAML` restored to the venv via
+  `uv sync --extra dev` (6).
+- `mypy src/` now runs in test.yml + release.yml (floors bumped to the
+  verified 1.19) — the backlog accumulated precisely because the gate was
+  local-only, and it hid the two real bugs above.
+
 ### Added — `loomgraph branch-diff <A>..<B>`: structural diff between two refs (EPIC-016 #185)
 - One command answers "what structurally changed between two git refs":
   auto-provisions snapshot workspaces for missing refs (`git worktree add

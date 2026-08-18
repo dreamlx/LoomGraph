@@ -193,8 +193,7 @@ def install(install_all: bool, force: bool, workspace: str | None) -> None:
         loomgraph hooks install --all               # Install all hooks
         loomgraph hooks install --force -w myname   # Overwrite + repin
     """
-    from ._setup import ErrorCode
-    from .main import output_error, output_success
+    from ._common import ErrorCode, output_error, output_success
 
     try:
         repo_root = find_git_repo()
@@ -255,8 +254,7 @@ def uninstall(uninstall_all: bool, no_restore: bool) -> None:
         loomgraph hooks uninstall --all      # Uninstall all
         loomgraph hooks uninstall --no-restore  # Don't restore backup
     """
-    from ._setup import ErrorCode
-    from .main import output_error, output_success
+    from ._common import ErrorCode, output_error, output_success
 
     try:
         repo_root = find_git_repo()
@@ -289,8 +287,7 @@ def status() -> None:
     Example:
         loomgraph hooks status
     """
-    from ._setup import ErrorCode
-    from .main import output_error, output_success
+    from ._common import ErrorCode, output_error, output_success
 
     try:
         repo_root = find_git_repo()

@@ -65,6 +65,15 @@ jobs:
           source .venv/bin/activate
           ruff check src/ tests/
 
+      # Type gate: the 117-error backlog hid 4 real runtime bugs (missing
+      # `scope` arg in 3 MCP callers, nonexistent ErrorCode.OPERATION_FAILED)
+      # — mypy stayed local-only and drifted for months. Kept honest in CI
+      # since the 2026-08-17 cleanup (117 → 0).
+      - name: Type check
+        run: |
+          source .venv/bin/activate
+          mypy src/
+
       - name: Unit tests
         run: |
           source .venv/bin/activate

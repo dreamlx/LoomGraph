@@ -10,11 +10,44 @@ import subprocess
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
+from typing import TypedDict
 
 from loomgraph.core.git import GitError, is_git_repository
 from loomgraph.core.models import FileMetrics
 
 logger = logging.getLogger(__name__)
+
+
+class _CommitStats(TypedDict):
+    """Per-file numstat within one commit."""
+
+    added: int
+    deleted: int
+
+
+class _CommitData(TypedDict):
+    """One parsed commit (header line + its numstat lines)."""
+
+    sha: str
+    author: str
+    timestamp: int
+    message: str
+    files: list[str]
+    stats: dict[str, _CommitStats]
+
+
+class _FileAcc(TypedDict):
+    """Per-file aggregation accumulator (mypy: kills the heterogeneous
+    dict-value union that used to fan out ~60 errors)."""
+
+    commits: list[_CommitData]
+    authors: set[str]
+    author_counts: defaultdict[str, int]
+    bug_fixes: int
+    lines_added: int
+    lines_deleted: int
+    first_seen: datetime | None
+    last_seen: datetime | None
 
 
 class GitLogParser:
@@ -33,7 +66,7 @@ class GitLogParser:
         if not is_git_repository(self.repo_path):
             raise GitError(f"Not a git repository: {self.repo_path}")
 
-    def parse_commits(self, since: str = "3 months") -> list[dict]:
+    def parse_commits(self, since: str = "3 months") -> list[_CommitData]:
         """Parse git log for commits in time window.
 
         Args:
@@ -76,7 +109,7 @@ class GitLogParser:
         except FileNotFoundError as e:
             raise GitError(f"git command not found: {e}") from e
 
-    def _parse_log_output(self, output: str) -> list[dict]:
+    def _parse_log_output(self, output: str) -> list[_CommitData]:
         """Parse git log --numstat output into structured commits.
 
         Format:
@@ -93,8 +126,8 @@ class GitLogParser:
         Returns:
             List of commit dicts
         """
-        commits = []
-        current_commit = None
+        commits: list[_CommitData] = []
+        current_commit: _CommitData | None = None
 
         for line in output.split("\n"):
             line = line.strip()
@@ -170,7 +203,7 @@ class GitLogParser:
 
         return any(re.search(pattern, message, re.IGNORECASE) for pattern in bug_patterns)
 
-    def _aggregate_file_metrics(self, commits: list[dict]) -> dict[str, FileMetrics]:
+    def _aggregate_file_metrics(self, commits: list[_CommitData]) -> dict[str, FileMetrics]:
         """Aggregate commits into FileMetrics.
 
         Args:
@@ -179,9 +212,8 @@ class GitLogParser:
         Returns:
             Dict mapping file_path → FileMetrics
         """
-        # Aggregate data per file
-        file_data = defaultdict(
-            lambda: {
+        def _new_file_acc() -> _FileAcc:
+            return {
                 "commits": [],
                 "authors": set(),
                 "author_counts": defaultdict(int),
@@ -191,7 +223,9 @@ class GitLogParser:
                 "first_seen": None,
                 "last_seen": None,
             }
-        )
+
+        # Aggregate data per file
+        file_data: defaultdict[str, _FileAcc] = defaultdict(_new_file_acc)
 
         for commit in commits:
             commit_time = datetime.fromtimestamp(commit["timestamp"])

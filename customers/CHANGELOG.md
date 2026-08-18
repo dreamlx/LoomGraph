@@ -6,6 +6,14 @@
 
 ## [Unreleased]
 
+### 修复 — MCP `debt_audit` / `sync_advice` 的 debt 维度自 v0.15 起静默失效
+
+- 内部调用漏传 `scope` 参数,每次都 TypeError 被吞成错误封套——两个
+  composite 工具一直只剩 compare 维度在干活。测试全程 mock 掉了被调函数,
+  签名漂移不可见;本轮 mypy 存量清理(117→0)首次暴露。顺带修复
+  `git-metrics` 异常处理引用不存在的错误码、原始报错被 AttributeError
+  掩盖的问题。mypy 现已进 CI 门禁,防止同类漂移再积累。
+
 ### 新增 — `loomgraph branch-diff A..B`:两个 ref 之间的结构性 diff(#185)
 
 - 一条命令回答「这个分支/版本相对基准结构上改了什么」:缺失的 ref 快照自动

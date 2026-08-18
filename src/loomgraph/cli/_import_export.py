@@ -24,8 +24,9 @@ from typing import Any
 
 import click
 
-from loomgraph.cli._common import ErrorCode, maybe_embed_entities, output_error, output_success
+from loomgraph.cli._common import ErrorCode, output_error, output_success
 from loomgraph.cli.main import main
+from loomgraph.core.embedding_pipeline import maybe_embed_entities
 
 
 @main.command("import-export")

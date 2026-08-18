@@ -276,7 +276,7 @@ def _format_console(report: dict[str, Any]) -> dict[str, Any]:
         lines.append("")
 
         # Group by category
-        by_category: dict[str, list[dict]] = {}
+        by_category: dict[str, list[dict[str, Any]]] = {}
         for issue in issues:
             cat = issue["category"]
             by_category.setdefault(cat, []).append(issue)

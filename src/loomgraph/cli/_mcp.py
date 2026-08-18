@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import sys
+from typing import Any
 
 import click
 
@@ -96,7 +97,7 @@ def install_config(path: str | None) -> None:
 
     p = Path(path).expanduser()
     p.parent.mkdir(parents=True, exist_ok=True)
-    existing: dict = {}
+    existing: dict[str, Any] = {}
     if p.exists():
         try:
             existing = json.loads(p.read_text())
