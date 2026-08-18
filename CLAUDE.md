@@ -336,6 +336,18 @@ mypy src/
 - 合并 feature 分支到 main 时 → 更新根 `CHANGELOG.md` 的 `[Unreleased]`
 - 执行 `git tag vX.Y.Z` 发版时 → 先阅读 `docs/PACKAGING.md` 发布流程
 
+**Follow-up 限制回写（MUST）**：某个 follow-up 落地后，如果它移除了此前
+`[Unreleased]` 中写下的暂时限制，必须同时回写根和客户两份 active release note；
+历史版本条目保持原样。本仓的权威搜索目标仅为 `CHANGELOG.md` 与
+`customers/CHANGELOG.md` 的 `[Unreleased]` 段，提交前用下列命令列出可能遗留的
+临时措辞，再逐条确认其仍然成立：
+
+```bash
+sed -n '/^## \[Unreleased\]/,/^## \[/p' CHANGELOG.md customers/CHANGELOG.md \
+  | rg -n -i -e 'v1 (only|仅)' -e 'codeindex-only|仅支持 codeindex' \
+    -e 'tracked by #[0-9]+|见 #[0-9]+ 跟进'
+```
+
 ## 关键文档
 
 ```
