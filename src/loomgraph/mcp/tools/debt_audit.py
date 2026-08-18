@@ -162,6 +162,7 @@ async def handle(arguments: dict[str, Any]) -> list[TextContent]:
             output_format="json",
             workspace=workspace,
             module=None,
+            scope=None,
             skip_topology=False,
             with_git=git_enabled,
             git_since=git_since,

@@ -146,7 +146,7 @@ def _is_whitelisted_orphan(name: str, source_id: str = "") -> bool:
 
 def _entity_name(entity: dict[str, Any]) -> str:
     """Extract entity name from various API response formats."""
-    return (
+    return str(
         entity.get("entity_name", "")
         or entity.get("entity_id", "")
         or entity.get("id", "")
@@ -155,7 +155,7 @@ def _entity_name(entity: dict[str, Any]) -> str:
 
 def _is_external(entity: dict[str, Any]) -> bool:
     """Check if entity is an external stub."""
-    return (
+    return bool(
         entity.get("entity_type", "") == "external"
         or entity.get("source_id", "") == "external"
     )
@@ -382,7 +382,7 @@ class TopologyAnalyzer:
         # For filtering endpoints (orphans/degree): scope wins (absolute path
         # prefix, e.g. "src/"); else combine auto prefix + module (#61).
         if self.scope:
-            filter_prefix = self.scope
+            filter_prefix: str | None = self.scope
         else:
             filter_prefix = effective_prefix or ""
             if self.module:

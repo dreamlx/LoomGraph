@@ -104,11 +104,13 @@ async def handle(arguments: dict[str, Any]) -> list[TextContent]:
     compare_task = _safe(_async_compare(ws1=upstream, ws2=downstream))
     up_debt_task = _safe(_async_debt(
         codeindex_data_path=None, output_format="json", workspace=upstream,
-        module=module, skip_topology=False, with_git=True, git_since=git_since,
+        module=module, scope=None, skip_topology=False, with_git=True,
+        git_since=git_since,
     ))
     down_debt_task = _safe(_async_debt(
         codeindex_data_path=None, output_format="json", workspace=downstream,
-        module=module, skip_topology=False, with_git=True, git_since=git_since,
+        module=module, scope=None, skip_topology=False, with_git=True,
+        git_since=git_since,
     ))
     impact_tasks = [
         _safe(_async_graph_query(

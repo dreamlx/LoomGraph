@@ -25,8 +25,9 @@ def resolve_workspace(arguments: dict[str, Any]) -> str | None:
     CLI auto-detect from cwd / git branch as today)."""
     ws = arguments.get("workspace")
     if ws:
-        return ws
-    return os.environ.get(DEFAULT_WORKSPACE_ENV)
+        return str(ws)
+    env = os.environ.get(DEFAULT_WORKSPACE_ENV)
+    return str(env) if env else None
 
 
 def success_response(data: dict[str, Any]) -> list[TextContent]:

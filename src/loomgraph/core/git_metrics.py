@@ -90,7 +90,7 @@ class GitMetricsAnalyzer:
         )
 
         # Generate summary
-        summary = {
+        summary: dict[str, int | str] = {
             "total_files": len(file_metrics),
             "total_commits": len(commits),
             "hotspots_count": len(hotspots),
@@ -212,7 +212,7 @@ class GitMetricsAnalyzer:
 
         for file_path, metrics in file_metrics.items():
             contributors = len(metrics.authors)
-            owner = metrics.primary_author
+            owner = metrics.primary_author or "unknown"
 
             # Calculate ownership ratio (primary author commits / total commits)
             # For now, estimate as 1.0 if only 1 contributor

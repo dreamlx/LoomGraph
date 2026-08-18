@@ -628,7 +628,7 @@ class DebtAnalyzer:
         """Lookup maintainability score from codeindex data."""
         for score_data in data.maintainability_scores:
             if score_data["path"] == path:
-                return score_data["score"]
+                return float(score_data["score"])
         return 5.0  # Default mid-range score
 
     def _calculate_maintainability_score(
@@ -653,7 +653,7 @@ class DebtAnalyzer:
         avg_score = sum(scores) / len(scores)
 
         # Normalize: codeindex uses 0-10 scale, convert to 0-100
-        return avg_score * 10.0
+        return float(avg_score) * 10.0
 
     def _calculate_overall_health(
         self,
@@ -745,7 +745,7 @@ class DebtAnalyzer:
 
     def _issue_to_dict(self, issue: DebtIssue) -> dict[str, Any]:
         """Convert DebtIssue to dict for JSON serialization."""
-        result = {
+        result: dict[str, Any] = {
             "id": issue.id,
             "severity": issue.severity,
             "category": issue.category,

@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -350,3 +351,27 @@ class TestSingleAuthorSuppression:
         }
         bfs = analyzer._detect_bus_factor(file_metrics, repo_is_single_author=False)
         assert bfs[0].risk_level == "critical"
+
+
+def test_git_metrics_error_path_uses_valid_error_code(
+    tmp_path, monkeypatch
+) -> None:
+    """回归:except 分支引用不存在的 ErrorCode.OPERATION_FAILED(0.9.0 改名
+    遗漏),异常处理自身抛 AttributeError,原始错误被吞。"""
+    import json
+    import subprocess
+
+    from click.testing import CliRunner
+
+    from loomgraph.cli.main import main
+
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, capture_output=True)
+    with patch(
+        "loomgraph.core.git_metrics.GitMetricsAnalyzer.analyze",
+        side_effect=RuntimeError("boom"),
+    ):
+        res = CliRunner().invoke(main, ["git-metrics", str(tmp_path)])
+    assert res.exit_code == 1, res.output
+    payload = json.loads(res.stdout)
+    assert payload["error"]["code"] == "STORAGE_ERROR"
+    assert "boom" in payload["error"]["message"]

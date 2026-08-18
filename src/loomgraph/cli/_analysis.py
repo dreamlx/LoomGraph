@@ -431,7 +431,10 @@ def git_metrics(path: str, repo: str | None, since: str, output: str | None) -> 
             output_success(output_data)
 
     except Exception as e:
-        output_error(f"Git metrics analysis failed: {e}", ErrorCode.OPERATION_FAILED)
+        output_error(
+            code=ErrorCode.STORAGE_ERROR,
+            message=f"Git metrics analysis failed: {e}",
+        )
 
 
 @main.command("trends")

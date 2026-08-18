@@ -197,7 +197,7 @@ class ImpactAnalyzer:
 
         return direct_callers, indirect_callers
 
-    async def _query_callers(self, symbol_name: str, depth: int = 1) -> list[dict]:
+    async def _query_callers(self, symbol_name: str, depth: int = 1) -> list[dict[str, Any]]:
         """Find callers of a symbol via deterministic graph traversal.
 
         codeindex extracts CALLS edges at parse time; the knowledge graph
@@ -209,7 +209,7 @@ class ImpactAnalyzer:
         except Exception:
             return []
 
-        callers: list[dict] = []
+        callers: list[dict[str, Any]] = []
         for r in relations:
             keywords = r.get("keywords", "")
             tgt = r.get("tgt_id", "") or r.get("target", "")
@@ -235,7 +235,7 @@ class ImpactAnalyzer:
                 return source_id, 0
         return source_id, 0
 
-    def _parse_caller_response(self, response: str) -> list[dict]:
+    def _parse_caller_response(self, response: str) -> list[dict[str, Any]]:
         """Parse LightRAG response to extract caller information.
 
         Args:

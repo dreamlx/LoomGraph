@@ -88,7 +88,7 @@ dev = [
     "pytest-bdd>=7.0",
     "testcontainers>=3.7",
     "ruff>=0.2",
-    "mypy>=1.8",
+    "mypy>=1.19",  # CI type gate floor — 与验证过的本地版本一致
     "types-PyYAML>=6.0",
     "pre-commit>=3.6",
 ]
@@ -134,7 +134,7 @@ dev-dependencies = [
     "pytest-asyncio>=0.23",
     "pytest-cov>=4.0",
     "ruff>=0.2",
-    "mypy>=1.8",
+    "mypy>=1.19",
 ]
 
 [tool.uv.sources]

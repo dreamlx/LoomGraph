@@ -25,6 +25,7 @@ from collections import Counter
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from loomgraph.core.models import EntityData, RelationData
 
@@ -76,12 +77,12 @@ class ExportReadError(ValueError):
 class ImportSummary:
     """Counts + warnings from a single read."""
 
-    meta: dict | None = None
+    meta: dict[str, Any] | None = None
     entity_count: int = 0
     relation_count: int = 0
-    entity_types: Counter = field(default_factory=Counter)
-    edge_kinds: Counter = field(default_factory=Counter)
-    edge_qualifiers: Counter = field(default_factory=Counter)
+    entity_types: Counter[str] = field(default_factory=Counter)
+    edge_kinds: Counter[str] = field(default_factory=Counter)
+    edge_qualifiers: Counter[str] = field(default_factory=Counter)
     schema_warnings: list[str] = field(default_factory=list)
     skipped_records: int = 0
     # #156 提案 3: test-file pollution visibility (mock-heavy test corpora
@@ -93,7 +94,7 @@ class ImportSummary:
     # will be dominated by mock-call edges that never resolve.
     TEST_POLLUTION_THRESHOLD = 0.5
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "meta": self.meta,
             "entity_count": self.entity_count,
@@ -128,7 +129,7 @@ def _is_test_source(source_id: str) -> bool:
 # Mapping (Q1=A: import all edges with qualifier)
 # ============================================
 
-def map_entity(rec: dict) -> EntityData:
+def map_entity(rec: dict[str, Any]) -> EntityData:
     """codeindex entity record → loomgraph EntityData.
 
     Field map:
@@ -174,7 +175,7 @@ def map_entity(rec: dict) -> EntityData:
     )
 
 
-def map_edge(rec: dict) -> RelationData | None:
+def map_edge(rec: dict[str, Any]) -> RelationData | None:
     """codeindex edge record → loomgraph RelationData.
 
     Q1=A decision (from LoomGraph#30 round-trip planning): surface the
@@ -231,7 +232,7 @@ def map_edge(rec: dict) -> RelationData | None:
     else:
         return None
 
-    edge_data: dict = {
+    edge_data: dict[str, Any] = {
         "keywords": kind,
         "description": f"{kind} from {src} at {source_id}",
         "weight": 1.0 if qualifier == "resolved" else 0.5,
@@ -311,7 +312,7 @@ class GraphExportReader:
 
         return entities, relations, summary
 
-    def _handle_meta(self, line_no: int, rec: dict, summary: ImportSummary) -> None:
+    def _handle_meta(self, line_no: int, rec: dict[str, Any], summary: ImportSummary) -> None:
         missing = META_REQUIRED - rec.keys()
         if missing:
             summary.schema_warnings.append(
@@ -333,7 +334,7 @@ class GraphExportReader:
     def _handle_entity(
         self,
         line_no: int,
-        rec: dict,
+        rec: dict[str, Any],
         summary: ImportSummary,
         out: list[EntityData],
     ) -> None:
@@ -358,7 +359,7 @@ class GraphExportReader:
     def _handle_edge(
         self,
         line_no: int,
-        rec: dict,
+        rec: dict[str, Any],
         summary: ImportSummary,
         out: list[RelationData],
     ) -> None:
@@ -399,7 +400,7 @@ class GraphExportReader:
             summary.test_relation_count += 1
         out.append(mapped)
 
-    def iter_records(self) -> Iterator[dict]:
+    def iter_records(self) -> Iterator[dict[str, Any]]:
         """Memory-friendly iterator over raw JSON records (for tests
         and tooling that don't need the eager-mapped output)."""
         for line in self.path.open():

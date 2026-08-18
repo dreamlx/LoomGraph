@@ -30,11 +30,14 @@ class _QuietHintGroup(click.Group):
             msg = exc.format_message()
             # click 8.3 formats the option error as `No such option: -q`,
             # 8.4 as `No such option '-q'` — match the bare substring for both.
+            # click 8.4 marks `.message` Final — replace the exception, never
+            # mutate it (CI resolves click 8.4; local lockfile may be 8.3).
             if "-q" in msg or "--quiet" in msg:
-                exc.message = (
+                raise click.exceptions.UsageError(
                     f"{msg}\n\n  Hint: -q/--quiet is a global flag — put it "
-                    "before the command: loomgraph -q <command> [args]"
-                )
+                    "before the command: loomgraph -q <command> [args]",
+                    exc.ctx,
+                ) from exc
             raise
 
 

@@ -28,9 +28,9 @@ class BuiltinEmbeddingError(RuntimeError):
 
 def _import_deps() -> tuple[Any, Any, Any]:
     try:
-        import numpy as np  # noqa: PLC0415
-        import onnxruntime as ort  # noqa: PLC0415
-        from tokenizers import Tokenizer  # noqa: PLC0415
+        import numpy as np  # type: ignore[import-not-found]  # noqa: PLC0415
+        import onnxruntime as ort  # type: ignore[import-not-found]  # noqa: PLC0415
+        from tokenizers import Tokenizer  # type: ignore[import-not-found]  # noqa: PLC0415
     except ImportError as ex:
         raise BuiltinEmbeddingError(
             f"built-in embedding needs the [embed] extra ({ex}). "

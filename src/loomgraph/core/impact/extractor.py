@@ -7,6 +7,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from loomgraph.core.impact.models import ChangedFile, ChangedSymbol, ChangeType
 
@@ -204,7 +205,7 @@ class ChangedSymbolExtractor:
                 count += overlap_end - overlap_start + 1
         return count
 
-    def _run_codeindex(self, file_path: Path) -> list[dict]:
+    def _run_codeindex(self, file_path: Path) -> list[dict[str, Any]]:
         """Run codeindex CLI to get symbols from a file.
 
         Uses codeindex parse CLI command for loose coupling.
@@ -236,7 +237,7 @@ class ChangedSymbolExtractor:
             data = json.loads(result.stdout)
 
             # Return symbols list (format matches codeindex v0.13.0+)
-            return data.get("symbols", [])
+            return list(data.get("symbols", []))
 
         except subprocess.TimeoutExpired:
             return []

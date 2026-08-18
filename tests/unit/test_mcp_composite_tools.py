@@ -10,6 +10,7 @@ SQLite workspace.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -208,3 +209,33 @@ def test_composite_tools_registered():
     assert expected.issubset(_TOOL_HANDLERS)
     names = {s.name for s in _TOOL_SPECS}
     assert expected.issubset(names)
+
+
+async def test_sync_advice_debt_dims_bind_scope(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """回归:#61 给 `_async_debt` 加了必填位置参数 scope,MCP 调用点
+    (sync_advice ×2 / debt_audit ×1)没跟上 → TypeError 被 `_safe` 吞成
+    错误封套,debt 维度自 v0.15 起静默失效。composite 测试全程 mock
+    `_async_debt`,签名漂移不可见;mypy call-arg 首次暴露。本测试**不**
+    mock 它,只断言绑定不炸。"""
+    import json as _json
+
+    from loomgraph.core.config import reset_settings
+
+    monkeypatch.setenv(
+        "LOOMGRAPH_STORAGE__DB_PATH", str(tmp_path / "{workspace}.db")
+    )
+    reset_settings()
+
+    import loomgraph.mcp.tools.sync_advice as t_sync
+
+    contents = await t_sync.handle(
+        {"upstream": "ws-a", "downstream": "ws-b"}
+    )
+    payload = _json.loads(contents[0].text)
+    for key in ("upstream_debt", "downstream_debt"):
+        err = payload["data"][key]["error"]
+        assert err is None or "positional argument" not in err, (
+            f"{key} dimension died on argument binding: {err}"
+        )
