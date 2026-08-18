@@ -295,3 +295,92 @@ def get_current_branch(repo_path: Path | str = ".") -> str:
         raise GitError("git rev-parse timed out") from err
     except FileNotFoundError as err:
         raise GitError("git command not found") from err
+
+def resolve_ref(repo_path: Path | str, ref: str) -> str:
+    """Resolve an arbitrary ref to its full commit sha (EPIC-016 branch-diff).
+
+    ``^{commit}`` peels annotated tags to the commit they point at, so a tag,
+    branch, short sha, or ``HEAD`` all resolve to the same 40-hex form.
+
+    Args:
+        repo_path: Repository path (or anywhere inside it)
+        ref: Any git rev syntax (branch / tag / sha / HEAD)
+
+    Returns:
+        Full 40-character commit sha
+
+    Raises:
+        GitError: If the ref does not resolve (message names the ref)
+    """
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--verify", f"{ref}^{{commit}}"],
+            cwd=str(repo_path),
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except subprocess.TimeoutExpired:
+        raise GitError(f"git rev-parse timed out resolving {ref!r}") from None
+    except FileNotFoundError:
+        raise GitError("git command not found") from None
+
+    if result.returncode != 0:
+        raise GitError(
+            f"cannot resolve ref {ref!r}: {result.stderr.strip() or 'unknown ref'}"
+        )
+    return result.stdout.strip()
+
+
+def worktree_add(repo_path: Path | str, path: Path, sha: str) -> None:
+    """Create a temporary worktree detached at ``sha`` (EPIC-016 branch-diff).
+
+    ``--detach`` is load-bearing: the base ref of a branch-diff is frequently
+    the branch already checked out in the main worktree, and git refuses to
+    check the same branch out twice. A detached worktree at the resolved sha
+    also pins the exact commit (same-input-same-output for the diff).
+
+    Raises:
+        GitError: If git worktree add fails (bad sha, path exists, ...)
+    """
+    try:
+        result = subprocess.run(
+            ["git", "worktree", "add", "--detach", str(path), sha],
+            cwd=str(repo_path),
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+    except subprocess.TimeoutExpired:
+        raise GitError("git worktree add timed out") from None
+    except FileNotFoundError:
+        raise GitError("git command not found") from None
+
+    if result.returncode != 0:
+        raise GitError(f"git worktree add failed: {result.stderr.strip()}")
+
+
+def worktree_remove(repo_path: Path | str, path: Path) -> None:
+    """Remove a worktree and its git metadata (EPIC-016 branch-diff).
+
+    ``--force`` because the provisioning flow treats worktrees as disposable:
+    a leftover dirty state must never block cleanup of our own temp dir.
+
+    Raises:
+        GitError: If git worktree remove fails
+    """
+    try:
+        result = subprocess.run(
+            ["git", "worktree", "remove", "--force", str(path)],
+            cwd=str(repo_path),
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except subprocess.TimeoutExpired:
+        raise GitError("git worktree remove timed out") from None
+    except FileNotFoundError:
+        raise GitError("git command not found") from None
+
+    if result.returncode != 0:
+        raise GitError(f"git worktree remove failed: {result.stderr.strip()}")
