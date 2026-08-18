@@ -1,8 +1,8 @@
-{{ instruction }}
-
-Before you modify any repository file, investigate the task and write exactly one
-JSON orientation packet to `/logs/artifacts/orientation.json`. It must be valid
-JSON (not Markdown) with this shape:
+You are running an orientation-only phase, not an implementation task. Use at
+most five tool calls to locate the relevant production code, then stop. Do not
+modify repository files, create a branch, commit, run tests, or access the
+network. Your final response must be exactly one raw JSON object (no Markdown
+or prose) with this shape:
 
 ```json
 {
@@ -27,6 +27,10 @@ JSON (not Markdown) with this shape:
 }
 ```
 
+Task to orient:
+
+{{ instruction }}
+
 Rules:
 
 - `candidates` contains at most five production-code files or symbols. Do not
@@ -36,4 +40,4 @@ Rules:
 - If you use LoomGraph, set `tooling.loomgraph.used` to true and record the
   command, workspace/backend when known, and any trust signal you relied on
   (for example `resolved_ratio`, `partial`, or content-comparison status).
-- Write the packet before any edit. Continue with the task normally afterwards.
+- End the session after emitting the JSON object.

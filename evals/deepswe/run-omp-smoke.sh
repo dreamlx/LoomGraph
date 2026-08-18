@@ -33,13 +33,13 @@ common_args=(
   -m deepseek/deepseek-v4-flash
   --ak binary_x64=.cache/omp-linux-x64
   --ak binary_arm64=.cache/omp-linux-arm64
+  --ak "orientation_max_time=${ORIENTATION_MAX_TIME:-420s}"
   --ak "prompt_template_path=$repo_root/evals/deepswe/orientation-packet.j2"
   --n-concurrent 1
-  --agent-timeout-multiplier "${AGENT_TIMEOUT_MULTIPLIER:-0.05}"
-  --verifier-timeout-multiplier "${VERIFIER_TIMEOUT_MULTIPLIER:-0.15}"
+  --agent-timeout-multiplier "${AGENT_TIMEOUT_MULTIPLIER:-0.1}"
   --artifact /logs/artifacts
   --artifact /logs/agent
-  --artifact /logs/verifier
+  --disable-verification
   --jobs-dir "$jobs_dir"
 )
 
@@ -48,8 +48,14 @@ case "$condition" in
     agent_args=(--agent-import-path omp_orientation:OmpWithOrientation)
     ;;
   treatment)
-    wheelhouse="$jobs_dir/loomgraph-wheelhouse.tar.gz"
-    "$repo_root/evals/deepswe/build-wheelhouse.sh" "$wheelhouse"
+    wheelhouse=${LOOMGRAPH_WHEELHOUSE:-"$jobs_dir/loomgraph-wheelhouse.tar.gz"}
+    if [[ -z ${LOOMGRAPH_WHEELHOUSE:-} ]]; then
+      "$repo_root/evals/deepswe/build-wheelhouse.sh" "$wheelhouse"
+    fi
+    if [[ ! -f "$wheelhouse" ]]; then
+      echo "LoomGraph wheelhouse not found: $wheelhouse" >&2
+      exit 2
+    fi
     agent_args=(
       --agent-import-path omp_loomgraph:OmpWithLoomGraph
       --ak "loomgraph_wheelhouse=$wheelhouse"

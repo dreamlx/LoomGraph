@@ -7,11 +7,16 @@ runs the same DeepSWE task with a fixed OMP model and budget in two conditions:
 - `treatment`: the same packet plus an offline Linux/amd64 LoomGraph install
   and a small tool card.
 
-The primary artifact is `artifacts/orientation.json`.  A usable packet has
+The primary artifact is `artifacts/orientation.json`. A usable packet has
 `status: "complete"`, `pre_edit: true`, up to five production-code candidates,
 and records whether LoomGraph was used and its trust signals.  A task reward,
 timeout, or patch is recorded separately and is never used as this harness's
-capability metric.
+capability metric. The agent runs only the orientation phase and is bounded by
+OMP's `--max-time` (420 seconds by default). The adapter, rather than the
+model, validates the final JSON response and writes the packet. A single
+Markdown-fenced JSON object remains a semantic packet but is reported
+separately as raw-JSON protocol non-compliance. Source changes make a packet
+invalid.
 
 ## Local run
 
@@ -22,6 +27,7 @@ credential to a repository file.
 ```bash
 evals/deepswe/run-omp-smoke.sh baseline textual-richlog-follow-state
 evals/deepswe/run-omp-smoke.sh treatment textual-richlog-follow-state
+evals/deepswe/run-orientation-pilot.sh textual-richlog-follow-state 3
 ```
 
 The treatment builds a self-contained `linux/amd64` wheelhouse, uploads it to

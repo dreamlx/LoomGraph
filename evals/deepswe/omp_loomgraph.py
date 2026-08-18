@@ -20,7 +20,7 @@ _TOOL_CARD = """This is the LoomGraph treatment condition. The CLI is available 
 `$HOME/.local/bin/loomgraph`. For structural navigation, you may run
 `$HOME/.local/bin/loomgraph index .` and then `find` or `graph`. Do not infer
 that an unavailable, partial, or non-comparable result means no change; record
-the actual command and trust signal in the orientation packet."""
+the actual command and trust signal in your final JSON response."""
 
 
 class OmpWithLoomGraph(OmpWithOrientation):
