@@ -6,6 +6,17 @@
 
 ## [Unreleased]
 
+### 变更 — L2 内容可比性显式契约（#201）
+
+- `branch-diff` 现在返回唯一、带版本的 `content_comparison` 对象，不再把
+  `content_changed` 空数组和 summary 计数当作内容结论。状态为
+  `available`、`partial` 或 `unavailable`；不可比较时 `changed: null`，不会把
+  “不能判断”伪装成“没有变化”。
+- 内容 hash 只允许同 backend 比较：codeindex graph-export schema v1 使用每符号
+  export hash；旧 schema 或无 span 符号会标为 `partial`。codegraph 或混合 backend
+  快照会明确说明不可比较原因，但 L0/L1 的结构 diff 仍照常可用。
+- `compare` 仍只比较结构，不声明源码内容相同或不同。
+
 ### 新增 — MCP `loomgraph_branch_diff` 复合工具（#191）
 
 - Agent 可一次调用两个 git ref 的结构性 diff，返回与 CLI
@@ -28,9 +39,8 @@
   loomgraph 会在每个 detached worktree 中调用本机 npm `codegraph` CLI，读取
   `.codegraph/codegraph.db` 再生成同形状的结构 diff。新 worktree 先 `init`，已有
   数据库才执行 `sync`。
-- 快照会记录 extraction backend，codeindex 与 codegraph 不会互相误复用。由于
-  codegraph 没有 codeindex 的 `content_hash`，共享实体计入
-  `content_hash_missing`，不会伪报 `content_changed`。
+- 快照会记录 extraction backend，codeindex 与 codegraph 不会互相误复用。codegraph
+  内容不可比较时采用 #201 的显式 L2 结果契约。
 - 这是显式成本选择：默认最多 10,000 个 tracked 文件、单个 worktree 最长 30 分钟；
   可用 `LOOMGRAPH_CODEGRAPH_MAX_FILES` 调整文件上限。CLI 缺失、超限或失败返回
   `CODEGRAPH_FAILED`。

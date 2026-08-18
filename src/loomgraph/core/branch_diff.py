@@ -35,7 +35,7 @@ class BranchDiffResult:
     edges_removed: list[dict[str, Any]] = field(default_factory=list)
     broken_chains: list[dict[str, Any]] = field(default_factory=list)
     new_chains: list[dict[str, Any]] = field(default_factory=list)
-    content_changed: list[dict[str, Any]] = field(default_factory=list)
+    content_comparison: dict[str, Any] = field(default_factory=dict)
     module_delta: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -49,7 +49,7 @@ class BranchDiffResult:
             "edges_removed": self.edges_removed,
             "broken_chains": self.broken_chains,
             "new_chains": self.new_chains,
-            "content_changed": self.content_changed,
+            "content_comparison": self.content_comparison,
             "module_delta": self.module_delta,
         }
 
@@ -109,6 +109,8 @@ class BranchDiffAnalyzer:
     head_store: Any  # GraphStore
     base: str = "base"
     head: str = "head"
+    base_backend: str = "codeindex"
+    head_backend: str = "codeindex"
 
     async def analyze(self) -> BranchDiffResult:
         """Run the directional diff.
@@ -119,8 +121,8 @@ class BranchDiffAnalyzer:
             3. Resolvable edge sets per side; set diff → edges_added/removed
             4. broken_chains = removed edges whose src survives in head;
                new_chains = added edges whose src existed in base
-            5. content_changed: shared entities with differing content_hash
-               (either side None → counted as missing, never listed)
+            5. content comparison: same-backend codeindex hashes only;
+               unavailable comparisons return an explicit null change list
             6. module_delta: added/removed edges attributed to src's module
 
         Returns:
@@ -161,17 +163,56 @@ class BranchDiffAnalyzer:
         broken = sorted(k for k in removed_keys if k[0] in head_names)
         new = sorted(k for k in added_keys if k[0] in base_names)
 
-        # L2: content_hash 语义层
+        # L2: content comparison is deliberately narrower than graph
+        # comparison. A hash from a different extractor is not evidence that
+        # two symbols' source bodies are comparable.
         content_changed: list[dict[str, Any]] = []
         hash_missing = 0
-        for name in shared:
-            base_hash = base_map[name].get("content_hash")
-            head_hash = head_map[name].get("content_hash")
-            if base_hash is None or head_hash is None:
-                hash_missing += 1
-            elif base_hash != head_hash:
-                content_changed.append(_entity_to_info(head_map[name]))
-        content_changed.sort(key=lambda x: x["name"])
+        comparison_reason: str | None = None
+        comparable_shared = 0
+        if self.base_backend != self.head_backend:
+            comparison_reason = "cross_backend_comparison_not_supported"
+            hash_missing = len(shared)
+        elif self.base_backend != "codeindex":
+            comparison_reason = "backend_has_no_per_entity_content_hash"
+            hash_missing = len(shared)
+        else:
+            for name in shared:
+                base_hash = base_map[name].get("content_hash")
+                head_hash = head_map[name].get("content_hash")
+                if base_hash is None or head_hash is None:
+                    hash_missing += 1
+                else:
+                    comparable_shared += 1
+                    if base_hash != head_hash:
+                        content_changed.append(_entity_to_info(head_map[name]))
+            content_changed.sort(key=lambda x: x["name"])
+
+        if comparison_reason is not None or (
+            comparable_shared == 0 and hash_missing
+        ):
+            content_status = "unavailable"
+            comparison_reason = comparison_reason or "missing_per_entity_content_hash"
+            changed: list[dict[str, Any]] | None = None
+            changes_total: int | None = None
+        else:
+            content_status = "partial" if hash_missing else "available"
+            changed = content_changed[:_LIST_CAP]
+            changes_total = len(content_changed)
+
+        content_comparison: dict[str, Any] = {
+            "version": 1,
+            "status": content_status,
+            "scope": "same_backend_only",
+            "base_backend": self.base_backend,
+            "head_backend": self.head_backend,
+            "comparable_shared": comparable_shared,
+            "uncomparable_shared": hash_missing,
+            "changes_total": changes_total,
+            "changed": changed,
+        }
+        if comparison_reason is not None:
+            content_comparison["reason"] = comparison_reason
 
         # module_delta: 边按 src 端模块聚合(removed 归 base 侧模块,added 归 head 侧)
         module_added: dict[str, int] = {}
@@ -209,8 +250,6 @@ class BranchDiffAnalyzer:
                 "edges_removed_total": len(edges_removed),
                 "broken_chains_total": len(broken),
                 "new_chains_total": len(new),
-                "content_changed_total": len(content_changed),
-                "content_hash_missing": hash_missing,
                 "module_changed": len(module_delta),
                 "base_unresolved_edges": base_unresolved,
                 "head_unresolved_edges": head_unresolved,
@@ -227,6 +266,6 @@ class BranchDiffAnalyzer:
             edges_removed=cap(edges_removed, _LIST_CAP),
             broken_chains=cap([_edge_info(k) for k in broken], _LIST_CAP),
             new_chains=cap([_edge_info(k) for k in new], _LIST_CAP),
-            content_changed=cap(content_changed, _LIST_CAP),
+            content_comparison=content_comparison,
             module_delta=cap(module_delta, _MODULE_CAP),
         )

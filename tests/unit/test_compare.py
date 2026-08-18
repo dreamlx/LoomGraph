@@ -56,6 +56,12 @@ class TestCompareResult:
         assert len(d["relation_changes"]) == 1
         assert d["relation_changes"][0]["entity"] == "AuthService"
 
+    def test_to_dict_makes_no_content_comparison_claim(self) -> None:
+        """`compare` remains L0/L1-only until it adopts the L2 contract."""
+        result = CompareResult(ws1="before", ws2="after")
+
+        assert "content_comparison" not in result.to_dict()
+
 
 class TestCompareAnalyzer:
     """Tests for CompareAnalyzer class."""

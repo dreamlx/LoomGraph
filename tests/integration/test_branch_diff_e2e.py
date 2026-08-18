@@ -3,7 +3,7 @@
 
 场景构造(base commit → feature 分支):
 - 删 `foo` 且 mod_b **不改动**(调用方还在、被调方没了)→ broken_chain
-- `bar` 只改 body → content_changed(图形状没变)
+- `bar` 只改 body → codeindex L2 content comparison(图形状没变)
 - 新目录 `sub/mod_c.py` 的 `baz` 调 `bar` → new_chain + module_delta("sub")
 
 再验证 provisioning 生命周期:rerun → reused;分支前进 → rebuilt;退出后无
@@ -82,6 +82,16 @@ def _seed_feature(repo: Path) -> None:
     _git(repo, "commit", "-q", "-m", "feature")
 
 
+def _seed_body_only_feature(repo: Path) -> None:
+    """Create a second commit whose only semantic delta is `bar`'s body."""
+    _git(repo, "checkout", "-q", "-b", "body-only")
+    (repo / "mod_a.py").write_text(
+        "def foo():\n    return 1\n\n\ndef bar():\n    return 3\n"
+    )
+    _git(repo, "add", "mod_a.py")
+    _git(repo, "commit", "-q", "-m", "body only")
+
+
 @pytest.fixture
 def bd_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     repo = tmp_path / "repo"
@@ -123,8 +133,10 @@ def test_branch_diff_e2e_full_lifecycle(bd_env: Path, tmp_path: Path) -> None:
     broken = [(c["src"], c["tgt"]) for c in diff["broken_chains"]]
     assert ("mod_b.caller", "mod_a.foo") in broken, broken
     assert any(e["name"] == "mod_a.foo" for e in diff["entities_removed"])
-    # L2:bar body 变了 → content_changed;caller 未动 → 不在
-    changed = {c["name"] for c in diff["content_changed"]}
+    # L2:bar body 变了; caller 未动 → 不在。
+    content = diff["content_comparison"]
+    assert content["status"] == "available"
+    changed = {c["name"] for c in content["changed"]}
     assert "mod_a.bar" in changed, changed
     assert "mod_b.caller" not in changed
     # 新链(存活函数新增调用):bar → twenti;新文件 baz→bar 只进 edges_added
@@ -160,6 +172,26 @@ def test_branch_diff_e2e_full_lifecycle(bd_env: Path, tmp_path: Path) -> None:
     assert _bd_tmpdirs() == tmp_before
     listing = _git(bd_env, "worktree", "list")
     assert "feature" not in listing.splitlines()[1:]
+
+
+@requires_codeindex
+def test_branch_diff_e2e_codeindex_proves_one_body_only_change(bd_env: Path) -> None:
+    """The codeindex L2 contract has one exact body-only witness."""
+    base_branch = _git(bd_env, "rev-parse", "--abbrev-ref", "HEAD").strip()
+    _seed_body_only_feature(bd_env)
+    _git(bd_env, "checkout", "-q", base_branch)
+
+    res = CliRunner().invoke(main, ["branch-diff", f"{base_branch}..body-only"])
+    assert res.exit_code == 0, res.output
+    diff = json.loads(res.stdout)["data"]["diff"]
+
+    assert diff["entities_added"] == []
+    assert diff["entities_removed"] == []
+    assert diff["edges_added"] == []
+    assert diff["edges_removed"] == []
+    assert diff["content_comparison"]["status"] == "available"
+    assert diff["content_comparison"]["changes_total"] == 1
+    assert [c["name"] for c in diff["content_comparison"]["changed"]] == ["mod_a.bar"]
 
 
 @requires_codeindex
@@ -218,7 +250,7 @@ def test_mcp_branch_diff_e2e_matches_cli_data_shape(bd_env: Path) -> None:
 
 
 @requires_codegraph
-def test_branch_diff_codegraph_e2e_has_hash_missing_not_content_changed(
+def test_branch_diff_codegraph_e2e_marks_content_comparison_unavailable(
     bd_env: Path,
 ) -> None:
     """#189: codegraph provisioning is real and L2 stays non-comparable."""
@@ -230,5 +262,31 @@ def test_branch_diff_codegraph_e2e_has_hash_missing_not_content_changed(
     )
     assert res.exit_code == 0, res.output
     diff = json.loads(res.stdout)["data"]["diff"]
-    assert diff["content_changed"] == []
-    assert diff["summary"]["content_hash_missing"] == diff["summary"]["entities_shared"]
+    content = diff["content_comparison"]
+    assert content["status"] == "unavailable"
+    assert content["changed"] is None
+    assert content["reason"] == "backend_has_no_per_entity_content_hash"
+
+
+@requires_codegraph
+def test_branch_diff_codegraph_e2e_marks_body_only_change_unavailable(
+    bd_env: Path,
+) -> None:
+    """L0/L1 can be unchanged while codegraph L2 remains explicitly unknown."""
+    base_branch = _git(bd_env, "rev-parse", "--abbrev-ref", "HEAD").strip()
+    _seed_body_only_feature(bd_env)
+    _git(bd_env, "checkout", "-q", base_branch)
+
+    res = CliRunner().invoke(
+        main,
+        ["branch-diff", f"{base_branch}..body-only", "--backend", "codegraph"],
+    )
+    assert res.exit_code == 0, res.output
+    diff = json.loads(res.stdout)["data"]["diff"]
+
+    assert diff["entities_added"] == []
+    assert diff["entities_removed"] == []
+    assert diff["edges_added"] == []
+    assert diff["edges_removed"] == []
+    assert diff["content_comparison"]["status"] == "unavailable"
+    assert diff["content_comparison"]["changed"] is None

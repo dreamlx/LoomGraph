@@ -120,9 +120,12 @@ loomgraph branch-diff <base>..<head> [--backend codeindex|codegraph]
 workspace，然后返回实体、边、调用链、内容变化和模块耦合的方向性 diff。
 默认使用本地 `codeindex`；`--backend codegraph` 会在每个 detached worktree
 中调用 PATH 上解析到的 npm `codegraph` CLI（新 worktree 先 `init`，已有数据库才
-`sync`），再由 loomgraph 读取 `.codegraph/codegraph.db`。codegraph 不能提供
-codeindex 的 `content_hash`，因此这一路径的共享实体会计入
-`summary.content_hash_missing`，而不会出现在 `content_changed`。
+`sync`），再由 loomgraph 读取 `.codegraph/codegraph.db`。`diff` 的
+`content_comparison` 是 version 1 的 L2 契约：只有同 backend 的 codeindex
+graph-export schema v1 快照会返回 `status: "available"` 或 `"partial"` 与确认过
+的 `changed` 列表；旧 schema / 无 span symbol 会导致 `partial`。codegraph 返回
+`status: "unavailable"`、`changed: null` 和原因。空列表只在可比较时表示未发现内容
+变化，跨 backend hash 也永不比较。
 
 codegraph 是显式的成本选择：默认最多处理 10,000 个 git tracked 文件，单个
 worktree provision 最长 30 分钟；可用 `LOOMGRAPH_CODEGRAPH_MAX_FILES` 调高或

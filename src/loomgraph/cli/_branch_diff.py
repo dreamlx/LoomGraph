@@ -314,9 +314,19 @@ async def _async_branch_diff(base_ws: str, head_ws: str) -> dict[str, Any]:
     base_store = await create_graph_store(workspace=base_ws)
     head_store = await create_graph_store(workspace=head_ws)
     try:
+        async def _backend(store: Any) -> str:
+            get_meta = getattr(store, "get_meta", None)
+            if get_meta is None:
+                return "codeindex"
+            return str(await get_meta("extraction_backend") or "codeindex")
+
+        base_backend, head_backend = await asyncio.gather(
+            _backend(base_store), _backend(head_store)
+        )
         result = await BranchDiffAnalyzer(
             base_store=base_store, head_store=head_store,
             base=base_ws, head=head_ws,
+            base_backend=base_backend, head_backend=head_backend,
         ).analyze()
         return result.to_dict()
     finally:
