@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — CI workflow's last bare `codeindex` PATH lookup (#183)
+- `.github/workflows/incremental-update.yml` invoked `codeindex affected` via
+  PATH — the #76 PATH-bypass class, the one remaining bare invocation after
+  the product code was pinned (`graph_export_ingest` / impact extractor /
+  `check_codeindex` / the `loomgraph codeindex` passthrough all use
+  `sys.executable -m codeindex.cli`). A runner image shipping a codeindex
+  ahead of the venv install would compute the changed-file set under a
+  different version's semantics than the one loomgraph tests against. Now
+  `python -m codeindex.cli affected --json --since ...` (flags contract
+  verified against the installed version).
+- New guard test `tests/unit/test_ci_workflows.py` scans workflow `run:`
+  command lines (literal blocks tracked by indent + single-line forms; step
+  names/comments exempt) and fails on any bare `codeindex` — same
+  regression-guard pattern as the #65 stale-package-name test.
+
 ### Added — machine-readable `partial` flag on write-path success payloads (#184)
 - Decision (option 2, revised): exit code stays 0 — a graph missing 1 of 5
   languages is still better than no graph, and the #93/#142 fail-loud boundary

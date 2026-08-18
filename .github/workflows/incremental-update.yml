@@ -47,7 +47,10 @@ jobs:
         id: changes
         run: |
           cd ${{ inputs.working_directory }}
-          codeindex affected --json --since ${{ inputs.since }} > changed.json
+          # #76 PATH-bypass class (#183): run via the job's interpreter so
+          # the pip-installed ai-codeindex is what executes, not whatever a
+          # runner image might ship ahead of it on PATH.
+          python -m codeindex.cli affected --json --since ${{ inputs.since }} > changed.json
 
           # Check if any files changed
           CHANGED_COUNT=$(cat changed.json | jq -r '.affected_files | length')

@@ -6,6 +6,14 @@
 
 ## [Unreleased]
 
+### 修复 — GitHub Action 集成的 reusable workflow 不再裸调 PATH 上的 codeindex(#183)
+
+- `incremental-update.yml` 里 `codeindex affected` 改为
+  `python -m codeindex.cli affected`:与 loomgraph 内部同一调用形式,确保跑的
+  是 job 里 pip 安装的 ai-codeindex,而不是 runner 镜像可能自带的版本
+  (#76 PATH-bypass 类)。引用该 reusable workflow 的项目下次触发自动生效,
+  参数(`--since` / `embedding_endpoint`)不变。
+
 ### 新增 — `index`/`update`/MCP `refresh` 成功输出带 `partial` 字段(#184)
 
 - `partial: true` = **图缺符号**(有 tree-sitter grammar 没装,或 repo 主语言不在
