@@ -63,14 +63,26 @@ loomgraph
 跨文件 callee 解析。需要 `ai-codeindex >= 0.33.3`。
 
 ```bash
-loomgraph index <repo_path> [options]
+loomgraph index [<repo_path>] [options]
 ```
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
-| `<repo_path>` | 仓库路径 | 必填 |
+| `<repo_path>` | 仓库路径 | 当前目录 |
 | `--clear` / `--no-clear` | 清除旧数据后重建(Cold Rebuild) | `true` |
 | `-w, --workspace` | workspace 名(默认: 当前目录名) | 自动 |
+| `--at-ref REF` | 从 git ref 创建独立快照 workspace；默认名为 `<repo>:<ref>` | — |
+
+`--at-ref` 使用 `branch-diff` 的 worktree + cold-index provisioning 内核，适合把
+历史 tag/branch 固定成可查询的 workspace：
+
+```bash
+loomgraph index --at-ref v1.2
+loomgraph index /path/to/repo --at-ref v1.2 --workspace customer:v1.2
+```
+
+该模式始终是 cold snapshot，不接受 `--no-clear`；v1 仅支持默认的 `codeindex`
+backend。完成后可直接把返回的 `workspace` 传给 `find`、`graph`、`topology` 等查询命令。
 
 **成功输出** (exit code 0):
 ```json

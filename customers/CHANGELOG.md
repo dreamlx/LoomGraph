@@ -6,6 +6,13 @@
 
 ## [Unreleased]
 
+### 新增 — `loomgraph index --at-ref <ref>` 历史版本快照（#190）
+
+- 可将 tag、branch 或 commit 固定成独立 workspace：`loomgraph index --at-ref v1.2`。
+- 快照沿用 `branch-diff` 的临时 worktree + 冷索引内核，完成后可用
+  `find`、`graph`、`topology` 查询；`-w` 可指定 workspace 名。
+- v1 仅支持 codeindex，始终冷重建；codegraph 快照另见 #189。
+
 ## [0.20.0] - 2026-08-18
 
 > **更新方式**: `pipx upgrade loomgraph`（已装 `[embed]` extra 的用 `pipx upgrade loomgraph --include-extra`）。

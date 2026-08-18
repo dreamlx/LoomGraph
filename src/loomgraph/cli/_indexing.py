@@ -13,9 +13,11 @@ from loomgraph.cli._common import ErrorCode, get_auto_workspace, output_error, o
 from loomgraph.cli._deps_check import check_codeindex
 from loomgraph.cli.main import main
 from loomgraph.core.git import (
+    GitError,
     get_changed_files,
     get_working_tree_files,
     is_git_repository,
+    resolve_ref,
 )
 from loomgraph.core.graph_export_ingest import (
     GraphExportEmptyError,
@@ -207,9 +209,18 @@ def _diff_names_with_deletions(since: str, repo: Path) -> list[str] | None:
 
 
 @main.command()
-@click.argument("repo_path", type=click.Path(exists=True))
+@click.argument("repo_path", type=click.Path(exists=True), required=False, default=".")
 @click.option("--clear/--no-clear", default=True, help="Clear old data before indexing")
 @click.option("--workspace", "-w", default=None, help="Workspace name (default: current directory name)")
+@click.option(
+    "--at-ref",
+    default=None,
+    metavar="REF",
+    help=(
+        "Index a git ref in an isolated snapshot workspace (default: "
+        "<repo>:<ref>); use -w to choose the workspace explicitly"
+    ),
+)
 @click.option(
     "--backend",
     type=click.Choice(SUPPORTED_BACKENDS),
@@ -220,7 +231,11 @@ def _diff_names_with_deletions(since: str, repo: Path) -> list[str] | None:
     ),
 )
 def index(
-    repo_path: str, clear: bool, workspace: str | None, backend: str
+    repo_path: str,
+    clear: bool,
+    workspace: str | None,
+    at_ref: str | None,
+    backend: str,
 ) -> None:
     """Index a code repository (one-step pipeline).
 
@@ -228,12 +243,42 @@ def index(
     snapshot. Both produce the same (entities, relations) 4-tuple that the
     shared embed→inject pipeline consumes.
 
-    REPO_PATH: Directory path to index
+    REPO_PATH: Directory path to index (default: current directory)
     """
     import time
 
     start_time = time.time()
     repo = Path(repo_path).resolve()
+
+    if at_ref is not None:
+        if backend != DEFAULT_BACKEND:
+            output_error(
+                code=ErrorCode.INVALID_INPUT,
+                message="index --at-ref currently supports only the codeindex backend",
+                suggestion=(
+                    "Use 'loomgraph index <repo> --backend codegraph' for a "
+                    "working-tree codegraph snapshot"
+                ),
+            )
+            return
+        if not clear:
+            output_error(
+                code=ErrorCode.INVALID_INPUT,
+                message=(
+                    "index --at-ref always performs a cold snapshot; "
+                    "--no-clear is not supported"
+                ),
+                suggestion=(
+                    "Remove --no-clear (or use 'loomgraph index <repo> "
+                    "--no-clear' for a working-tree update)"
+                ),
+            )
+            return
+        result = _index_at_ref(repo, at_ref, workspace)
+        if result is not None:
+            result["duration_seconds"] = round(time.time() - start_time, 2)
+            output_success(result)
+        return
 
     # #152: backend branch BEFORE the codeindex gate — a codegraph workspace
     # on a machine without codeindex would otherwise die with
@@ -356,6 +401,74 @@ def index(
     result["partial"] = any(_is_partial_graph_warning(w) for w in warnings)
 
     output_success(result)
+
+
+def _index_at_ref(
+    repo: Path, ref: str, workspace: str | None
+) -> dict[str, Any] | None:
+    """Provision a historical ref using branch-diff's snapshot kernel."""
+    from loomgraph.cli._branch_diff import _provision_ref
+
+    if not is_git_repository(repo):
+        output_error(
+            code=ErrorCode.GIT_ERROR,
+            message=f"Not a git repository: {repo}",
+            suggestion="Run index --at-ref from inside a git repository.",
+        )
+        return None
+
+    click.echo("[1/2] Checking codeindex installation...", err=True)
+    codeindex_status = check_codeindex()
+    if not codeindex_status.get("installed"):
+        output_error(
+            code=ErrorCode.CODEINDEX_NOT_FOUND,
+            message="codeindex command not found in PATH",
+            suggestion="Install codeindex: pip install ai-codeindex",
+            docs="https://github.com/dreamlx/codeindex#installation",
+        )
+        return None
+
+    try:
+        sha = resolve_ref(repo, ref)
+    except GitError as e:
+        output_error(code=ErrorCode.GIT_ERROR, message=str(e))
+        return None
+
+    repo_dir = repo.name.lower()
+    click.echo(f"[2/2] Provisioning ref '{ref}' ({sha[:7]})...", err=True)
+    try:
+        info = _provision_ref(
+            repo,
+            repo_dir,
+            ref,
+            sha,
+            workspace_name=workspace,
+        )
+    except GraphExportEmptyError as e:
+        output_error(
+            code=ErrorCode.GRAPH_EXPORT_EMPTY,
+            message=str(e),
+            suggestion=(
+                "The ref exported 0 entities — check .codeindex.yaml at that "
+                "commit (languages config travels with the ref, not the cwd)."
+            ),
+        )
+        return None
+    except GraphExportError as e:
+        output_error(code=ErrorCode.CODEINDEX_FAILED, message=str(e))
+        return None
+    except GitError as e:
+        output_error(code=ErrorCode.GIT_ERROR, message=str(e))
+        return None
+
+    return {
+        "ref": info["ref"],
+        "sha": info["sha"],
+        "workspace": info["workspace"],
+        "provisioned": info["provisioned"],
+        "mode": "at_ref",
+        "repo_path": str(repo),
+    }
 
 
 async def _async_index(

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — `loomgraph index --at-ref <ref>` historical snapshot command (#190)
+- Reuses branch-diff's detached-worktree + cold-index provisioning kernel to
+  materialize a tag/branch/commit as an isolated, queryable workspace.
+- `REPO_PATH` now defaults to the current directory for this form; `-w` still
+  explicitly selects the destination workspace. The mode is intentionally
+  codeindex-only and always cold (`--no-clear` is rejected); codegraph
+  provisioning remains tracked by #189.
+
 ## [0.20.0] - 2026-08-18
 
 ### Fixed — MCP `debt_audit` / `sync_advice` debt dimensions silently dead since v0.15
