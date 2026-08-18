@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Evaluation v1 orientation pilot harness (#206)
+- Added a reproducible DeepSWE/Pier orientation protocol, frozen target
+  manifest, raw-packet schema, and separate codeindex/codegraph setup gates.
+  It records pre-edit candidate positioning, source-clean compliance, and
+  observed LoomGraph invocation/retrieval. Results are deliberately reported
+  per task/stratum; this is capability-and-use evidence, not a task solve-rate
+  claim.
+
 ## [0.21.0] - 2026-08-18
 
 ### Changed — explicit L2 content-comparison contract (#201)
