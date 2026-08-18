@@ -164,3 +164,24 @@ def test_branch_diff_bad_ref_and_range(bd_env: Path) -> None:
     res = CliRunner().invoke(main, ["branch-diff", "main"])
     assert res.exit_code == 1
     assert "Invalid ref range" in res.stdout
+
+
+@requires_codeindex
+def test_index_at_ref_e2e_provisions_queryable_snapshot(bd_env: Path) -> None:
+    """#190: historical ref indexing persists a queryable workspace."""
+    base_branch = _git(bd_env, "rev-parse", "--abbrev-ref", "HEAD").strip()
+
+    res = CliRunner().invoke(main, ["index", "--at-ref", base_branch])
+    assert res.exit_code == 0, res.output
+    data = json.loads(res.stdout)["data"]
+    assert data["mode"] == "at_ref"
+    assert data["workspace"] == f"repo:{base_branch}"
+    assert data["provisioned"] == "created"
+
+    find_res = CliRunner().invoke(
+        main,
+        ["find", "mod_a.foo", "--workspace", f"repo:{base_branch}"],
+    )
+    assert find_res.exit_code == 0, find_res.output
+    find_data = json.loads(find_res.stdout)["data"]
+    assert any(match["entity"] == "mod_a.foo" for match in find_data["matches"])

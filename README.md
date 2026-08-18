@@ -219,6 +219,7 @@ summary mode) calls the LLM; `--no-summary` skips it entirely.
 | Command | Purpose | Network calls |
 |---|---|---|
 | `loomgraph index <path>` | Index a repo | codeindex (local) + optional embedding |
+| `loomgraph index --at-ref <ref> [-w NAME]` | Index a historical git ref into an isolated, queryable snapshot workspace | codeindex (local), on first run per ref |
 | `loomgraph update` | Incremental from git diff | same |
 | `loomgraph check` | Index freshness vs source files | none |
 | `loomgraph find "<query>"` | Fuzzy entity search | none |

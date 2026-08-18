@@ -112,10 +112,25 @@ async def _decide_workspace(repo_dir: str, ref: str, sha: str) -> tuple[str, str
     )
 
 
-def _provision_ref(repo: Path, repo_dir: str, ref: str, sha: str) -> dict[str, Any]:
-    """Provision 一个 ref 的快照 workspace;reused 时零成本短路。"""
+def _provision_ref(
+    repo: Path,
+    repo_dir: str,
+    ref: str,
+    sha: str,
+    *,
+    workspace_name: str | None = None,
+) -> dict[str, Any]:
+    """Provision 一个 ref 的快照 workspace;reused 时零成本短路。
+
+    ``workspace_name`` is used by ``index --at-ref -w`` to make the explicit
+    destination authoritative.  The regular branch-diff path keeps the
+    decision table above unchanged.
+    """
     start = time.time()
-    name, action = asyncio.run(_decide_workspace(repo_dir, ref, sha))
+    if workspace_name is None:
+        name, action = asyncio.run(_decide_workspace(repo_dir, ref, sha))
+    else:
+        name, action = workspace_name, "rebuilt"
     info: dict[str, Any] = {
         "ref": ref, "sha": sha, "workspace": name, "provisioned": action,
     }

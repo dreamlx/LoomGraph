@@ -400,6 +400,67 @@ class TestIndexCommand:
         result = runner.invoke(main, ["index", "/nonexistent/path"])
         assert result.exit_code != 0
 
+    @patch("loomgraph.cli._branch_diff._provision_ref")
+    @patch("loomgraph.cli._indexing.resolve_ref")
+    @patch("loomgraph.cli._indexing.is_git_repository")
+    @patch("loomgraph.cli._indexing.check_codeindex")
+    def test_index_at_ref_uses_snapshot_kernel_and_explicit_workspace(
+        self,
+        mock_check: MagicMock,
+        mock_is_git: MagicMock,
+        mock_resolve: MagicMock,
+        mock_provision: MagicMock,
+        runner: CliRunner,
+        tmp_path: Path,
+    ) -> None:
+        """#190: at-ref provisions the resolved commit into the requested workspace."""
+        mock_check.return_value = {"installed": True, "version": "0.37.0"}
+        mock_is_git.return_value = True
+        mock_resolve.return_value = "a" * 40
+        mock_provision.return_value = {
+            "ref": "v1.2",
+            "sha": "a" * 40,
+            "workspace": "historical-v1.2",
+            "provisioned": "rebuilt",
+        }
+
+        result = runner.invoke(
+            main,
+            ["index", str(tmp_path), "--at-ref", "v1.2", "-w", "historical-v1.2"],
+        )
+
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.stdout)
+        assert data["success"] is True
+        assert data["data"]["mode"] == "at_ref"
+        assert data["data"]["workspace"] == "historical-v1.2"
+        assert data["data"]["sha"] == "a" * 40
+        mock_provision.assert_called_once_with(
+            tmp_path.resolve(),
+            tmp_path.name.lower(),
+            "v1.2",
+            "a" * 40,
+            workspace_name="historical-v1.2",
+        )
+
+    @patch("loomgraph.cli._indexing.check_codeindex")
+    def test_index_at_ref_rejects_no_clear(
+        self,
+        mock_check: MagicMock,
+        runner: CliRunner,
+        tmp_path: Path,
+    ) -> None:
+        """Historical snapshots are always cold rebuilds."""
+        result = runner.invoke(
+            main,
+            ["index", str(tmp_path), "--at-ref", "v1.2", "--no-clear"],
+        )
+
+        assert result.exit_code == 1
+        data = json.loads(result.stdout)
+        assert data["error"]["code"] == ErrorCode.INVALID_INPUT
+        mock_check.assert_not_called()
+
     @patch("loomgraph.cli._indexing.check_codeindex")
     def test_index_codeindex_not_found(
         self, mock_check: MagicMock, runner: CliRunner, tmp_path: Path
