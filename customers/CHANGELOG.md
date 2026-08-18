@@ -6,6 +6,21 @@
 
 ## [Unreleased]
 
+### 新增 — `loomgraph branch-diff A..B`:两个 ref 之间的结构性 diff(#185)
+
+- 一条命令回答「这个分支/版本相对基准结构上改了什么」:缺失的 ref 快照自动
+  provision(临时 git worktree + 冷索引成独立 workspace,复用现有 workspace
+  机制,不新建存储),然后输出方向性深 diff。
+- **diff 内容**:实体/边增删;**断链**(调用方还在、被调方没了)、**新链**
+  (存活函数开始调新目标)、**content_changed**(图形状没变但函数 body 变了)、
+  **模块耦合 delta**(按模块聚合的边增删)。大仓库输出有 cap(50/20),summary
+  恒带未截断的 total。
+- **快照是缓存**:同 ref 未移动 → rerun 秒回(reused);分支移动 → 自动原地
+  重建(rebuilt);你手动建的 workspace 永不被碰。未提交的工作区改动不会漏进
+  ref diff(两侧都按 commit 快照取)。
+- **典型用法**:PR 审查 `branch-diff main..HEAD`;回归定位
+  `branch-diff v1.2..HEAD`。v1 仅 codeindex backend(codegraph 见 #185 跟进)。
+
 ### 修复 — GitHub Action 集成的 reusable workflow 不再裸调 PATH 上的 codeindex(#183)
 
 - `incremental-update.yml` 里 `codeindex affected` 改为
