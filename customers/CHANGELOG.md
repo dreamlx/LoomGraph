@@ -6,6 +6,10 @@
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-08-18
+
+> **更新方式**: `pipx upgrade loomgraph`（已装 `[embed]` extra 的用 `pipx upgrade loomgraph --include-extra`）。
+
 ### 修复 — MCP `debt_audit` / `sync_advice` 的 debt 维度自 v0.15 起静默失效
 
 - 内部调用漏传 `scope` 参数,每次都 TypeError 被吞成错误封套——两个
