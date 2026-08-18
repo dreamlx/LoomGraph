@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-08-18
+
 ### Fixed — MCP `debt_audit` / `sync_advice` debt dimensions silently dead since v0.15
 - All three `_async_debt` call sites in `mcp/tools/debt_audit.py` /
   `sync_advice.py` omitted the `scope` positional argument (#61 added it in
@@ -106,6 +108,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Documented in `docs/guides/index-output.md` (field table). codegraph
   refresh keeps no flag — `run_codegraph_export` structurally cannot emit
   partial-class warnings (resolved-edges-only, no `.codeindex.yaml` gate).
+
+### Tests
+- Updated `update` command fixtures to cover the #165 diff short-circuit helper
+  separately from the incremental changed-files helper.
 
 ## [0.19.2] - 2026-08-17
 
@@ -1678,7 +1684,11 @@ infrastructure was added.
 - System design document
 - Project roadmap, epics, and feature definitions
 
-[Unreleased]: https://github.com/dreamlx/LoomGraph/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/dreamlx/LoomGraph/compare/v0.20.0...HEAD
+[0.20.0]: https://github.com/dreamlx/LoomGraph/compare/v0.19.2...v0.20.0
+[0.19.2]: https://github.com/dreamlx/LoomGraph/compare/v0.19.1...v0.19.2
+[0.19.1]: https://github.com/dreamlx/LoomGraph/compare/v0.19.0...v0.19.1
+[0.19.0]: https://github.com/dreamlx/LoomGraph/compare/v0.18.1...v0.19.0
 [0.8.0]: https://github.com/dreamlx/LoomGraph/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/dreamlx/LoomGraph/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/dreamlx/LoomGraph/compare/v0.6.0...v0.6.1
