@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — `loomgraph branch-diff <A>..<B>`: structural diff between two refs (EPIC-016 #185)
+- One command answers "what structurally changed between two git refs":
+  auto-provisions snapshot workspaces for missing refs (`git worktree add
+  --detach` temp dir + cold index — the workspace mechanism addressed by ref,
+  no new storage; ADR-015's event-sourcing rejection stands), then runs the
+  new directional `BranchDiffAnalyzer`.
+- **Diff output**: entity + edge added/removed (edges keyed `(src, tgt, kind)`
+  on the resolvable-graph口径 — #149/#154, unresolved edges counted only),
+  **broken_chains** (base edge gone while its src entity survives — "caller
+  still there, callee gone"), **new_chains** (head edge whose src existed in
+  base — surviving function started calling something new), **content_changed**
+  (L2: shared entities whose codeindex `content_hash` differs — graph shape
+  same, body changed; `content_hash_missing` counts non-comparable sides),
+  **module_delta** (added/removed edges aggregated by src module,
+  `extract_module` depth 2). Lists capped at 50 / modules at 20 (module
+  constants, zero config knobs); summary always carries uncapped `*_total`.
+- **Provisioning semantics** (#185 decision table): provisioned workspaces
+  are meta-tagged (`provisioned_by/ref/sha`) disposable caches — same ref +
+  same sha → `reused` (skip indexing; reruns are cheap), branch moved →
+  `rebuilt` in place (a stale-ref diff is silently-wrong output), non-tagged
+  workspaces (the user's own, or `feature/x`-vs-`feature-x` sanitization
+  collisions) are never clobbered → sha-suffixed fallback name. Both refs are
+  always provisioned — the current checkout's workspace (which may contain
+  uncommitted `refresh` edits) never leaks into a ref diff.
+- `CompareAnalyzer` and its consumers (`evolution_track` / `sync_advice`) are
+  untouched — directionality lives in the new analyzer.
+- New git primitives in `core/git.py`: `resolve_ref` (`^{commit}` peels
+  annotated tags), `worktree_add --detach` (detach is load-bearing: the base
+  ref is often the checked-out branch), `worktree_remove --force`. Zero new
+  ErrorCodes. Follow-ups tracked in #185: codegraph backend provisioning,
+  `index --at-ref`, MCP composite.
+
 ### Fixed — CI workflow's last bare `codeindex` PATH lookup (#183)
 - `.github/workflows/incremental-update.yml` invoked `codeindex affected` via
   PATH — the #76 PATH-bypass class, the one remaining bare invocation after

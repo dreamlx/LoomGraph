@@ -263,6 +263,7 @@ llm:
 | `loomgraph workspace delete NAME --yes` | 删除指定 workspace |
 | `loomgraph compare --ws1 A --ws2 B` | 跨 workspace 实体/关系 diff |
 | `loomgraph similar -e "<entity>"` | 跨 workspace 相似实体检测 |
+| `loomgraph branch-diff <A>..<B>` | 两 ref 结构性 diff(自动 worktree+索引快照;断链/新链/content_hash/模块 delta) |
 | `loomgraph import-export <artifact>` | 消费 codeindex graph-export NDJSON |
 | `loomgraph mcp install-config --path <p>` | 配置 MCP（Claude Code/Cursor） |
 | `loomgraph install-skills` | 安装 Claude Code Skills（setup/init） |

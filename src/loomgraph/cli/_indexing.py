@@ -365,13 +365,15 @@ async def _async_index(
     clear: bool,
     backend: str = DEFAULT_BACKEND,
     summary: Any = None,
+    extra_meta: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Resolve workspace, build the store, run the shared ingest pipeline.
 
     Receives already-mapped entities/relations (codeindex graph-export or a
     codegraph snapshot, #152 — both produce the same 4-tuple). Records the
     extraction backend + codegraph provenance into workspace meta so `update`
-    routes to the same backend without an explicit flag.
+    routes to the same backend without an explicit flag. ``extra_meta`` adds
+    caller provenance keys (branch-diff's provisioned_by/ref/sha, EPIC-016).
     """
     from loomgraph.storage.factory import create_graph_store
 
@@ -405,6 +407,9 @@ async def _async_index(
             if (ev := meta.get("indexed_with_extraction_version")):
                 await set_meta("codegraph_extraction_version", ev)
             await set_meta("codegraph_head", _git_head_safe())
+        if extra_meta:
+            for key, value in extra_meta.items():
+                await set_meta(key, value)
     return result
 
 

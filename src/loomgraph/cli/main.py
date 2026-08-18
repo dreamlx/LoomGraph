@@ -55,6 +55,7 @@ def main(verbose: bool, quiet: bool) -> None:
 from loomgraph.cli import (  # noqa: E402, F401
     _analysis,
     _backfill,
+    _branch_diff,
     _codeindex,
     _debt,
     _hooks,
