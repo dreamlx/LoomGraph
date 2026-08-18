@@ -1,0 +1,39 @@
+{{ instruction }}
+
+Before you modify any repository file, investigate the task and write exactly one
+JSON orientation packet to `/logs/artifacts/orientation.json`. It must be valid
+JSON (not Markdown) with this shape:
+
+```json
+{
+  "schema_version": 1,
+  "status": "complete",
+  "pre_edit": true,
+  "candidates": [
+    {"path": "relative/source/path", "symbol": "optional.symbol", "reason": "short"}
+  ],
+  "evidence": [
+    {"kind": "command|source|test", "detail": "short", "path": "optional/path"}
+  ],
+  "tooling": {
+    "loomgraph": {
+      "used": false,
+      "commands": [],
+      "workspace": null,
+      "backend": null,
+      "trust": null
+    }
+  }
+}
+```
+
+Rules:
+
+- `candidates` contains at most five production-code files or symbols. Do not
+  list test or documentation files as candidates.
+- Record only evidence actually observed. Do not include credentials, complete
+  environment variables, or unbounded command output.
+- If you use LoomGraph, set `tooling.loomgraph.used` to true and record the
+  command, workspace/backend when known, and any trust signal you relied on
+  (for example `resolved_ratio`, `partial`, or content-comparison status).
+- Write the packet before any edit. Continue with the task normally afterwards.
