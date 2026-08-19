@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+from pathlib import Path
 
 from omp_loomgraph import OmpWithLoomGraph, _tool_card
 from omp_orientation import OmpWithOrientation
@@ -69,6 +70,15 @@ def test_prose_around_a_json_fence_remains_invalid() -> None:
 
     assert packet["status"] == "missing_or_invalid_agent_response"
     assert packet["response_format"] == "invalid"
+
+
+def test_orientation_template_ends_with_a_raw_json_checklist() -> None:
+    template = Path(__file__).with_name("orientation-packet.j2").read_text()
+
+    assert "Final response checklist" in template
+    assert "must begin with `{` and end with `}`" in template
+    assert "Do not precede it with" in template
+    assert "explanation or a Markdown fence" in template
 
 
 def test_example_candidate_is_not_a_production_orientation_packet() -> None:

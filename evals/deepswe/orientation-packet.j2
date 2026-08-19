@@ -40,4 +40,7 @@ Rules:
 - If you use LoomGraph, set `tooling.loomgraph.used` to true and record the
   command, workspace/backend when known, and any trust signal you relied on
   (for example `resolved_ratio`, `partial`, or content-comparison status).
-- End the session after emitting the JSON object.
+- Final response checklist: after your last tool result, your only assistant
+  message must begin with `{` and end with `}`. Do not precede it with
+  explanation or a Markdown fence. Output that object immediately, then end
+  the session.
