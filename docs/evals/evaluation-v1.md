@@ -87,10 +87,12 @@ The latter is planning evidence, not navigation recall.
 
 Agent-use is also split from the trace, rather than trusting the model's own
 `used` field: `loomgraph_invoked`, `loomgraph_retrieval_used` (a structural
-query such as `find` or `graph`), and `loomgraph_index_only`. Indexing alone is
-setup/invocation evidence, not retrieval use. Every run is labelled
+query attempt such as `find` or `graph`), `loomgraph_retrieval_succeeded`
+(adapter-observed `success:true` from that command), and
+`loomgraph_index_only`. A failed query remains an attempt, never a successful
+retrieval. Indexing alone is setup/invocation evidence, not retrieval use. Every run is labelled
 `voluntary` or `assisted`: voluntary availability does not require retrieval;
-assisted treatment requires one retrieval and reports compliance separately.
+assisted treatment requires one successful retrieval and reports compliance separately.
 These modes are not pooled. The backend-aware card tells codegraph treatment
 not to re-index its setup-ready graph, while codeindex treatment may index once
 before retrieval. Other descriptive fields are semantic packet rate,

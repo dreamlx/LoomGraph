@@ -32,33 +32,63 @@ import json
 
 last_text = ""
 loomgraph_commands = []
+loomgraph_command_by_id = {}
+loomgraph_command_results = []
 tool_call_count = 0
+
+
+def command_success(event):
+    if event.get("isError") is True:
+        return False
+    result = event.get("result") or {}
+    content = result.get("content") or []
+    text = "".join(
+        item.get("text", "")
+        for item in content
+        if isinstance(item, dict) and isinstance(item.get("text"), str)
+    ).lstrip()
+    try:
+        payload, _ = json.JSONDecoder().raw_decode(text)
+    except json.JSONDecodeError:
+        return False
+    return payload.get("success") is True if isinstance(payload, dict) else False
+
+
 with open("/logs/agent/omp.txt", encoding="utf-8", errors="replace") as trace:
     for raw in trace:
         try:
             event = json.loads(raw)
         except json.JSONDecodeError:
             continue
-        if event.get("type") != "message_end":
+        if event.get("type") == "tool_execution_end" and event.get("toolName") == "bash":
+            command = loomgraph_command_by_id.get(event.get("toolCallId"))
+            if command is not None:
+                loomgraph_command_results.append({
+                    "command": command,
+                    "success": command_success(event),
+                })
             continue
-        message = event.get("message") or {}
-        if message.get("role") != "assistant":
-            continue
-        for part in message.get("content") or []:
-            if part.get("type") == "text" and isinstance(part.get("text"), str):
-                last_text = part["text"]
-            if part.get("type") != "toolCall":
+        if event.get("type") == "message_end":
+            message = event.get("message") or {}
+            if message.get("role") != "assistant":
                 continue
-            tool_call_count += 1
-            if part.get("name") != "bash":
-                continue
-            command = (part.get("arguments") or {}).get("command")
-            if isinstance(command, str) and "loomgraph" in command:
-                loomgraph_commands.append(command)
+            for part in message.get("content") or []:
+                if part.get("type") == "text" and isinstance(part.get("text"), str):
+                    last_text = part["text"]
+                if part.get("type") != "toolCall":
+                    continue
+                tool_call_count += 1
+                if part.get("name") != "bash":
+                    continue
+                command = (part.get("arguments") or {}).get("command")
+                if isinstance(command, str) and "loomgraph" in command:
+                    loomgraph_commands.append(command)
+                    loomgraph_command_by_id[part.get("id")] = command
 
 payload = {
     "response": last_text,
     "loomgraph_commands": loomgraph_commands,
+    "loomgraph_command_results": loomgraph_command_results,
     "tool_call_count": tool_call_count,
 }
 print(base64.b64encode(json.dumps(payload).encode()).decode())
@@ -130,6 +160,7 @@ class OmpWithOrientation(Omp):
             trace = json.loads(base64.b64decode(encoded_trace.strip()))
             response, response_format = self._decode_response(trace["response"])
             commands = trace["loomgraph_commands"]
+            command_results = trace["loomgraph_command_results"]
             tool_call_count = trace.get("tool_call_count", 0)
         except (KeyError, TypeError, ValueError, json.JSONDecodeError):
             return self._missing_packet()
@@ -137,12 +168,30 @@ class OmpWithOrientation(Omp):
         if (
             not isinstance(commands, list)
             or not all(isinstance(command, str) for command in commands)
+            or not isinstance(command_results, list)
+            or not all(
+                isinstance(result, dict)
+                and isinstance(result.get("command"), str)
+                and isinstance(result.get("success"), bool)
+                for result in command_results
+            )
             or not isinstance(tool_call_count, int)
             or tool_call_count < 0
             or not self._response_is_valid(response)
         ):
             return self._missing_packet()
-        retrieval_required, retrieval_requirement_met = self._retrieval_requirement(commands)
+        retrieval_attempted = any(is_loomgraph_retrieval(command) for command in commands)
+        retrieval_succeeded = (
+            any(
+                is_loomgraph_retrieval(result["command"]) and result["success"]
+                for result in command_results
+            )
+            if retrieval_attempted
+            else None
+        )
+        retrieval_required, retrieval_requirement_met = self._retrieval_requirement(
+            commands, retrieval_succeeded
+        )
 
         return {
             "schema_version": 1,
@@ -163,6 +212,7 @@ class OmpWithOrientation(Omp):
                 "loomgraph": {
                     "used": bool(commands),
                     "commands": commands,
+                    "retrieval_succeeded": retrieval_succeeded,
                     "workspace": response["tooling"]["loomgraph"].get("workspace"),
                     "backend": response["tooling"]["loomgraph"].get("backend"),
                     "trust": response["tooling"]["loomgraph"].get("trust"),
@@ -200,7 +250,9 @@ class OmpWithOrientation(Omp):
             response.get("tooling", {}).get("loomgraph"), dict
         )
 
-    def _retrieval_requirement(self, commands: list[str]) -> tuple[bool, bool | None]:
+    def _retrieval_requirement(
+        self, commands: list[str], retrieval_succeeded: bool | None
+    ) -> tuple[bool, bool | None]:
         return False, None
 
     def _missing_packet(self) -> dict[str, Any]:
@@ -219,7 +271,13 @@ class OmpWithOrientation(Omp):
             "retrieval_requirement_met": None,
             "candidates": [],
             "evidence": [],
-            "tooling": {"loomgraph": {"used": False, "commands": []}},
+            "tooling": {
+                "loomgraph": {
+                    "used": False,
+                    "commands": [],
+                    "retrieval_succeeded": None,
+                }
+            },
         }
 
     def _instrumentation_cache_paths(self) -> list[str]:

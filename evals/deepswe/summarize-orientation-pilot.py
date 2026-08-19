@@ -90,6 +90,9 @@ def score_packet(packet: dict[str, Any], target: dict[str, Any] | None) -> dict[
         "loomgraph_trust": tool.get("trust") if isinstance(tool, dict) else None,
         "loomgraph_invoked": use["invoked"],
         "loomgraph_retrieval_used": use["retrieval_used"],
+        "loomgraph_retrieval_succeeded": (
+            tool.get("retrieval_succeeded") if isinstance(tool, dict) else None
+        ),
         "loomgraph_index_only": use["index_only"],
         "tool_call_count": tool_call_count if isinstance(tool_call_count, int) else None,
         "tool_call_budget": packet.get("tool_call_budget"),
@@ -224,6 +227,7 @@ def main() -> int:
         "instrumentation_cache_paths",
         "loomgraph_invoked",
         "loomgraph_retrieval_used",
+        "loomgraph_retrieval_succeeded",
         "loomgraph_index_only",
         "tool_call_count",
         "tool_call_budget",

@@ -17,6 +17,7 @@ def _packet(
     *, commands: list[str], paths: list[str], tool_call_count: int = 0,
     orientation_mode: str = "voluntary", retrieval_required: bool = False,
     retrieval_requirement_met: bool | None = None,
+    retrieval_succeeded: bool | None = None,
 ) -> dict[str, object]:
     return {
         "status": "complete",
@@ -29,7 +30,13 @@ def _packet(
         "retrieval_required": retrieval_required,
         "retrieval_requirement_met": retrieval_requirement_met,
         "candidates": [{"path": path} for path in paths],
-        "tooling": {"loomgraph": {"used": bool(commands), "commands": commands}},
+        "tooling": {
+            "loomgraph": {
+                "used": bool(commands),
+                "commands": commands,
+                "retrieval_succeeded": retrieval_succeeded,
+            }
+        },
     }
 
 
@@ -61,6 +68,7 @@ def test_score_records_observed_tool_budget_and_assisted_requirement() -> None:
             orientation_mode="assisted",
             retrieval_required=True,
             retrieval_requirement_met=True,
+            retrieval_succeeded=True,
         ),
         None,
     )
@@ -70,6 +78,25 @@ def test_score_records_observed_tool_budget_and_assisted_requirement() -> None:
     assert score["tool_call_budget_overrun"] is True
     assert score["retrieval_required"] is True
     assert score["retrieval_requirement_met"] is True
+    assert score["loomgraph_retrieval_succeeded"] is True
+
+
+def test_score_keeps_a_failed_retrieval_attempt_distinct_from_success() -> None:
+    score = _module.score_packet(
+        _packet(
+            commands=["loomgraph find Widget --workspace /app"],
+            paths=["src/widget.py"],
+            orientation_mode="assisted",
+            retrieval_required=True,
+            retrieval_requirement_met=False,
+            retrieval_succeeded=False,
+        ),
+        None,
+    )
+
+    assert score["loomgraph_retrieval_used"] is True
+    assert score["loomgraph_retrieval_succeeded"] is False
+    assert score["retrieval_requirement_met"] is False
 
 
 def test_target_metrics_separate_existing_navigation_from_new_file_planning() -> None:

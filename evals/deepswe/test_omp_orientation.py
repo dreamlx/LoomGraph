@@ -10,11 +10,16 @@ from omp_orientation import OmpWithOrientation
 
 
 def _encoded_trace(
-    response: str, *, commands: list[str] | None = None, tool_call_count: int = 0
+    response: str,
+    *,
+    commands: list[str] | None = None,
+    command_results: list[dict[str, object]] | None = None,
+    tool_call_count: int = 0,
 ) -> str:
     trace = {
         "response": response,
         "loomgraph_commands": commands or [],
+        "loomgraph_command_results": command_results or [],
         "tool_call_count": tool_call_count,
     }
     return base64.b64encode(json.dumps(trace).encode()).decode()
@@ -100,21 +105,47 @@ def test_packet_records_observed_tool_budget() -> None:
 
 def test_backend_aware_tool_cards_separate_setup_from_retrieval() -> None:
     codeindex = _tool_card("codeindex", "assisted")
-    codegraph = _tool_card("codegraph", "assisted")
+    codegraph = _tool_card("codegraph", "assisted", workspace="app:main")
 
     assert "index ." in codeindex
     assert "must run one structural retrieval" in codeindex
     assert "Do not run `loomgraph index` again" in codegraph
     assert "must run one structural retrieval" in codegraph
+    assert "--workspace app:main" in codegraph
+    assert "not `/app`" in codegraph
 
 
 def test_assisted_requirement_recognizes_quoted_loomgraph_binary() -> None:
     adapter = OmpWithLoomGraph.__new__(OmpWithLoomGraph)
     adapter._orientation_use_mode = "assisted"
 
-    assert adapter._retrieval_requirement([
-        '"$HOME/.local/bin/loomgraph" find Vulture',
-    ]) == (True, True)
+    assert adapter._retrieval_requirement(
+        ['"$HOME/.local/bin/loomgraph" find Vulture'], True
+    ) == (True, True)
+
+
+def test_failed_retrieval_attempt_is_not_an_assisted_success() -> None:
+    adapter = OmpWithLoomGraph.__new__(OmpWithLoomGraph)
+    adapter._loomgraph_backend = "codegraph"
+    adapter._loomgraph_workspace = "app:main"
+    adapter._orientation_use_mode = "assisted"
+
+    packet = adapter._packet_from_trace(
+        _encoded_trace(
+            _response(),
+            commands=["$HOME/.local/bin/loomgraph find match --workspace /app"],
+            command_results=[
+                {
+                    "command": "$HOME/.local/bin/loomgraph find match --workspace /app",
+                    "success": False,
+                }
+            ],
+        ),
+        source_mutated=False,
+    )
+
+    assert packet["tooling"]["loomgraph"]["retrieval_succeeded"] is False
+    assert packet["retrieval_requirement_met"] is False
 
 
 def test_codegraph_packet_uses_adapter_observed_backend_and_workspace() -> None:

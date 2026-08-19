@@ -70,6 +70,7 @@
         "new_path_nominated_at_5": {"type": ["boolean", "null"]},
         "loomgraph_invoked": {"type": "boolean"},
         "loomgraph_retrieval_used": {"type": "boolean"},
+        "loomgraph_retrieval_succeeded": {"type": ["boolean", "null"]},
         "loomgraph_index_only": {"type": "boolean"},
         "tool_call_count": {"type": "integer", "minimum": 0},
         "tool_call_budget": {"type": "integer", "minimum": 1},
