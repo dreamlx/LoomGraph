@@ -5,12 +5,18 @@ from __future__ import annotations
 import base64
 import json
 
-from omp_loomgraph import OmpWithLoomGraph
+from omp_loomgraph import OmpWithLoomGraph, _tool_card
 from omp_orientation import OmpWithOrientation
 
 
-def _encoded_trace(response: str) -> str:
-    trace = {"response": response, "loomgraph_commands": []}
+def _encoded_trace(
+    response: str, *, commands: list[str] | None = None, tool_call_count: int = 0
+) -> str:
+    trace = {
+        "response": response,
+        "loomgraph_commands": commands or [],
+        "tool_call_count": tool_call_count,
+    }
     return base64.b64encode(json.dumps(trace).encode()).decode()
 
 
@@ -78,3 +84,34 @@ def test_codegraph_cache_is_declared_as_instrumentation_not_source_change() -> N
 
     assert adapter._instrumentation_cache_paths() == [".codegraph/"]
     assert adapter._missing_packet()["instrumentation_cache_paths"] == [".codegraph/"]
+
+
+def test_packet_records_observed_tool_budget() -> None:
+    adapter = OmpWithOrientation.__new__(OmpWithOrientation)
+
+    packet = adapter._packet_from_trace(
+        _encoded_trace(_response(), tool_call_count=6), source_mutated=False
+    )
+
+    assert packet["tool_call_count"] == 6
+    assert packet["tool_call_budget"] == 5
+    assert packet["tool_call_budget_overrun"] is True
+
+
+def test_backend_aware_tool_cards_separate_setup_from_retrieval() -> None:
+    codeindex = _tool_card("codeindex", "assisted")
+    codegraph = _tool_card("codegraph", "assisted")
+
+    assert "index ." in codeindex
+    assert "must run one structural retrieval" in codeindex
+    assert "Do not run `loomgraph index` again" in codegraph
+    assert "must run one structural retrieval" in codegraph
+
+
+def test_assisted_requirement_recognizes_quoted_loomgraph_binary() -> None:
+    adapter = OmpWithLoomGraph.__new__(OmpWithLoomGraph)
+    adapter._orientation_use_mode = "assisted"
+
+    assert adapter._retrieval_requirement([
+        '"$HOME/.local/bin/loomgraph" find Vulture',
+    ]) == (True, True)

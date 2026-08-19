@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from omp_orientation import OmpWithOrientation
+from omp_orientation import OmpWithOrientation, is_loomgraph_retrieval
 from pier.environments.base import BaseEnvironment
 from pier.models.agent.context import AgentContext
 
@@ -22,13 +22,28 @@ _CODEGRAPH_DIR = "$HOME/.local/share/codegraph-linux-x64"
 _CODEGRAPH_BIN = "$HOME/.local/bin/codegraph"
 
 
-def _tool_card(backend: str) -> str:
-    backend_hint = " --backend codegraph" if backend == "codegraph" else ""
+def _tool_card(backend: str, use_mode: str) -> str:
+    retrieval = (
+        "You must run one structural retrieval command (`find` or `graph`) before "
+        "your final JSON response."
+        if use_mode == "assisted"
+        else "You may run one structural retrieval command (`find` or `graph`) if useful."
+    )
+    if backend == "codegraph":
+        setup = (
+            "The codegraph database and LoomGraph graph are ready from adapter setup. "
+            "Do not run `loomgraph index` again; query the ready graph instead."
+        )
+    else:
+        setup = (
+            "For this codeindex graph, run `$HOME/.local/bin/loomgraph index .` once "
+            "before a retrieval command."
+        )
     return f"""This is the LoomGraph treatment condition. The CLI is available at
-`$HOME/.local/bin/loomgraph`. For structural navigation, you may run
-`$HOME/.local/bin/loomgraph index .{backend_hint}` and then `find` or `graph`. Do not infer
-that an unavailable, partial, or non-comparable result means no change; record
-the actual command and trust signal in your final JSON response."""
+`$HOME/.local/bin/loomgraph`. {setup} {retrieval} A lone index is setup evidence,
+not navigation evidence. Do not infer that an unavailable, partial, or
+non-comparable result means no change; record the actual command and trust
+signal in your final JSON response."""
 
 
 class OmpWithLoomGraph(OmpWithOrientation):
@@ -59,6 +74,11 @@ class OmpWithLoomGraph(OmpWithOrientation):
 
     def _instrumentation_cache_paths(self) -> list[str]:
         return [".codegraph/"] if self._loomgraph_backend == "codegraph" else []
+
+    def _retrieval_requirement(self, commands: list[str]) -> tuple[bool, bool | None]:
+        required = self._orientation_use_mode == "assisted"
+        retrieved = any(is_loomgraph_retrieval(command) for command in commands)
+        return required, retrieved if required else None
 
     async def setup(self, environment: BaseEnvironment) -> None:
         if not self._loomgraph_wheelhouse.is_file():
@@ -130,7 +150,7 @@ class OmpWithLoomGraph(OmpWithOrientation):
         context: AgentContext,
     ) -> None:
         await super().run(
-            f"{_tool_card(self._loomgraph_backend)}\n\n{instruction}",
+            f"{_tool_card(self._loomgraph_backend, self._orientation_use_mode)}\n\n{instruction}",
             environment,
             context,
         )

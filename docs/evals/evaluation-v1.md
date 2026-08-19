@@ -88,10 +88,16 @@ The latter is planning evidence, not navigation recall.
 Agent-use is also split from the trace, rather than trusting the model's own
 `used` field: `loomgraph_invoked`, `loomgraph_retrieval_used` (a structural
 query such as `find` or `graph`), and `loomgraph_index_only`. Indexing alone is
-setup/invocation evidence, not retrieval use. Other descriptive fields are
-semantic packet rate, source-clean rate, raw-JSON compliance, tool rounds,
-time, tokens/cost, and verifier status. A verifier result is evidence about
-task execution only; it is not the orientation metric.
+setup/invocation evidence, not retrieval use. Every run is labelled
+`voluntary` or `assisted`: voluntary availability does not require retrieval;
+assisted treatment requires one retrieval and reports compliance separately.
+These modes are not pooled. The backend-aware card tells codegraph treatment
+not to re-index its setup-ready graph, while codeindex treatment may index once
+before retrieval. Other descriptive fields are semantic packet rate,
+source-clean rate, raw-JSON compliance, observed tool-call count and its
+five-call budget-overrun flag, time, tokens/cost, and verifier status. A
+verifier result is evidence about task execution only; it is not the
+orientation metric.
 
 `source-clean` applies to the model phase only. The codegraph treatment may
 create the ignored `.codegraph/` instrumentation cache before that phase; its
