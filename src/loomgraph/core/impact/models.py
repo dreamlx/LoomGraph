@@ -78,7 +78,7 @@ class Caller:
 class RiskAssessment:
     """Risk assessment for a set of changes."""
 
-    level: str  # "low", "medium", "high"
+    level: str  # "low", "medium", "high", "unknown"
     reason: str
     suggestions: list[str] = field(default_factory=list)
 
@@ -102,6 +102,7 @@ class ImpactResult:
     affected_modules: list[str] = field(default_factory=list)
     affected_tests: list[str] = field(default_factory=list)
     risk_assessment: RiskAssessment | None = None
+    resolution: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to JSON-serializable dict."""
@@ -117,4 +118,6 @@ class ImpactResult:
         }
         if self.risk_assessment:
             result["risk_assessment"] = self.risk_assessment.to_dict()
+        if self.resolution is not None:
+            result["resolution"] = self.resolution
         return result

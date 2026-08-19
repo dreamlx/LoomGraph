@@ -253,7 +253,7 @@ def _diff_names_with_deletions(since: str, repo: Path) -> list[str] | None:
 @main.command()
 @click.argument("repo_path", type=click.Path(exists=True), required=False, default=".")
 @click.option("--clear/--no-clear", default=True, help="Clear old data before indexing")
-@click.option("--workspace", "-w", default=None, help="Workspace name (default: current directory name)")
+@click.option("--workspace", "-w", default=None, help="Workspace name (default: current directory and git branch)")
 @click.option(
     "--at-ref",
     default=None,
@@ -746,7 +746,7 @@ def _zero_entities_warning(repo: Path, warnings: list[str] | None = None) -> str
 
 @main.command()
 @click.option("--since", default="HEAD~1", help="Git ref to compare from (default: HEAD~1)")
-@click.option("--workspace", "-w", default=None, help="Workspace name (default: current directory name)")
+@click.option("--workspace", "-w", default=None, help="Workspace name (default: current directory and git branch)")
 @click.option("--files", default=None, help="Comma-separated list of files to update (skips git detection)")
 @click.option("--embedding-url", default=None, help="Override embedding API URL from config")
 @click.option("--use-affected", is_flag=True, help="Use 'codeindex affected' instead of 'git diff' (smarter detection)")

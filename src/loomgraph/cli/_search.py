@@ -19,7 +19,7 @@ from loomgraph.cli.main import main
 @main.command()
 @click.argument("query")
 @click.option("--type", "-t", "entity_type", default=None, help="Filter by entity type (e.g. function, class, module)")
-@click.option("--workspace", "-w", default=None, help="Workspace name (default: current directory name)")
+@click.option("--workspace", "-w", default=None, help="Workspace name (default: current directory and git branch)")
 @click.option("--limit", "-n", default=20, help="Maximum number of results")
 @click.option("--with-relations", is_flag=True, default=False, help="Include callers/callees for each matched entity")
 @click.option("--depth", default=1, help="BFS expansion depth for --with-relations (default: 1)")
@@ -402,7 +402,7 @@ def _class_methods(class_name: str, source_id_map: dict[str, str]) -> list[str]:
 )
 @click.option("--include-unresolved", is_flag=True, default=False,
     help="Include unresolved/ambiguous edges (phantom targets not in repo)")
-@click.option("--workspace", "-w", default=None, help="Workspace name (default: current directory name)")
+@click.option("--workspace", "-w", default=None, help="Workspace name (default: current directory and git branch)")
 def graph(entity_name: str, direction: str, depth: int, relation_type: str, include_unresolved: bool, workspace: str | None) -> None:
     """Query entity relationships in the graph.
 

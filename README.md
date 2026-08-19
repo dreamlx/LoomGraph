@@ -74,6 +74,10 @@ pipx install "loomgraph[objc]"          # Objective-C (.h / .m; .mm not supporte
 
 > Quotes are required — `[extra]` is a shell glob in zsh/bash (`no matches found`
 > without them). Add several at once: `pipx install "loomgraph[typescript,javascript]"`.
+> If `loomgraph` is already installed with pipx, inject the grammar packages into
+> that existing venv instead: `pipx inject loomgraph tree-sitter-typescript
+> tree-sitter-javascript` (or use `pipx runpip loomgraph install <package>` on
+> older pipx installations).
 > Then ensure the languages are listed under `languages:` in `.codeindex.yaml`
 > (the `/loomgraph-setup` skill generates this via codeindex's own wizard).
 

@@ -410,6 +410,26 @@ async def test_impact_handler_default_target_is_head():
 
 
 @pytest.mark.asyncio
+async def test_impact_handler_preserves_shared_trust_payload():
+    """MCP must expose the same risk/resolution result as the CLI path."""
+    from loomgraph.mcp.tools import impact as t_impact
+
+    async def fake(**kwargs):
+        del kwargs
+        return {
+            "resolution": {"resolved_ratio": 0.0175},
+            "risk_assessment": {"level": "unknown"},
+        }
+
+    with patch.object(t_impact, "_async_impact", side_effect=fake):
+        contents = await t_impact.handle({})
+
+    payload = json.loads(contents[0].text)
+    assert payload["data"]["resolution"]["resolved_ratio"] == 0.0175
+    assert payload["data"]["risk_assessment"]["level"] == "unknown"
+
+
+@pytest.mark.asyncio
 async def test_deps_handler_passes_depth():
     from loomgraph.mcp.tools import deps as t_deps
 
