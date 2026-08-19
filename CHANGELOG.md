@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.1] - 2026-08-19
+
 ### Changed — distinguish guided retrieval from setup-only evaluation use (#209)
 - DeepSWE orientation runs are labelled `voluntary` or `assisted`; assisted
   treatment requires and reports one structural retrieval separately from
@@ -1748,6 +1750,7 @@ infrastructure was added.
 - Project roadmap, epics, and feature definitions
 
 [Unreleased]: https://github.com/dreamlx/LoomGraph/compare/v0.20.0...HEAD
+[0.21.1]: https://github.com/dreamlx/LoomGraph/compare/v0.21.0...v0.21.1
 [0.21.0]: https://github.com/dreamlx/LoomGraph/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/dreamlx/LoomGraph/compare/v0.19.2...v0.20.0
 [0.19.2]: https://github.com/dreamlx/LoomGraph/compare/v0.19.1...v0.19.2

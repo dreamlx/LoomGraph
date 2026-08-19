@@ -6,6 +6,15 @@
 
 ## [Unreleased]
 
+> **更新方式**: `pipx upgrade loomgraph`（已装 `[embed]` extra 的用 `pipx upgrade loomgraph --include-extra`）。
+
+### 修复 — 缺失 parser grammar 时给出可直接复制的修复命令（#210）
+
+- `index`、`update` 和 MCP `refresh` 检测到缺少已支持语言的 tree-sitter grammar 时，
+  现在会保留 codeindex 原始诊断，并附上对应的 LoomGraph extra 安装命令，例如
+  `pipx install "loomgraph[typescript]"`，同时明确提醒在 `.codeindex.yaml` 的
+  `languages:` 中启用该语言。未知语言不会猜测不存在的安装包。
+
 ## [0.21.0] - 2026-08-18
 
 ### 变更 — L2 内容可比性显式契约（#201）
