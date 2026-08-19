@@ -115,3 +115,40 @@ def test_assisted_requirement_recognizes_quoted_loomgraph_binary() -> None:
     assert adapter._retrieval_requirement([
         '"$HOME/.local/bin/loomgraph" find Vulture',
     ]) == (True, True)
+
+
+def test_codegraph_packet_uses_adapter_observed_backend_and_workspace() -> None:
+    adapter = OmpWithLoomGraph.__new__(OmpWithLoomGraph)
+    adapter._loomgraph_backend = "codegraph"
+    adapter._loomgraph_workspace = "app:main"
+    adapter._orientation_use_mode = "assisted"
+    response = json.loads(_response())
+    response["tooling"]["loomgraph"] = {
+        "backend": "codeindex",
+        "workspace": "wrong:workspace",
+    }
+
+    packet = adapter._packet_from_trace(
+        _encoded_trace(
+            json.dumps(response),
+            commands=["$HOME/.local/bin/loomgraph find match"],
+        ),
+        source_mutated=False,
+    )
+
+    assert packet["tooling"]["loomgraph"]["backend"] == "codegraph"
+    assert packet["tooling"]["loomgraph"]["workspace"] == "app:main"
+
+
+def test_codegraph_setup_workspace_comes_from_index_result() -> None:
+    assert OmpWithLoomGraph._workspace_from_index_output(
+        '{"success":true,"data":{"workspace":"app:main"}}'
+    ) == "app:main"
+    assert OmpWithLoomGraph._workspace_from_index_output("not json") is None
+
+
+def test_codegraph_setup_workspace_falls_back_to_observed_status() -> None:
+    assert OmpWithLoomGraph._workspace_from_status_output(
+        '{"success":true,"data":{"workspace":{"name":"app:main"}}}'
+    ) == "app:main"
+    assert OmpWithLoomGraph._workspace_from_status_output("not json") is None
