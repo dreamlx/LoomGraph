@@ -109,10 +109,14 @@ def test_backend_aware_tool_cards_separate_setup_from_retrieval() -> None:
 
     assert "index ." in codeindex
     assert "must run one structural retrieval" in codeindex
+    assert "find <symbol>" in codeindex
+    assert "Do not add `--format`" in codeindex
+    assert "do not pipe or truncate its output" in codeindex
     assert "Do not run `loomgraph index` again" in codegraph
     assert "must run one structural retrieval" in codegraph
     assert "--workspace app:main" in codegraph
     assert "not `/app`" in codegraph
+    assert "Do not add `--format`" in codegraph
 
 
 def test_assisted_requirement_recognizes_quoted_loomgraph_binary() -> None:

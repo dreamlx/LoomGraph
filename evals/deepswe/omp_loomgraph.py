@@ -42,11 +42,13 @@ def _tool_card(backend: str, use_mode: str, workspace: str | None = None) -> str
         setup = (
             "For this codeindex graph, run `$HOME/.local/bin/loomgraph index .` once "
             "before a retrieval command. Then query from `/app` without passing `/app` "
-            "as a `--workspace` value."
+            "as a `--workspace` value: `$HOME/.local/bin/loomgraph find <symbol>`."
         )
     return f"""This is the LoomGraph treatment condition. The CLI is available at
 `$HOME/.local/bin/loomgraph`. {setup} {retrieval} A lone index is setup evidence,
-not navigation evidence. Do not infer that an unavailable, partial, or
+not navigation evidence. Run the retrieval command directly. Do not add `--format`,
+and do not pipe or truncate its output: LoomGraph already emits JSON and the adapter
+needs the complete response to verify `success:true`. Do not infer that an unavailable, partial, or
 non-comparable result means no change; record the actual command and trust
 signal in your final JSON response."""
 
