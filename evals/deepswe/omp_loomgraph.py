@@ -138,7 +138,7 @@ class OmpWithLoomGraph(OmpWithOrientation):
                 f"mkdir -p {_WHEELHOUSE_DIR}; "
                 f"tar -xzf {_WHEELHOUSE_ARCHIVE} -C {_WHEELHOUSE_DIR}; "
                 "python -m pip install --user --no-index "
-                f"--find-links {_WHEELHOUSE_DIR} loomgraph==0.21.0; "
+                f"--find-links {_WHEELHOUSE_DIR} loomgraph; "
                 f"{_LOOMGRAPH_BIN} --version"
             ),
         )
