@@ -25,6 +25,11 @@ CORE_MODULES = {
     "settings",
 }
 
+# Below this join-based ratio, an empty or sparse caller traversal cannot
+# establish that a change has a limited blast radius. This matches the index
+# warning tier for TS path aliases / Java DI blind spots.
+LOW_RESOLUTION_THRESHOLD = 0.1
+
 
 @dataclass
 class RiskAssessor:
@@ -38,7 +43,9 @@ class RiskAssessor:
     low_threshold: int = 3
     high_threshold: int = 10
 
-    def assess(self, result: ImpactResult) -> RiskAssessment:
+    def assess(
+        self, result: ImpactResult, resolved_ratio: float | None = None
+    ) -> RiskAssessment:
         """Assess risk for an impact analysis result.
 
         Args:
@@ -65,8 +72,20 @@ class RiskAssessor:
             level = "medium"
             reason = self._build_medium_risk_reason(total_callers, result)
         else:
-            level = "low"
-            reason = self._build_low_risk_reason(total_callers, result)
+            if (
+                resolved_ratio is not None
+                and resolved_ratio < LOW_RESOLUTION_THRESHOLD
+            ):
+                level = "unknown"
+                reason = (
+                    f"Impact confidence unknown: edge resolution ratio "
+                    f"{resolved_ratio:.1%} is below "
+                    f"{LOW_RESOLUTION_THRESHOLD:.0%}; {total_callers} discovered "
+                    "caller(s) does not establish a limited blast radius"
+                )
+            else:
+                level = "low"
+                reason = self._build_low_risk_reason(total_callers, result)
 
         # Generate suggestions
         suggestions = self._generate_suggestions(level, result)

@@ -70,7 +70,7 @@ loomgraph index [<repo_path>] [options]
 |------|------|--------|
 | `<repo_path>` | 仓库路径 | 当前目录 |
 | `--clear` / `--no-clear` | 清除旧数据后重建(Cold Rebuild) | `true` |
-| `-w, --workspace` | workspace 名(默认: 当前目录名) | 自动 |
+| `-w, --workspace` | workspace 名(默认: `<目录>:<git 分支>`；非 git 时目录名) | 自动 |
 | `--at-ref REF` | 从 git ref 创建独立快照 workspace；默认名为 `<repo>:<ref>` | — |
 
 `--at-ref` 使用 `branch-diff` 的 worktree + cold-index provisioning 内核，适合把
@@ -147,7 +147,7 @@ loomgraph update [options]
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
 | `--since` | git diff 起始 ref | `HEAD~1` |
-| `-w, --workspace` | workspace 名 | 当前目录名 |
+| `-w, --workspace` | workspace 名 | `<目录>:<git 分支>`（非 git 时目录名） |
 | `--files` | 逗号分隔文件列表(跳过 git 检测) | — |
 | `--embedding-url` | 覆盖 config 的 embedding URL(**inert**,仅 CI-script/肌肉记忆兼容) | — |
 | `--use-affected` | 用 `codeindex affected` 代替 `git diff`(**inert**) | `false` |
@@ -233,7 +233,7 @@ loomgraph find <query> [options]
 | `--limit/-n` | 结果数量 | `20` |
 | `--with-relations` | 附带 callers/callees | 否 |
 | `--depth` | BFS 扩展层数(需 `--with-relations`) | `1` |
-| `--workspace/-w` | workspace 名 | 当前目录名 |
+| `--workspace/-w` | workspace 名 | `<目录>:<git 分支>`（非 git 时目录名） |
 
 **基础输出**:
 ```json
@@ -341,7 +341,7 @@ loomgraph graph <entity_name> [options]
 | `--depth` | 遍历深度(BFS) | `1` |
 | `--relation-type` | 关系类型 `[CALLS\|INHERITS\|IMPORTS\|all]` | `all` |
 | `--include-unresolved` | 包含 unresolved/ambiguous 低信任边(target 为调用表达式,可能不在仓库 entity 表内,显示为 `source_id=""`) | `false` |
-| `--workspace/-w` | workspace 名 | 当前目录名 |
+| `--workspace/-w` | workspace 名 | `<目录>:<git 分支>`（非 git 时目录名） |
 
 **方向**: `callers`(谁调用了它) / `callees`(它调用了谁) / `both`(双向)
 
@@ -389,7 +389,7 @@ loomgraph topology [options]
 | `--god-threshold` | God Function 的最小 out-degree | `5` |
 | `--scope` | 绝对路径前缀过滤(如 `src/`),排除 docs/scripts/tests;优先于 `--module` (#61) | 全部 |
 | `--module` | 模块前缀过滤;**已弃用,优先用 `--scope`** | 全部 |
-| `--workspace/-w` | workspace 名 | 当前目录名 |
+| `--workspace/-w` | workspace 名 | `<目录>:<git 分支>`（非 git 时目录名） |
 
 **检测项**:
 - **Orphans**: 0 in-degree + 0 out-degree(排除 module 类型和 external)
@@ -418,7 +418,7 @@ loomgraph deps [options]
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
 | `-d, --depth` | 目录深度(模块分组粒度) | 默认 |
-| `-w, --workspace` | workspace 名 | 当前目录名 |
+| `-w, --workspace` | workspace 名 | `<目录>:<git 分支>`（非 git 时目录名） |
 
 **输出**:
 ```json
@@ -482,7 +482,7 @@ loomgraph impact [TARGET] [options]
 | `--base` | range 比较的 base(如 `main..HEAD`) | — |
 | `--depth` | caller 遍历深度 | 默认 |
 | `--file` | 分析指定文件 | — |
-| `-w, --workspace` | workspace 名 | 当前目录名 |
+| `-w, --workspace` | workspace 名 | `<目录>:<git 分支>`（非 git 时目录名） |
 
 **输出**:
 ```json
@@ -519,7 +519,7 @@ loomgraph overview [options]
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
 | `-d, --depth` | 目录深度(模块分组粒度) | 默认 |
-| `-w, --workspace` | workspace 名 | 当前目录名 |
+| `-w, --workspace` | workspace 名 | `<目录>:<git 分支>`（非 git 时目录名） |
 | `--no-summary` | 跳过 LLM module summaries(只返回结构计数,免费/快) | `false` |
 
 > `--no-summary` 跳过 LLM 调用,只给 per-module entity 计数 + top entities。多数场景足够。
@@ -538,7 +538,7 @@ loomgraph check [options]
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
 | `--repo-path` | 项目根目录(用于验证文件路径) | `.` |
-| `-w, --workspace` | workspace 名 | 当前目录名 |
+| `-w, --workspace` | workspace 名 | `<目录>:<git 分支>`（非 git 时目录名） |
 
 **输出**:
 ```json

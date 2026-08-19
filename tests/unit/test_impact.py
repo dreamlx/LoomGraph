@@ -283,6 +283,43 @@ class TestRiskAssessor:
         assert risk.level == "high"
         assert "auth" in risk.reason.lower()
 
+    def test_low_resolution_empty_callers_is_unknown(self) -> None:
+        """An empty traversal cannot prove isolation on a blind graph."""
+        result = ImpactResult(
+            commit="abc123",
+            changed_symbols=[
+                ChangedSymbol(
+                    name="setupAlarmListener",
+                    file="apps/mobile/service.ts",
+                    change_type=ChangeType.MODIFIED,
+                )
+            ],
+        )
+
+        risk = RiskAssessor().assess(result, resolved_ratio=0.0175)
+
+        assert risk.level == "unknown"
+        assert "1.8%" in risk.reason
+        assert "not establish" in risk.reason
+
+    def test_sufficient_resolution_empty_callers_remains_low(self) -> None:
+        """The trust guard does not change normal graph behavior."""
+        result = ImpactResult(
+            commit="abc123",
+            changed_symbols=[
+                ChangedSymbol(
+                    name="helper",
+                    file="src/helper.py",
+                    change_type=ChangeType.MODIFIED,
+                )
+            ],
+        )
+
+        risk = RiskAssessor().assess(result, resolved_ratio=0.2)
+
+        assert risk.level == "low"
+        assert risk.reason == "Low risk: no callers found, isolated change"
+
     def test_suggestions_include_tests(self) -> None:
         """Test that suggestions include running tests."""
         result = ImpactResult(
@@ -454,10 +491,15 @@ class TestImpactModels:
                 reason="Limited impact",
                 suggestions=["Run unit tests"],
             ),
+            resolution={
+                "resolved_ratio": 0.0175,
+                "caveat": "empty caller lists are inconclusive",
+            },
         )
 
         data = result.to_dict()
         assert data["commit"] == "abc123"
+        assert data["resolution"]["resolved_ratio"] == 0.0175
         assert len(data["changed_symbols"]) == 1
         assert data["impact_analysis"]["affected_modules"] == ["src.test", "src.main"]
         assert data["risk_assessment"]["level"] == "low"

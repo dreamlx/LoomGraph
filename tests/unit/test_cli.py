@@ -1287,6 +1287,29 @@ class TestCLIHelp:
         assert result.exit_code == 0
         assert "REPO_PATH" in result.stdout
 
+    @pytest.mark.parametrize(
+        "command",
+        [
+            ["index", "--help"],
+            ["update", "--help"],
+            ["find", "--help"],
+            ["graph", "--help"],
+            ["impact", "--help"],
+            ["deps", "--help"],
+            ["overview", "--help"],
+            ["topology", "--help"],
+            ["check", "--help"],
+        ],
+    )
+    def test_workspace_help_describes_branch_aware_default(
+        self, runner: CliRunner, command: list[str]
+    ) -> None:
+        """Git workspaces are `<directory>:<branch>`, not directory-only."""
+        result = runner.invoke(main, command)
+
+        assert result.exit_code == 0
+        assert "current directory and git branch" in " ".join(result.stdout.split())
+
     def test_find_help(self, runner: CliRunner) -> None:
         """Test find command help."""
         result = runner.invoke(main, ["find", "--help"])
@@ -1300,6 +1323,107 @@ class TestCLIHelp:
         assert result.exit_code == 0
         assert "ENTITY_NAME" in result.stdout
         assert "--direction" in result.stdout
+
+
+class TestImpactTrustOutput:
+    """Impact risk and trust payloads must be produced once for every surface."""
+
+    @pytest.mark.asyncio
+    async def test_async_impact_attaches_low_resolution_trust(self) -> None:
+        """The shared CLI/MCP path reads the workspace's persisted ratio."""
+        from loomgraph.cli import _analysis
+        from loomgraph.core.impact import ChangedSymbol, ChangeType, ImpactResult
+
+        store = MagicMock()
+        store.get_meta = AsyncMock(return_value="0.0175")
+        analyzer = MagicMock()
+        analyzer.analyze_commit = AsyncMock(
+            return_value=ImpactResult(
+                commit="abc123",
+                changed_symbols=[
+                    ChangedSymbol(
+                        name="setupAlarmListener",
+                        file="apps/mobile/service.ts",
+                        change_type=ChangeType.MODIFIED,
+                    )
+                ],
+            )
+        )
+
+        with (
+            patch.object(
+                _analysis,
+                "prepare_workspace_store",
+                new=AsyncMock(return_value=("bluehawklock:develop", store)),
+            ),
+            patch("loomgraph.core.impact.ImpactAnalyzer", return_value=analyzer),
+        ):
+            data = await _analysis._async_impact(
+                target="abc123",
+                staged=False,
+                base=None,
+                depth=2,
+                file_path=None,
+            )
+
+        assert data["resolution"]["resolved_ratio"] == 0.0175
+        assert data["risk_assessment"]["level"] == "unknown"
+
+    @pytest.mark.asyncio
+    async def test_async_impact_keeps_analysis_when_resolution_meta_fails(self) -> None:
+        """Resolution metadata is advisory and cannot make impact fail."""
+        from loomgraph.cli import _analysis
+        from loomgraph.core.impact import ImpactResult
+
+        store = MagicMock()
+        store.get_meta = AsyncMock(side_effect=RuntimeError("metadata unavailable"))
+        analyzer = MagicMock()
+        analyzer.analyze_commit = AsyncMock(
+            return_value=ImpactResult(commit="abc123", changed_symbols=[])
+        )
+
+        with (
+            patch.object(
+                _analysis,
+                "prepare_workspace_store",
+                new=AsyncMock(return_value=("workspace", store)),
+            ),
+            patch("loomgraph.core.impact.ImpactAnalyzer", return_value=analyzer),
+        ):
+            data = await _analysis._async_impact(
+                target="abc123",
+                staged=False,
+                base=None,
+                depth=2,
+                file_path=None,
+            )
+
+        assert "resolution" not in data
+        assert data["risk_assessment"]["level"] == "low"
+
+    @patch("loomgraph.cli._analysis._async_impact", new_callable=AsyncMock)
+    def test_cli_preserves_shared_unknown_risk(
+        self, mock_impact: AsyncMock, runner: CliRunner
+    ) -> None:
+        mock_impact.return_value = {
+            "commit": "abc123",
+            "changed_symbols": [],
+            "impact_analysis": {
+                "direct_callers": [],
+                "indirect_callers": [],
+                "affected_modules": [],
+                "affected_tests": [],
+            },
+            "resolution": {"resolved_ratio": 0.0175},
+            "risk_assessment": {"level": "unknown", "reason": "inconclusive"},
+        }
+
+        result = runner.invoke(main, ["impact", "abc123"])
+
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.stdout)
+        assert data["data"]["resolution"]["resolved_ratio"] == 0.0175
+        assert data["data"]["risk_assessment"]["level"] == "unknown"
 
 
 class TestWorkspaceListCommand:

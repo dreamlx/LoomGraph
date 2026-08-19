@@ -29,7 +29,7 @@ from loomgraph.cli.main import main
 )
 @click.option("--depth", default=2, help="Caller traversal depth")
 @click.option("--file", "file_path", type=click.Path(), help="Analyze specific file")
-@click.option("--workspace", "-w", default=None, help="Workspace name (default: current directory name)")
+@click.option("--workspace", "-w", default=None, help="Workspace name (default: current directory and git branch)")
 def impact(target: str, staged: bool, base: str | None, depth: int, file_path: str | None, workspace: str | None) -> None:
     """Analyze impact of code changes.
 
@@ -43,53 +43,6 @@ def impact(target: str, staged: bool, base: str | None, depth: int, file_path: s
     """
     try:
         result = asyncio.run(_async_impact(target, staged, base, depth, file_path, workspace))
-
-        # Add risk assessment
-        from loomgraph.core.impact import RiskAssessor
-        assessor = RiskAssessor()
-        from loomgraph.core.impact import Caller, ChangedSymbol, ChangeType, ImpactResult
-
-        # Reconstruct ImpactResult for risk assessment
-        changed_symbols = [
-            ChangedSymbol(
-                name=s["name"],
-                file=s["file"],
-                change_type=ChangeType(s["change_type"]),
-                lines_changed=s.get("lines_changed", 0),
-            )
-            for s in result.get("changed_symbols", [])
-        ]
-        direct_callers = [
-            Caller(
-                name=c["name"],
-                file=c["file"],
-                line=c.get("line", 0),
-                depth=1,
-            )
-            for c in result.get("impact_analysis", {}).get("direct_callers", [])
-        ]
-        indirect_callers = [
-            Caller(
-                name=c["name"],
-                file=c["file"],
-                line=c.get("line", 0),
-                depth=c.get("depth", 2),
-            )
-            for c in result.get("impact_analysis", {}).get("indirect_callers", [])
-        ]
-
-        impact_result = ImpactResult(
-            commit=result.get("commit", ""),
-            changed_symbols=changed_symbols,
-            direct_callers=direct_callers,
-            indirect_callers=indirect_callers,
-            affected_modules=result.get("impact_analysis", {}).get("affected_modules", []),
-            affected_tests=result.get("impact_analysis", {}).get("affected_tests", []),
-        )
-
-        risk = assessor.assess(impact_result)
-        result["risk_assessment"] = risk.to_dict()
-
         output_success(result)
 
     except Exception as e:
@@ -118,7 +71,8 @@ async def _async_impact(
     workspace: str | None = None,
 ) -> dict[str, Any]:
     """Run async impact analysis."""
-    from loomgraph.core.impact import ImpactAnalyzer
+    from loomgraph.core.impact import ImpactAnalyzer, RiskAssessor
+    from loomgraph.core.impact.risk import LOW_RESOLUTION_THRESHOLD
 
     ws, store = await prepare_workspace_store(workspace)
 
@@ -140,12 +94,35 @@ async def _async_impact(
     else:
         result = await analyzer.analyze_commit(target)
 
+    resolved_ratio = await _impact_resolved_ratio(store)
+    if resolved_ratio is not None:
+        result.resolution = {
+            "resolved_ratio": resolved_ratio,
+            "caveat": (
+                "empty or sparse caller lists cannot establish a limited blast radius"
+                if resolved_ratio < LOW_RESOLUTION_THRESHOLD
+                else None
+            ),
+        }
+    result.risk_assessment = RiskAssessor().assess(result, resolved_ratio)
     return result.to_dict()
+
+
+async def _impact_resolved_ratio(store: Any) -> float | None:
+    """Read optional graph-resolution metadata without breaking impact analysis."""
+    get_meta = getattr(store, "get_meta", None)
+    if get_meta is None:
+        return None
+    try:
+        raw = await get_meta("resolved_ratio")
+        return float(raw) if raw else None
+    except Exception:  # noqa: BLE001 - resolution metadata is advisory
+        return None
 
 
 @main.command()
 @click.option("--depth", "-d", default=2, help="Directory depth for module grouping")
-@click.option("--workspace", "-w", default=None, help="Workspace name (default: current directory name)")
+@click.option("--workspace", "-w", default=None, help="Workspace name (default: current directory and git branch)")
 def deps(depth: int, workspace: str | None) -> None:
     """Analyze module-level dependencies.
 
@@ -175,7 +152,7 @@ async def _async_deps(depth: int, workspace: str | None = None) -> dict[str, Any
 
 @main.command()
 @click.option("--depth", "-d", default=2, help="Directory depth for module grouping")
-@click.option("--workspace", "-w", default=None, help="Workspace name (default: current directory name)")
+@click.option("--workspace", "-w", default=None, help="Workspace name (default: current directory and git branch)")
 @click.option("--no-summary", is_flag=True, help="Skip LLM module summaries")
 def overview(depth: int, workspace: str | None, no_summary: bool) -> None:
     """Generate project module overview.
@@ -217,7 +194,7 @@ async def _async_overview(
     default=None,
     help="Absolute path-prefix filter (e.g. 'src/'); excludes docs/scripts/tests. Wins over --module (#61)",
 )
-@click.option("--workspace", "-w", default=None, help="Workspace name (default: current directory name)")
+@click.option("--workspace", "-w", default=None, help="Workspace name (default: current directory and git branch)")
 def topology(hub_threshold: int, god_threshold: int, module: str | None, scope: str | None, workspace: str | None) -> None:
     """Analyze knowledge graph topology for structural code smells.
 
@@ -267,7 +244,7 @@ async def _async_topology(
     default=".",
     help="Base path for source_id file verification",
 )
-@click.option("--workspace", "-w", default=None, help="Workspace name (default: current directory name)")
+@click.option("--workspace", "-w", default=None, help="Workspace name (default: current directory and git branch)")
 def check(repo_path: str, workspace: str | None) -> None:
     """Check index freshness by verifying source_id file paths.
 

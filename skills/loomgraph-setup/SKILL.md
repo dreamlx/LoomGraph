@@ -39,17 +39,18 @@ Python 默认包含。其他语言需要对应 tree-sitter grammar——**gramma
 
 codeindex 实际支持的 parser（`codeindex/parser.py` `FILE_EXTENSIONS`，权威）：**python / php / java / typescript(+tsx) / javascript(+jsx) / swift / objc**。**不支持 go / rust / c / cpp**（即使装了 grammar 也不会索引）。
 
-| 检测到的语言 | 安装（装进 loomgraph venv） |
-|---|---|
-| Python | 无需（默认） |
-| Java | `pipx install --force "loomgraph[java]"` |
-| TypeScript / TSX | `pipx install --force "loomgraph[typescript]"` |
-| Swift | `pipx install --force "loomgraph[swift]"` |
-| JavaScript / JSX | `pipx install --force "loomgraph[javascript]"` |
-| Objective-C | `pipx install --force "loomgraph[objc]"` |
+| 检测到的语言 | 首次安装 | 已有 loomgraph pipx venv |
+|---|---|---|
+| Python | 无需（默认） | 无需（默认） |
+| Java | `pipx install "loomgraph[java]"` | `pipx inject loomgraph tree-sitter-java` |
+| TypeScript / TSX | `pipx install "loomgraph[typescript]"` | `pipx inject loomgraph tree-sitter-typescript` |
+| Swift | `pipx install "loomgraph[swift]"` | `pipx inject loomgraph tree-sitter-swift` |
+| JavaScript / JSX | `pipx install "loomgraph[javascript]"` | `pipx inject loomgraph tree-sitter-javascript` |
+| Objective-C | `pipx install "loomgraph[objc]"` | `pipx inject loomgraph tree-sitter-objc` |
 
 > 语言检测交给 Step 2 的 codeindex wizard 做。这里只需知道：装好对应 grammar 再进 Step 2。
 > **引号必要**：`[extra]` 会被 zsh/bash 当 glob（`no matches found`），务必用引号包住 `"loomgraph[javascript]"`。
+> 若使用的旧版 pipx 没有 `inject`，可用 `pipx runpip loomgraph install tree-sitter-<language>` 作为兼容路径；不要对已有 venv 再重复 `pipx install` 并假设 extras 会被补齐。
 
 ---
 

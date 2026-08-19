@@ -268,7 +268,7 @@ LoomGraph 的主要用户是 AI Agent（Claude Code Skills / MCP 客户端）。
 | 输出格式 | 全部 JSON（`{"success": true, "data": {...}}`） |
 | 错误处理 | 结构化错误 + suggestion 字段，Agent 可据此修复 |
 | 命令风格 | 原子命令可组合，Skill 负责编排 |
-| Workspace | 默认自动检测（当前目录名），`-w` 可覆盖 |
+| Workspace | 默认自动检测（`<目录>:<git 分支>`；非 git 时目录名），`-w` 可覆盖 |
 | 日志 | stderr 输出，不干扰 stdout JSON（pipe-safe） |
 
 ### 7.2 命令全览
