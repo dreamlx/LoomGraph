@@ -66,8 +66,10 @@ already been indexed by setup and must not be indexed again; codeindex may be
 indexed once before retrieval.
 
 The adapter records observed `tool_call_count`, the five-call budget-overrun
-flag, and whether an assisted retrieval requirement was met. These are
-operational measurements, not target-hit penalties.
+flag, and both structural-retrieval attempts and confirmed successful
+retrievals (from OMP tool-result events, not model self-report). Assisted mode
+requires one successful structural retrieval. These are operational
+measurements, not target-hit penalties.
 
 Each output directory contains Pier's result plus:
 

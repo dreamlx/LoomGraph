@@ -12,7 +12,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from omp_orientation import OmpWithOrientation, is_loomgraph_retrieval
+from omp_orientation import OmpWithOrientation
 from pier.environments.base import BaseEnvironment
 from pier.models.agent.context import AgentContext
 
@@ -24,22 +24,25 @@ _CODEGRAPH_DIR = "$HOME/.local/share/codegraph-linux-x64"
 _CODEGRAPH_BIN = "$HOME/.local/bin/codegraph"
 
 
-def _tool_card(backend: str, use_mode: str) -> str:
+def _tool_card(backend: str, use_mode: str, workspace: str | None = None) -> str:
     retrieval = (
-        "You must run one structural retrieval command (`find` or `graph`) before "
-        "your final JSON response."
+        "You must run one structural retrieval command (`find` or `graph`) that "
+        "returns `success:true` before your final JSON response."
         if use_mode == "assisted"
         else "You may run one structural retrieval command (`find` or `graph`) if useful."
     )
     if backend == "codegraph":
         setup = (
             "The codegraph database and LoomGraph graph are ready from adapter setup. "
-            "Do not run `loomgraph index` again; query the ready graph instead."
+            "Do not run `loomgraph index` again; query the ready graph instead. "
+            f"Use `$HOME/.local/bin/loomgraph find <symbol> --workspace {workspace}` "
+            "with this exact workspace name, not `/app`."
         )
     else:
         setup = (
             "For this codeindex graph, run `$HOME/.local/bin/loomgraph index .` once "
-            "before a retrieval command."
+            "before a retrieval command. Then query from `/app` without passing `/app` "
+            "as a `--workspace` value."
         )
     return f"""This is the LoomGraph treatment condition. The CLI is available at
 `$HOME/.local/bin/loomgraph`. {setup} {retrieval} A lone index is setup evidence,
@@ -78,10 +81,11 @@ class OmpWithLoomGraph(OmpWithOrientation):
     def _instrumentation_cache_paths(self) -> list[str]:
         return [".codegraph/"] if self._loomgraph_backend == "codegraph" else []
 
-    def _retrieval_requirement(self, commands: list[str]) -> tuple[bool, bool | None]:
+    def _retrieval_requirement(
+        self, commands: list[str], retrieval_succeeded: bool | None
+    ) -> tuple[bool, bool | None]:
         required = self._orientation_use_mode == "assisted"
-        retrieved = any(is_loomgraph_retrieval(command) for command in commands)
-        return required, retrieved if required else None
+        return required, retrieval_succeeded if required else None
 
     @staticmethod
     def _workspace_from_index_output(stdout: str) -> str | None:
@@ -207,7 +211,7 @@ class OmpWithLoomGraph(OmpWithOrientation):
         context: AgentContext,
     ) -> None:
         await super().run(
-            f"{_tool_card(self._loomgraph_backend, self._orientation_use_mode)}\n\n{instruction}",
+            f"{_tool_card(self._loomgraph_backend, self._orientation_use_mode, self._loomgraph_workspace)}\n\n{instruction}",
             environment,
             context,
         )
