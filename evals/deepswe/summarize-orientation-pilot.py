@@ -8,12 +8,26 @@ import csv
 import hashlib
 import json
 import re
+import statistics
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 _RETRIEVAL_COMMAND = re.compile(
     r"(?:^|[\s;&|])(?:[^\s;&|]*/)?loomgraph\s+(?:find|graph|search|deps|impact|topology|overview)\b"
+)
+_REPLICATE_DIRECTORY = re.compile(
+    r"(?:^|-)(?:baseline|treatment)(?:-(?:voluntary|assisted))?-(\d+)$"
+)
+_EFFICIENCY_FIELDS = (
+    "uncached_input_tokens",
+    "cached_input_tokens",
+    "output_tokens",
+    "cost_usd",
+    "agent_execution_seconds",
+    "agent_setup_seconds",
+    "trial_wall_seconds",
 )
 
 
@@ -62,6 +76,69 @@ def _unique_paths(packet: dict[str, Any]) -> tuple[list[str], int]:
 
 def _string_list(value: object) -> list[str]:
     return [item for item in value if isinstance(item, str)] if isinstance(value, list) else []
+
+
+def _integer(value: object) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def _number(value: object) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value)
+
+
+def _duration_seconds(start: object, finish: object) -> float | None:
+    if not isinstance(start, str) or not isinstance(finish, str):
+        return None
+    try:
+        elapsed = datetime.fromisoformat(finish.replace("Z", "+00:00")) - datetime.fromisoformat(
+            start.replace("Z", "+00:00")
+        )
+    except ValueError:
+        return None
+    return elapsed.total_seconds() if elapsed.total_seconds() >= 0 else None
+
+
+def _trial_efficiency(packet_path: Path) -> dict[str, object]:
+    """Read Pier's raw execution and token fields beside an orientation artifact."""
+    empty = dict.fromkeys(_EFFICIENCY_FIELDS)
+    result_path = packet_path.parent.parent / "result.json"
+    try:
+        result = json.loads(result_path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return empty
+    if not isinstance(result, dict):
+        return empty
+
+    agent_result = result.get("agent_result")
+    agent_result = agent_result if isinstance(agent_result, dict) else {}
+    input_tokens = _integer(agent_result.get("n_input_tokens"))
+    cached_input_tokens = _integer(agent_result.get("n_cache_tokens"))
+    uncached_input_tokens = (
+        input_tokens - cached_input_tokens
+        if input_tokens is not None
+        and cached_input_tokens is not None
+        and input_tokens >= cached_input_tokens
+        else None
+    )
+    agent_setup = result.get("agent_setup")
+    agent_execution = result.get("agent_execution")
+    agent_setup = agent_setup if isinstance(agent_setup, dict) else {}
+    agent_execution = agent_execution if isinstance(agent_execution, dict) else {}
+    return {
+        "uncached_input_tokens": uncached_input_tokens,
+        "cached_input_tokens": cached_input_tokens,
+        "output_tokens": _integer(agent_result.get("n_output_tokens")),
+        "cost_usd": _number(agent_result.get("cost_usd")),
+        "agent_execution_seconds": _duration_seconds(
+            agent_execution.get("started_at"), agent_execution.get("finished_at")
+        ),
+        "agent_setup_seconds": _duration_seconds(
+            agent_setup.get("started_at"), agent_setup.get("finished_at")
+        ),
+        "trial_wall_seconds": _duration_seconds(result.get("started_at"), result.get("finished_at")),
+    }
 
 
 def score_packet(packet: dict[str, Any], target: dict[str, Any] | None) -> dict[str, object]:
@@ -145,6 +222,14 @@ def _infer_use_mode(path: Path, output_dir: Path) -> str | None:
     return None
 
 
+def _infer_replicate(path: Path, output_dir: Path) -> int | None:
+    for part in path.relative_to(output_dir).parts:
+        match = _REPLICATE_DIRECTORY.fullmatch(part)
+        if match:
+            return int(match.group(1))
+    return None
+
+
 def _load_targets(path: Path) -> dict[str, dict[str, Any]]:
     manifest = json.loads(path.read_text())
     if manifest.get("schema_version") != 2:
@@ -181,11 +266,110 @@ def summarize(output_dir: Path, targets: dict[str, dict[str, Any]]) -> list[dict
             "task_id": task_id,
             "condition": condition,
             "use_mode": _infer_use_mode(path, output_dir),
+            "replicate": _infer_replicate(path, output_dir),
+            "stratum": targets.get(task_id, {}).get("stratum"),
             "run": str(path.relative_to(output_dir)),
             **score_packet(packet, targets.get(task_id)),
+            **_trial_efficiency(path),
         }
         rows.append(row)
     return rows
+
+
+def _quality_eligible(row: dict[str, object]) -> bool:
+    if not row.get("semantic_packet") or not row.get("source_clean_model_phase"):
+        return False
+    return not (
+        row.get("condition") == "treatment"
+        and row.get("use_mode") == "assisted"
+        and row.get("loomgraph_retrieval_succeeded") is not True
+    )
+
+
+def pair_efficiency(rows: list[dict[str, object]]) -> list[dict[str, object]]:
+    """Join explicit baseline/treatment replicates without pooling strata."""
+    grouped: dict[tuple[object, object, object], dict[str, dict[str, object]]] = {}
+    for row in rows:
+        replicate = row.get("replicate")
+        if not isinstance(replicate, int):
+            continue
+        key = (row.get("task_id"), row.get("use_mode"), replicate)
+        grouped.setdefault(key, {})[str(row.get("condition"))] = row
+
+    pairs: list[dict[str, object]] = []
+    for (_, _, replicate), conditions in sorted(grouped.items(), key=lambda item: str(item[0])):
+        baseline = conditions.get("baseline")
+        treatment = conditions.get("treatment")
+        if baseline is None or treatment is None:
+            continue
+        eligible = _quality_eligible(baseline) and _quality_eligible(treatment)
+        pair: dict[str, object] = {
+            "task_id": baseline.get("task_id"),
+            "stratum": baseline.get("stratum"),
+            "use_mode": baseline.get("use_mode"),
+            "replicate": replicate,
+            "baseline_run": baseline.get("run"),
+            "treatment_run": treatment.get("run"),
+            "quality_eligible": eligible,
+        }
+        for field in _EFFICIENCY_FIELDS:
+            baseline_value = baseline.get(field)
+            treatment_value = treatment.get(field)
+            pair[f"{field}_delta"] = (
+                treatment_value - baseline_value
+                if eligible
+                and isinstance(baseline_value, (int, float))
+                and isinstance(treatment_value, (int, float))
+                else None
+            )
+        pairs.append(pair)
+    return pairs
+
+
+def summarize_pair_deltas(pairs: list[dict[str, object]]) -> list[dict[str, object]]:
+    """Report median/IQR per task and stratum without pooling experiments."""
+    grouped: dict[tuple[object, object, object], list[dict[str, object]]] = {}
+    for pair in pairs:
+        key = (pair.get("task_id"), pair.get("stratum"), pair.get("use_mode"))
+        grouped.setdefault(key, []).append(pair)
+
+    summaries: list[dict[str, object]] = []
+    for (task_id, stratum, use_mode), task_pairs in sorted(grouped.items(), key=lambda item: str(item[0])):
+        summary: dict[str, object] = {
+            "task_id": task_id,
+            "stratum": stratum,
+            "use_mode": use_mode,
+            "n_pairs": len(task_pairs),
+            "n_quality_eligible_pairs": sum(
+                pair.get("quality_eligible") is True for pair in task_pairs
+            ),
+        }
+        for field in _EFFICIENCY_FIELDS:
+            values = [
+                float(value)
+                for pair in task_pairs
+                if pair.get("quality_eligible") is True
+                and isinstance((value := pair.get(f"{field}_delta")), (int, float))
+            ]
+            if not values:
+                summary[f"{field}_delta"] = None
+                continue
+            median = statistics.median(values)
+            if len(values) == 1:
+                first_quartile = third_quartile = median
+            else:
+                first_quartile, _, third_quartile = statistics.quantiles(
+                    values, n=4, method="inclusive"
+                )
+            summary[f"{field}_delta"] = {
+                "n": len(values),
+                "median": median,
+                "q1": first_quartile,
+                "q3": third_quartile,
+                "iqr": third_quartile - first_quartile,
+            }
+        summaries.append(summary)
+    return summaries
 
 
 def main() -> int:
@@ -203,6 +387,7 @@ def main() -> int:
     if not rows:
         parser.error(f"no recognizable orientation packets under {output_dir}")
 
+    pairs = pair_efficiency(rows)
     result_path = output_dir / "orientation-summary.json"
     result_path.write_text(
         json.dumps(
@@ -212,6 +397,8 @@ def main() -> int:
                     args.target_manifest.read_bytes()
                 ).hexdigest(),
                 "runs": rows,
+                "pairs": pairs,
+                "paired_delta_summary": summarize_pair_deltas(pairs),
             },
             indent=2,
         )
@@ -221,6 +408,8 @@ def main() -> int:
         "task_id",
         "condition",
         "use_mode",
+        "replicate",
+        "stratum",
         "orientation_mode",
         "semantic_packet",
         "source_clean_model_phase",
@@ -239,6 +428,7 @@ def main() -> int:
         "target_hit_at_5",
         "existing_target_recall_at_5",
         "new_path_nominated_at_5",
+        *_EFFICIENCY_FIELDS,
         "duplicate_candidate_paths",
         "candidate_paths",
     )

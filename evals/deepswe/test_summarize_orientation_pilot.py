@@ -158,3 +158,133 @@ def test_summary_recognizes_pier_job_and_trial_paths(tmp_path: Path) -> None:
     assert rows[0]["condition"] == "baseline"
     assert rows[0]["task_id"] == "vulture-persistent-analysis-cache"
     assert rows[0]["target_hit_at_5"] is True
+
+
+def test_summary_records_pier_efficiency_fields_and_paired_deltas(tmp_path: Path) -> None:
+    targets = {
+        "vulture-persistent-analysis-cache": {
+            "stratum": "codeindex-python",
+            "gold_existing_production_paths": ["src/existing.py"],
+            "gold_new_production_paths": [],
+        }
+    }
+    for condition, input_tokens, cache_tokens, output_tokens, execution_end in (
+        ("baseline", 100, 40, 20, "2026-08-19T00:00:08Z"),
+        ("treatment", 80, 30, 15, "2026-08-19T00:00:07Z"),
+    ):
+        trial = (
+            tmp_path
+            / f"{condition}-assisted-1"
+            / f"loomgraph-eval-{condition}-assisted-vulture-persistent-analysis-cache"
+            / f"vulture-persistent-analysis-cache__{condition}"
+        )
+        artifact = trial / "artifacts" / "orientation.json"
+        artifact.parent.mkdir(parents=True)
+        artifact.write_text(
+            json.dumps(
+                _packet(
+                    commands=["loomgraph find Existing"] if condition == "treatment" else [],
+                    paths=["src/existing.py"],
+                    orientation_mode="assisted",
+                    retrieval_required=condition == "treatment",
+                    retrieval_requirement_met=True if condition == "treatment" else None,
+                    retrieval_succeeded=True if condition == "treatment" else None,
+                )
+            )
+        )
+        (trial / "result.json").write_text(
+            json.dumps(
+                {
+                    "started_at": "2026-08-19T00:00:00Z",
+                    "finished_at": "2026-08-19T00:00:10Z",
+                    "agent_setup": {
+                        "started_at": "2026-08-19T00:00:01Z",
+                        "finished_at": "2026-08-19T00:00:03Z",
+                    },
+                    "agent_execution": {
+                        "started_at": "2026-08-19T00:00:03Z",
+                        "finished_at": execution_end,
+                    },
+                    "agent_result": {
+                        "n_input_tokens": input_tokens,
+                        "n_cache_tokens": cache_tokens,
+                        "n_output_tokens": output_tokens,
+                        "cost_usd": 0.01 if condition == "baseline" else 0.008,
+                    },
+                }
+            )
+        )
+
+    rows = _module.summarize(tmp_path, targets)
+    pairs = _module.pair_efficiency(rows)
+
+    treatment = next(row for row in rows if row["condition"] == "treatment")
+    assert treatment["replicate"] == 1
+    assert treatment["stratum"] == "codeindex-python"
+    assert treatment["uncached_input_tokens"] == 50
+    assert treatment["agent_execution_seconds"] == 4.0
+    assert treatment["agent_setup_seconds"] == 2.0
+    assert treatment["trial_wall_seconds"] == 10.0
+    assert len(pairs) == 1
+    assert pairs[0]["quality_eligible"] is True
+    assert pairs[0]["uncached_input_tokens_delta"] == -10
+    assert pairs[0]["agent_execution_seconds_delta"] == -1.0
+
+
+def test_pair_with_unsuccessful_assisted_retrieval_has_no_efficiency_delta() -> None:
+    base = {
+        "task_id": "task",
+        "stratum": "codegraph-js-ts",
+        "use_mode": "assisted",
+        "replicate": 1,
+        "semantic_packet": True,
+        "source_clean_model_phase": True,
+        "uncached_input_tokens": 100,
+    }
+    pairs = _module.pair_efficiency(
+        [
+            {**base, "condition": "baseline", "run": "baseline"},
+            {
+                **base,
+                "condition": "treatment",
+                "run": "treatment",
+                "loomgraph_retrieval_succeeded": False,
+                "uncached_input_tokens": 80,
+            },
+        ]
+    )
+
+    assert pairs[0]["quality_eligible"] is False
+    assert pairs[0]["uncached_input_tokens_delta"] is None
+
+
+def test_pair_summary_reports_inclusive_median_and_iqr_without_pooling() -> None:
+    base = {
+        "task_id": "task",
+        "stratum": "codegraph-js-ts",
+        "use_mode": "assisted",
+        "semantic_packet": True,
+        "source_clean_model_phase": True,
+        "loomgraph_retrieval_succeeded": True,
+    }
+    rows = []
+    for replicate, (baseline, treatment) in enumerate(((100, 96), (100, 98), (100, 108)), 1):
+        rows.extend(
+            (
+                {**base, "condition": "baseline", "replicate": replicate, "run": f"b-{replicate}", "uncached_input_tokens": baseline},
+                {**base, "condition": "treatment", "replicate": replicate, "run": f"t-{replicate}", "uncached_input_tokens": treatment},
+            )
+        )
+
+    summary = _module.summarize_pair_deltas(_module.pair_efficiency(rows))
+
+    assert len(summary) == 1
+    assert summary[0]["n_pairs"] == 3
+    assert summary[0]["n_quality_eligible_pairs"] == 3
+    assert summary[0]["uncached_input_tokens_delta"] == {
+        "n": 3,
+        "median": -2.0,
+        "q1": -3.0,
+        "q3": 3.0,
+        "iqr": 6.0,
+    }
