@@ -47,6 +47,9 @@ def test_loomgraph_use_distinguishes_invocation_from_retrieval() -> None:
     assert _module.classify_loomgraph_use(
         ["$HOME/.local/bin/loomgraph index . && $HOME/.local/bin/loomgraph find OptimizedExpr"]
     ) == {"invoked": True, "retrieval_used": True, "index_only": False}
+    assert _module.classify_loomgraph_use(
+        ['"$HOME/.local/bin/loomgraph" find OptimizedExpr']
+    ) == {"invoked": True, "retrieval_used": True, "index_only": False}
 
 
 def test_score_records_observed_tool_budget_and_assisted_requirement() -> None:

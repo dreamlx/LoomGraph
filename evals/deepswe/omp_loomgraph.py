@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from omp_orientation import _LOOMGRAPH_RETRIEVAL, OmpWithOrientation
+from omp_orientation import OmpWithOrientation, is_loomgraph_retrieval
 from pier.environments.base import BaseEnvironment
 from pier.models.agent.context import AgentContext
 
@@ -77,7 +77,7 @@ class OmpWithLoomGraph(OmpWithOrientation):
 
     def _retrieval_requirement(self, commands: list[str]) -> tuple[bool, bool | None]:
         required = self._orientation_use_mode == "assisted"
-        retrieved = any(_LOOMGRAPH_RETRIEVAL.search(command) for command in commands)
+        retrieved = any(is_loomgraph_retrieval(command) for command in commands)
         return required, retrieved if required else None
 
     async def setup(self, environment: BaseEnvironment) -> None:

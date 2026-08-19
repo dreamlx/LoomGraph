@@ -19,6 +19,13 @@ _LOOMGRAPH_RETRIEVAL = re.compile(
     r"(?:^|[\s;&|])(?:[^\s;&|]*/)?loomgraph\s+"
     r"(?:find|graph|search|deps|impact|topology|overview)\b"
 )
+
+
+def is_loomgraph_retrieval(command: str) -> bool:
+    """Recognize direct or shell-quoted LoomGraph retrieval commands."""
+    return bool(_LOOMGRAPH_RETRIEVAL.search(command.replace('"', "").replace("'", "")))
+
+
 _TRACE_SUMMARY_COMMAND = r'''python3 - <<'PY'
 import base64
 import json

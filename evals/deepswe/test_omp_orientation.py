@@ -106,3 +106,12 @@ def test_backend_aware_tool_cards_separate_setup_from_retrieval() -> None:
     assert "must run one structural retrieval" in codeindex
     assert "Do not run `loomgraph index` again" in codegraph
     assert "must run one structural retrieval" in codegraph
+
+
+def test_assisted_requirement_recognizes_quoted_loomgraph_binary() -> None:
+    adapter = OmpWithLoomGraph.__new__(OmpWithLoomGraph)
+    adapter._orientation_use_mode = "assisted"
+
+    assert adapter._retrieval_requirement([
+        '"$HOME/.local/bin/loomgraph" find Vulture',
+    ]) == (True, True)

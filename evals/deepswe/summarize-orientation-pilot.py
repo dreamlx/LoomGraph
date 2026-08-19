@@ -17,6 +17,10 @@ _RETRIEVAL_COMMAND = re.compile(
 )
 
 
+def _is_retrieval_command(command: str) -> bool:
+    return bool(_RETRIEVAL_COMMAND.search(command.replace('"', "").replace("'", "")))
+
+
 def packet_is_valid(packet: dict[str, Any]) -> bool:
     candidates = packet.get("candidates")
     if not isinstance(candidates, list) or not 1 <= len(candidates) <= 5:
@@ -37,7 +41,7 @@ def classify_loomgraph_use(commands: object) -> dict[str, bool]:
     """Classify observed CLI commands, rather than trusting a model assertion."""
     command_list = [command for command in commands if isinstance(command, str)] if isinstance(commands, list) else []
     invoked = bool(command_list)
-    retrieval_used = any(_RETRIEVAL_COMMAND.search(command) for command in command_list)
+    retrieval_used = any(_is_retrieval_command(command) for command in command_list)
     return {
         "invoked": invoked,
         "retrieval_used": retrieval_used,
