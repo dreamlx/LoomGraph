@@ -70,8 +70,9 @@ Treatment adds LoomGraph; it must not silently fall back to codeindex when the
 manifest requests codegraph. An unavailable backend is an infrastructure
 failure recorded per task and excluded from quality denominators.
 
-The primary metric is file-level `target_hit@5`, retained as a simple
-orientation success indicator:
+`target_hit@5` is a quality guardrail and per-task diagnostic, not the primary
+outcome. A valid, source-clean treatment must not be presented as an efficiency
+gain merely because it invoked LoomGraph or hit one target file:
 
 ```text
 target_hit@5 = valid, source-clean runs whose top-five candidate paths
@@ -85,6 +86,17 @@ that intersect existing gold paths, divided by existing gold paths) and
 `new_path_nominated@5` (whether any gold-created production path was proposed).
 The latter is planning evidence, not navigation recall.
 
+The paired primary outcomes are pre-edit navigation efficiency, reported only
+for valid, source-clean baseline/treatment pairs in the same task, mode, and
+replicate: uncached input tokens, output tokens, and `agent_execution_seconds`.
+For OMP, uncached input is `n_input_tokens - n_cache_tokens`, because its input
+counter includes cache reads. Cached input tokens and provider-reported cost
+remain separate. `agent_setup_seconds` (cold install/index) and
+`trial_wall_seconds` (end-to-end elapsed) are also reported separately: neither
+may be substituted for interactive navigation time.
+For each task/stratum/mode, publish all eligible paired deltas and their
+inclusive median, Q1, Q3, and IQR; do not pool across tasks or strata.
+
 Agent-use is also split from the trace, rather than trusting the model's own
 `used` field: `loomgraph_invoked`, `loomgraph_retrieval_used` (a structural
 query attempt such as `find` or `graph`), `loomgraph_retrieval_succeeded`
@@ -97,7 +109,7 @@ These modes are not pooled. The backend-aware card tells codegraph treatment
 not to re-index its setup-ready graph, while codeindex treatment may index once
 before retrieval. Other descriptive fields are semantic packet rate,
 source-clean rate, raw-JSON compliance, observed tool-call count and its
-five-call budget-overrun flag, time, tokens/cost, and verifier status. A
+five-call budget-overrun flag, and verifier status. A
 verifier result is evidence about task execution only; it is not the
 orientation metric.
 
@@ -124,10 +136,10 @@ missing or malformed responses are explicit invalid observations.
 
 1. Validate Track A capability fixtures.
 2. Run one task from each B stratum in baseline and treatment, and inspect raw traces.
-3. Run the frozen 12-task manifest at the planned replicate count only after the
-   codegraph install/index gate passes.
-4. Publish per-task raw records and a human-readable table; decide whether a
-   larger DeepSWE run is justified.
+3. Run a counterbalanced N=3-per-condition pilot for one task from each stratum
+   once the codegraph install/index gate passes; publish raw rows plus paired
+   deltas and median/IQR, without pooling strata.
+4. Run the frozen 12-task manifest only if that pilot supports further spend.
 
 The current OMP harness smoke establishes the install, invocation, and artifact
 chain. It is not evidence for `target_hit@5` until this independent target set

@@ -71,6 +71,13 @@ retrievals (from OMP tool-result events, not model self-report). Assisted mode
 requires one successful structural retrieval. These are operational
 measurements, not target-hit penalties.
 
+The summary also reads Pier's sibling trial `result.json`: uncached input
+tokens, cached input tokens, output tokens, model cost, agent navigation time,
+cold setup time, and total trial time. It emits raw rows, only explicit
+baseline/treatment replicate pairs, and per-task/stratum/mode delta summaries
+with the inclusive median and IQR. Quality-invalid rows and unsuccessful
+assisted treatment do not receive an efficiency delta.
+
 Each output directory contains Pier's result plus:
 
 - `artifacts/orientation.json` — pre-edit navigation evidence;
@@ -87,6 +94,8 @@ It writes `orientation-summary.json` alongside the run outputs and prints one
 row per task/condition/use-mode. The rows separate invocation, structural
 retrieval, and index-only use; target-hit, existing-file recall, new-path
 nomination, tool-call budget, and assisted-use compliance are also distinct.
+For N>1, the pilot runner alternates baseline-first and treatment-first by
+replicate while preserving the explicit replicate number used for paired deltas.
 The manifest remains host-only and is never mounted into the agent container.
 
 ## Evaluation v1 target set

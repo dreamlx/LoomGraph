@@ -32,7 +32,12 @@ if [[ ! -f "$wheelhouse" ]]; then
 fi
 
 for run in $(seq 1 "$runs"); do
-  for condition in baseline treatment; do
+  if (( run % 2 )); then
+    conditions=(baseline treatment)
+  else
+    conditions=(treatment baseline)
+  fi
+  for condition in "${conditions[@]}"; do
     LOOMGRAPH_WHEELHOUSE="$wheelhouse" \
       "$repo_root/evals/deepswe/run-omp-smoke.sh" \
       "$condition" "$task_id" "$output_dir/$condition-$use_mode-$run" "$use_mode"
