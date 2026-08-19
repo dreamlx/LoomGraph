@@ -8,7 +8,9 @@ orientation adapter own the result artifact.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from typing import Any
 
 from omp_orientation import OmpWithOrientation, is_loomgraph_retrieval
 from pier.environments.base import BaseEnvironment
@@ -61,6 +63,7 @@ class OmpWithLoomGraph(OmpWithOrientation):
         if loomgraph_backend not in {"codeindex", "codegraph"}:
             raise ValueError(f"unsupported LoomGraph backend: {loomgraph_backend}")
         self._loomgraph_backend = loomgraph_backend
+        self._loomgraph_workspace: str | None = None
         self._codegraph_bundle = (
             Path(codegraph_bundle).expanduser().resolve() if codegraph_bundle else None
         )
@@ -79,6 +82,36 @@ class OmpWithLoomGraph(OmpWithOrientation):
         required = self._orientation_use_mode == "assisted"
         retrieved = any(is_loomgraph_retrieval(command) for command in commands)
         return required, retrieved if required else None
+
+    @staticmethod
+    def _workspace_from_index_output(stdout: str) -> str | None:
+        """Read the workspace reported by adapter-owned LoomGraph setup."""
+        try:
+            payload = json.loads(stdout)
+        except json.JSONDecodeError:
+            return None
+        workspace = payload.get("data", {}).get("workspace")
+        return workspace if isinstance(workspace, str) else None
+
+    @staticmethod
+    def _workspace_from_status_output(stdout: str) -> str | None:
+        """Read the current workspace from LoomGraph's adapter-owned status call."""
+        try:
+            payload = json.loads(stdout)
+        except json.JSONDecodeError:
+            return None
+        workspace = payload.get("data", {}).get("workspace", {}).get("name")
+        return workspace if isinstance(workspace, str) else None
+
+    def _packet_from_trace(self, encoded_trace: str, source_mutated: bool) -> dict[str, Any]:
+        """Prefer adapter-observed setup identity over model self-reporting."""
+        packet = super()._packet_from_trace(encoded_trace, source_mutated)
+        tooling = packet["tooling"]["loomgraph"]
+        tooling["backend"] = self._loomgraph_backend
+        workspace = getattr(self, "_loomgraph_workspace", None)
+        if workspace is not None:
+            tooling["workspace"] = workspace
+        return packet
 
     async def setup(self, environment: BaseEnvironment) -> None:
         if not self._loomgraph_wheelhouse.is_file():
@@ -132,16 +165,40 @@ class OmpWithLoomGraph(OmpWithOrientation):
                     "if [ ! -f .codegraph/codegraph.db ]; then "
                     f"CODEGRAPH_TELEMETRY=0 CODEGRAPH_NO_WATCH=1 "
                     f"{_CODEGRAPH_BIN} init .; "
-                    "fi; "
+                    "fi"
+                ),
+            )
+            if result.return_code != 0:
+                raise RuntimeError(
+                    "codegraph init gate failed: "
+                    f"{result.stderr.strip() or result.stdout.strip()}"
+                )
+            result = await self.exec_as_agent(
+                environment,
+                cwd="/app",
+                command=(
                     f"CODEGRAPH_TELEMETRY=0 CODEGRAPH_NO_WATCH=1 "
                     f"{_LOOMGRAPH_BIN} index . --backend codegraph"
                 ),
             )
             if result.return_code != 0:
                 raise RuntimeError(
-                    "codegraph/LoomGraph index gate failed: "
+                    "LoomGraph codegraph index gate failed: "
                     f"{result.stderr.strip() or result.stdout.strip()}"
                 )
+            self._loomgraph_workspace = self._workspace_from_index_output(result.stdout)
+            if self._loomgraph_workspace is None:
+                result = await self.exec_as_agent(
+                    environment,
+                    cwd="/app",
+                    command=f"{_LOOMGRAPH_BIN} status",
+                )
+                if result.return_code != 0:
+                    raise RuntimeError(
+                        "LoomGraph status gate failed: "
+                        f"{result.stderr.strip() or result.stdout.strip()}"
+                    )
+                self._loomgraph_workspace = self._workspace_from_status_output(result.stdout)
 
     async def run(
         self,
