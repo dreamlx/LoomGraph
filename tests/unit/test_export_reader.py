@@ -369,6 +369,35 @@ def test_reader_imports_edge_not_flagged_unknown_kind(tmp_path: Path):
     assert relations[0].tgt_id == "os.path"
 
 
+def test_reader_references_edge_not_flagged_unknown_kind(tmp_path: Path):
+    """codeindex GH #128 (loomgraph#227): graph-export emits kind=REFERENCES
+    edges (Pass 4 import-ref + Pass 5 type-ref) connecting non-callable
+    exported symbols (const / interface / type_alias) that CALLS cannot reach.
+    Runs for every language with type annotations — not TS-only. The reader
+    must accept REFERENCES as a known kind: no 'unknown kind' schema warning,
+    mapped through like CALLS/INHERITS/IMPORTS."""
+    references_edge = {
+        "type": "edge",
+        "kind": "REFERENCES",
+        "src": ENTITY_RECORDS[0]["id"],
+        "dst": "app.types.Config",
+        "dst_raw": ".types.Config",
+        "resolution_qualifier": "resolved",
+        "source_id": "app/svc.py:1",
+    }
+    path = _write_ndjson(tmp_path, [MIN_META, *ENTITY_RECORDS, references_edge])
+    _, relations, summary = GraphExportReader(path).read()
+
+    assert summary.edge_kinds == {"REFERENCES": 1}
+    assert summary.relation_count == 1
+    assert summary.schema_warnings == [], (
+        f"REFERENCES must be a known kind; got warnings {summary.schema_warnings}"
+    )
+    assert len(relations) == 1
+    assert relations[0].edge_data["keywords"] == "REFERENCES"
+    assert relations[0].tgt_id == "app.types.Config"
+
+
 def test_reader_accepts_codeindex_full_entity_type_set(tmp_path: Path):
     """#76: codeindex graph-export emits one entity per parsed symbol with
     ``entity_type = sym.kind`` (graph_export.py). The Java/TS/PHP parsers

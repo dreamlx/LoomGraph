@@ -47,7 +47,13 @@ VALID_ENTITY_TYPES = {
     "interface", "method", "namespace", "property", "record",
     "type_alias", "variable",
 }
-VALID_EDGE_KINDS = {"CALLS", "INHERITS", "IMPORTS"}
+VALID_EDGE_KINDS = {"CALLS", "INHERITS", "IMPORTS", "REFERENCES"}
+# REFERENCES (codeindex GH #128): Pass 4 import-ref + Pass 5 type-ref edges that
+# connect non-callable exported symbols (const / interface / type_alias) imported
+# by name or used in type position. Runs for every language with type annotations
+# (not TS-only — 627/637 REFERENCES edges on codeindex's own repo come from .py
+# type annotations). The graph query layer and storage already accept REFERENCES
+# (see --relation-type flag listing); only this import gate lagged (#227).
 VALID_QUALIFIERS = {"resolved", "ambiguous", "unresolved"}
 
 # Historic sentinel for unresolved-edge targets. Pre-0.27.0 (no `dst_raw`
