@@ -119,6 +119,7 @@ def test_backend_aware_tool_cards_separate_setup_from_retrieval() -> None:
 
     assert "index ." in codeindex
     assert "must run one structural retrieval" in codeindex
+    assert "non-empty structural evidence" in codeindex
     assert "find <symbol>" in codeindex
     assert "Do not add `--format`" in codeindex
     assert "do not pipe or truncate its output" in codeindex
@@ -134,7 +135,7 @@ def test_assisted_requirement_recognizes_quoted_loomgraph_binary() -> None:
     adapter._orientation_use_mode = "assisted"
 
     assert adapter._retrieval_requirement(
-        ['"$HOME/.local/bin/loomgraph" find Vulture'], True
+        ['"$HOME/.local/bin/loomgraph" find Vulture'], True, True
     ) == (True, True)
 
 
@@ -152,6 +153,7 @@ def test_failed_retrieval_attempt_is_not_an_assisted_success() -> None:
                 {
                     "command": "$HOME/.local/bin/loomgraph find match --workspace /app",
                     "success": False,
+                    "evidence_bearing": False,
                 }
             ],
         ),
@@ -159,6 +161,32 @@ def test_failed_retrieval_attempt_is_not_an_assisted_success() -> None:
     )
 
     assert packet["tooling"]["loomgraph"]["retrieval_succeeded"] is False
+    assert packet["tooling"]["loomgraph"]["retrieval_evidence_succeeded"] is False
+    assert packet["retrieval_requirement_met"] is False
+
+
+def test_empty_successful_find_is_not_assisted_retrieval_evidence() -> None:
+    adapter = OmpWithLoomGraph.__new__(OmpWithLoomGraph)
+    adapter._loomgraph_backend = "codeindex"
+    adapter._orientation_use_mode = "assisted"
+
+    packet = adapter._packet_from_trace(
+        _encoded_trace(
+            _response(),
+            commands=["$HOME/.local/bin/loomgraph find BlendRanges"],
+            command_results=[
+                {
+                    "command": "$HOME/.local/bin/loomgraph find BlendRanges",
+                    "success": True,
+                    "evidence_bearing": False,
+                }
+            ],
+        ),
+        source_mutated=False,
+    )
+
+    assert packet["tooling"]["loomgraph"]["retrieval_succeeded"] is True
+    assert packet["tooling"]["loomgraph"]["retrieval_evidence_succeeded"] is False
     assert packet["retrieval_requirement_met"] is False
 
 

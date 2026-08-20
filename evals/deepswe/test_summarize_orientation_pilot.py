@@ -18,6 +18,7 @@ def _packet(
     orientation_mode: str = "voluntary", retrieval_required: bool = False,
     retrieval_requirement_met: bool | None = None,
     retrieval_succeeded: bool | None = None,
+    retrieval_evidence_succeeded: bool | None = None,
 ) -> dict[str, object]:
     return {
         "status": "complete",
@@ -35,6 +36,7 @@ def _packet(
                 "used": bool(commands),
                 "commands": commands,
                 "retrieval_succeeded": retrieval_succeeded,
+                "retrieval_evidence_succeeded": retrieval_evidence_succeeded,
             }
         },
     }
@@ -69,6 +71,7 @@ def test_score_records_observed_tool_budget_and_assisted_requirement() -> None:
             retrieval_required=True,
             retrieval_requirement_met=True,
             retrieval_succeeded=True,
+            retrieval_evidence_succeeded=True,
         ),
         None,
     )
@@ -79,6 +82,7 @@ def test_score_records_observed_tool_budget_and_assisted_requirement() -> None:
     assert score["retrieval_required"] is True
     assert score["retrieval_requirement_met"] is True
     assert score["loomgraph_retrieval_succeeded"] is True
+    assert score["loomgraph_retrieval_evidence_succeeded"] is True
 
 
 def test_score_keeps_a_failed_retrieval_attempt_distinct_from_success() -> None:
@@ -239,6 +243,7 @@ def test_pair_with_unsuccessful_assisted_retrieval_has_no_efficiency_delta() -> 
         "replicate": 1,
         "semantic_packet": True,
         "source_clean_model_phase": True,
+        "tool_call_budget_overrun": False,
         "uncached_input_tokens": 100,
     }
     pairs = _module.pair_efficiency(
@@ -249,11 +254,47 @@ def test_pair_with_unsuccessful_assisted_retrieval_has_no_efficiency_delta() -> 
                 "condition": "treatment",
                 "run": "treatment",
                 "loomgraph_retrieval_succeeded": False,
+                "retrieval_requirement_met": False,
                 "uncached_input_tokens": 80,
             },
         ]
     )
 
+    assert pairs[0]["quality_eligible"] is False
+    assert pairs[0]["uncached_input_tokens_delta"] is None
+
+
+def test_pair_over_tool_budget_has_no_efficiency_delta() -> None:
+    base = {
+        "task_id": "task",
+        "stratum": "codegraph-js-ts",
+        "use_mode": "assisted",
+        "replicate": 1,
+        "semantic_packet": True,
+        "source_clean_model_phase": True,
+        "loomgraph_retrieval_succeeded": True,
+        "retrieval_requirement_met": True,
+        "uncached_input_tokens": 100,
+    }
+    pairs = _module.pair_efficiency(
+        [
+            {
+                **base,
+                "condition": "baseline",
+                "run": "baseline",
+                "tool_call_budget_overrun": True,
+            },
+            {
+                **base,
+                "condition": "treatment",
+                "run": "treatment",
+                "tool_call_budget_overrun": False,
+                "uncached_input_tokens": 80,
+            },
+        ]
+    )
+
+    assert pairs[0]["tool_call_budget_compliant"] is False
     assert pairs[0]["quality_eligible"] is False
     assert pairs[0]["uncached_input_tokens_delta"] is None
 
@@ -266,6 +307,8 @@ def test_pair_summary_reports_inclusive_median_and_iqr_without_pooling() -> None
         "semantic_packet": True,
         "source_clean_model_phase": True,
         "loomgraph_retrieval_succeeded": True,
+        "tool_call_budget_overrun": False,
+        "retrieval_requirement_met": True,
     }
     rows = []
     for replicate, (baseline, treatment) in enumerate(((100, 96), (100, 98), (100, 108)), 1):

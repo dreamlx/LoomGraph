@@ -27,7 +27,7 @@ _CODEGRAPH_BIN = "$HOME/.local/bin/codegraph"
 def _tool_card(backend: str, use_mode: str, workspace: str | None = None) -> str:
     retrieval = (
         "You must run one structural retrieval command (`find` or `graph`) that "
-        "returns `success:true` before your final JSON response."
+        "returns `success:true` and non-empty structural evidence before your final JSON response."
         if use_mode == "assisted"
         else "You may run one structural retrieval command (`find` or `graph`) if useful."
     )
@@ -48,7 +48,7 @@ def _tool_card(backend: str, use_mode: str, workspace: str | None = None) -> str
 `$HOME/.local/bin/loomgraph`. {setup} {retrieval} A lone index is setup evidence,
 not navigation evidence. Run the retrieval command directly. Do not add `--format`,
 and do not pipe or truncate its output: LoomGraph already emits JSON and the adapter
-needs the complete response to verify `success:true`. Do not infer that an unavailable, partial, or
+needs the complete response to verify success and structural evidence. Do not infer that an unavailable, partial, or
 non-comparable result means no change; record the actual command and trust
 signal in your final JSON response."""
 
@@ -84,10 +84,13 @@ class OmpWithLoomGraph(OmpWithOrientation):
         return [".codegraph/"] if self._loomgraph_backend == "codegraph" else []
 
     def _retrieval_requirement(
-        self, commands: list[str], retrieval_succeeded: bool | None
+        self,
+        commands: list[str],
+        retrieval_succeeded: bool | None,
+        retrieval_evidence_succeeded: bool | None,
     ) -> tuple[bool, bool | None]:
         required = self._orientation_use_mode == "assisted"
-        return required, retrieval_succeeded if required else None
+        return required, retrieval_evidence_succeeded if required else None
 
     @staticmethod
     def _workspace_from_index_output(stdout: str) -> str | None:
