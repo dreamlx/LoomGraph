@@ -141,3 +141,6 @@ graphify-out/
 # codeindex root-level generated artifacts (src/**/README_AI.md are intentional)
 /CODEINDEX.md
 /PROJECT_SYMBOLS.md
+
+# codex CLI working-dir config (auto-generated, not project content)
+.codex/
