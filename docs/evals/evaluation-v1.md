@@ -42,6 +42,48 @@ task). `textual-richlog-follow-state` is excluded from the quality set because
 its instruction names the target classes and API; it remains useful as an
 adapter smoke task.
 
+## Runtime fidelity and track scope
+
+An agent-use run measures the combination of an agent runtime and its
+LoomGraph integration surface. It must never be generalized from one surface
+to another merely because both can execute the same CLI command.
+
+The current DeepSWE OMP harness is a **CLI compatibility dogfood track**. It
+installs LoomGraph in the task container and prepends a backend-aware CLI card
+to the rendered task instruction. OMP receives LoomGraph only through its
+`bash` tool; the harness enables a restricted built-in tool list and disables
+OMP skill/rule discovery. It does not register LoomGraph MCP tools, install
+LoomGraph's Claude Code skills, or provide codeindex-generated `README_AI.md`
+as agent context. In assisted mode it also requires a structural retrieval.
+
+Therefore OMP can establish all of the following:
+
+- offline installation, codeindex/codegraph setup, and JSON CLI compatibility;
+- whether the adapter records an actual, evidence-bearing retrieval; and
+- whether the packet, source-clean, and budget controls survive a real task
+  container.
+
+It cannot establish native tool discovery, voluntary product adoption, or a
+Claude Code / Pi-native token or navigation advantage. Assisted OMP results
+are compliance observations, not product-efficiency evidence; voluntary OMP
+results remain a compatibility diagnostic only.
+
+The high-fidelity agent-use tracks are deliberately separate:
+
+| Track | Integration under test | Valid claim |
+|---|---|---|
+| Claude Code | LoomGraph MCP registration plus project `CLAUDE.md` / skills | Native tool discovery and use in the product's primary workflow |
+| Pi-native | A Pi extension registering a minimal LoomGraph tool schema | Native Pi tool use with the same Pi runtime on both arms |
+| OMP | Explicit CLI card plus `bash` | Portable CLI compatibility and adapter integrity |
+
+Claude Code is the quickest next validation because LoomGraph already ships
+the MCP server and Claude-facing configuration path. Pi has no built-in MCP
+surface: a future Pi track must use an explicit extension that registers the
+smallest useful tool set (initially `loomgraph_find` and `loomgraph_graph`),
+rather than treating a Claude MCP config or a forced shell prompt as Pi-native
+integration. Baseline and treatment remain paired only within one row of this
+table; do not pool model, runtime, or integration surfaces.
+
 ## Target and leakage policy
 
 The reference target is the set of repository-relative paths changed by the
@@ -64,11 +106,12 @@ agent, the run is invalid for target-hit measurement.
 
 ## Controls and metrics
 
-Baseline and treatment must use the same task, model, OMP version, image,
+Baseline and treatment must use the same task, model, runtime version, image,
 architecture, prompt, tool permissions, wall/token budget, and task order.
-Treatment adds LoomGraph; it must not silently fall back to codeindex when the
-manifest requests codegraph. An unavailable backend is an infrastructure
-failure recorded per task and excluded from quality denominators.
+Treatment adds only the declared LoomGraph integration for that runtime; it
+must not silently fall back to codeindex when the manifest requests codegraph.
+An unavailable backend is an infrastructure failure recorded per task and
+excluded from quality denominators.
 
 `target_hit@5` is a quality guardrail and per-task diagnostic, not the primary
 outcome. A valid, source-clean treatment must not be presented as an efficiency
@@ -91,7 +134,8 @@ for valid, source-clean baseline/treatment pairs in the same task, mode, and
 replicate: uncached input tokens, output tokens, and `agent_execution_seconds`.
 For OMP, uncached input is `n_input_tokens - n_cache_tokens`, because its input
 counter includes cache reads. Cached input tokens and provider-reported cost
-remain separate. `agent_setup_seconds` (cold install/index) and
+remain separate. Each runtime must document its own equivalent counter before
+cross-run reporting. `agent_setup_seconds` (cold install/index) and
 `trial_wall_seconds` (end-to-end elapsed) are also reported separately: neither
 may be substituted for interactive navigation time.
 For each task/stratum/mode, publish all eligible paired deltas and their
@@ -135,12 +179,13 @@ missing or malformed responses are explicit invalid observations.
 ## Execution order
 
 1. Validate Track A capability fixtures.
-2. Run one task from each B stratum in baseline and treatment, and inspect raw traces.
-3. Run a counterbalanced N=3-per-condition pilot for one task from each stratum
-   once the codegraph install/index gate passes; publish raw rows plus paired
-   deltas and median/IQR, without pooling strata.
-4. Run the frozen 12-task manifest only if that pilot supports further spend.
-
-The current OMP harness smoke establishes the install, invocation, and artifact
-chain. It is not evidence for `target_hit@5` until this independent target set
-and the codegraph gate have both passed.
+2. Run a Claude Code MCP smoke on one task from each B stratum. Verify that the
+   native LoomGraph tools are registered and that the trace records their use;
+   this is the first product-fidelity gate.
+3. Run the OMP CLI smoke only to verify installation, invocation, and artifact
+   integrity. Do not promote its assisted results to an efficiency claim.
+4. Add the Pi-native track only after its minimal extension exists, then run a
+   counterbalanced N=3-per-condition pilot within that runtime.
+5. Run the frozen 12-task manifest only if a runtime-specific pilot supports
+   further spend. Publish raw rows plus paired deltas and median/IQR without
+   pooling strata or runtimes.
