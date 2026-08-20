@@ -56,6 +56,44 @@ the source-clean check begins only after setup. The bundle is intentionally
 kept outside the repository; the package version is controlled by
 `CODEGRAPH_VERSION` and defaults to `1.5.0`.
 
+## Claude Code native-MCP orientation
+
+`claude_orientation.py` is a host-side, read-only orientation runner. It is a
+separate runtime label from OMP/Pier: do not pool their timing, token, or
+quality rows. It retains the full `stream-json` trace, final `result` event,
+command, pre/post Git state, final run record, and adapter-owned
+`orientation.json` in an empty output directory. The source directory must
+start clean; any model-phase change makes the packet invalid.
+
+The two conditions share the same instruction file and JSON Schema. Baseline
+has only `Read`, `Glob`, and `Grep`; treatment has no built-in navigation tools
+and only the native MCP `loomgraph_find` and `loomgraph_graph` tools. Claude
+adds its required `StructuredOutput` tool when the JSON Schema is active. This
+uses Claude Code `--tools` for availability isolation; `--allowedTools` only
+auto-allows the treatment MCP calls.
+
+```bash
+python evals/deepswe/claude_orientation.py \
+  --condition baseline \
+  --task-id psd-tools-blend-range-api \
+  --source-dir /tmp/task-source \
+  --instruction-file /tmp/orientation.txt \
+  --output-dir /tmp/claude-baseline-1
+
+python evals/deepswe/claude_orientation.py \
+  --condition treatment \
+  --task-id psd-tools-blend-range-api \
+  --source-dir /tmp/task-source \
+  --instruction-file /tmp/orientation.txt \
+  --output-dir /tmp/claude-treatment-1
+```
+
+`--use-mode assisted` adds the same requirement to both arms to use at least
+one available navigation tool. It is not pooled with `voluntary`. Run an
+alternating baseline-first / treatment-first pair before calculating any
+efficiency delta. A Claude Code host run against the exact task source is not
+evidence that the Claude binary itself ran inside a DeepSWE container.
+
 ## Use modes
 
 `voluntary` is the default: LoomGraph is available, but the model may choose
