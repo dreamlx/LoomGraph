@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — impact `low`/`isolated` risk label is dishonest on a sparse graph (#230)
+- `RiskAssessor` now refuses the `"low: isolated change"` label when the
+  graph is sparse: a `resolved_ratio` in the 0.1–0.5 band with zero
+  discovered callers moves to `medium`, not `low`. At that ratio most CALLS
+  edges are unresolved and an empty traversal often reflects a factory / DI
+  resolution blind spot (the receiver type is statically unknowable to the
+  AST — codeindex GH #127), not true isolation. Self-dogfood on this repo:
+  `impact --file src/loomgraph/storage/sqlite_store.py` reported
+  `low / "no callers found, isolated change"` at `resolved_ratio 0.1989`,
+  though `SqliteGraphStore` has ~20 factory-routed call sites. The reason
+  string now names the blind spot and points to grep for verification.
+  Below 0.1 (extreme-blind) stays `unknown`; above 0.5 (dense) keeps the
+  trustworthy `low / isolated` label. Engine-side fix (codeindex return-type
+  binding) tracked separately.
+
+### Fixed — import-export stops spamming unknown-kind warnings for REFERENCES edges (#227)
+- `export_reader.VALID_EDGE_KINDS` now includes `REFERENCES` (codeindex GH
+  #128, Pass 4 import-ref + Pass 5 type-ref). REFERENCES edges were already
+  stored and already queryable via `graph --relation-type REFERENCES`, but
+  the import gate lagged, emitting one `unknown kind 'REFERENCES'` schema
+  warning per edge (638 lines on the codeindex repo's own artifact). The
+  kind runs for every language with type annotations — not TS-only — 627/637
+  REFERENCES edges on codeindex's own repo come from `.py` type annotations.
+
 ## [0.21.1] - 2026-08-19
 
 ### Changed — distinguish guided retrieval from setup-only evaluation use (#209)

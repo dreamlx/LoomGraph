@@ -30,6 +30,16 @@ CORE_MODULES = {
 # warning tier for TS path aliases / Java DI blind spots.
 LOW_RESOLUTION_THRESHOLD = 0.1
 
+# A resolved_ratio in this band sits above the extreme-blind floor but below
+# dense: most edges are unresolved, so an empty caller list may reflect a
+# factory / DI resolution blind spot (the receiver type is statically
+# unknowable to the AST — GH #230, GH #127), not true isolation. Below
+# LOW_RESOLUTION_THRESHOLD the graph is so blind we cannot even guess (→
+# "unknown"); in the sparse band we can say enough to refuse the "isolated"
+# label but not enough to call it high (→ "medium"). Above this, an empty
+# traversal is trustworthy isolation.
+SPARSE_RESOLUTION_THRESHOLD = 0.5
+
 
 @dataclass
 class RiskAssessor:
@@ -82,6 +92,24 @@ class RiskAssessor:
                     f"{resolved_ratio:.1%} is below "
                     f"{LOW_RESOLUTION_THRESHOLD:.0%}; {total_callers} discovered "
                     "caller(s) does not establish a limited blast radius"
+                )
+            elif (
+                resolved_ratio is not None
+                and resolved_ratio < SPARSE_RESOLUTION_THRESHOLD
+                and total_callers == 0
+            ):
+                # GH #230: at this ratio most CALLS edges are unresolved, and
+                # factory / DI dispatch is the common blind spot — the receiver
+                # type is statically unknowable to the AST (GH #127). An empty
+                # caller list here may be the blind spot, not isolation, so the
+                # "isolated change" label is dishonest. Medium, not low.
+                level = "medium"
+                reason = (
+                    f"Moderate risk: 0 discovered callers on a sparse graph "
+                    f"(resolved_ratio {resolved_ratio:.1%}, below "
+                    f"{SPARSE_RESOLUTION_THRESHOLD:.0%}); empty traversal may "
+                    "reflect a factory/DI resolution blind spot, not "
+                    "isolation — grep factory usage to verify"
                 )
             else:
                 level = "low"

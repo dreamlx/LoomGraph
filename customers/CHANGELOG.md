@@ -8,6 +8,10 @@
 
 > **更新方式**: `pipx upgrade loomgraph`（已装 `[embed]` extra 的用 `pipx upgrade loomgraph --include-extra`）。
 
+### 修复 — `impact` 不再对稀疏图谱误报「低风险 / 隔离改动」（#230）
+
+- 当知识图谱的边解析率（`resolved_ratio`）处于 0.1–0.5 区间且未发现调用方时，`impact` 的风险等级从 `low`（隔离改动）上调为 `medium`。该区间下多数 CALLS 边未解析，空调用方列表往往源于 factory / DI 分派的解析盲区（receiver 类型对 AST 静态不可知），而非真正无调用方。等级不再发出「隔离」结论，reason 字符串会点名盲区并提示用 grep 核实 factory 用法。低于 0.1（极盲）维持 `unknown`；高于 0.5（稠密）保持可信的 `low / 隔离`。
+
 ### 修复 — 缺失 parser grammar 时给出可直接复制的修复命令（#210）
 
 - `index`、`update` 和 MCP `refresh` 检测到缺少已支持语言的 tree-sitter grammar 时，

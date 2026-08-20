@@ -302,8 +302,34 @@ class TestRiskAssessor:
         assert "1.8%" in risk.reason
         assert "not establish" in risk.reason
 
-    def test_sufficient_resolution_empty_callers_remains_low(self) -> None:
-        """The trust guard does not change normal graph behavior."""
+    def test_sparse_resolution_empty_callers_not_isolated(self) -> None:
+        """A sparse graph (factory/DI band) cannot prove isolation either.
+
+        resolved_ratio in the 0.1-0.5 band sits above the extreme-blind floor
+        but below dense: most edges are unresolved, so an empty caller list may
+        reflect a factory/DI resolution blind spot, not true isolation. The
+        assessor must NOT emit "isolated change" here (GH #230: GraphStore.*
+        methods showed 0 callers at ratio 0.1989 despite 20+ factory call sites).
+        """
+        result = ImpactResult(
+            commit="abc123",
+            changed_symbols=[
+                ChangedSymbol(
+                    name="SqliteGraphStore.create_entity",
+                    file="src/storage/sqlite_store.py",
+                    change_type=ChangeType.MODIFIED,
+                )
+            ],
+        )
+
+        risk = RiskAssessor().assess(result, resolved_ratio=0.1989)
+
+        assert risk.level == "medium"
+        assert "isolated" not in risk.reason
+        assert "19.9%" in risk.reason
+
+    def test_dense_resolution_empty_callers_is_isolated(self) -> None:
+        """Only on a dense graph does an empty traversal prove isolation."""
         result = ImpactResult(
             commit="abc123",
             changed_symbols=[
@@ -315,7 +341,7 @@ class TestRiskAssessor:
             ],
         )
 
-        risk = RiskAssessor().assess(result, resolved_ratio=0.2)
+        risk = RiskAssessor().assess(result, resolved_ratio=0.6)
 
         assert risk.level == "low"
         assert risk.reason == "Low risk: no callers found, isolated change"
