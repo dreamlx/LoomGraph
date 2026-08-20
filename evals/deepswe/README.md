@@ -66,17 +66,19 @@ already been indexed by setup and must not be indexed again; codeindex may be
 indexed once before retrieval.
 
 The adapter records observed `tool_call_count`, the five-call budget-overrun
-flag, and both structural-retrieval attempts and confirmed successful
+flag, and structural-retrieval attempts, command success, and evidence-bearing
 retrievals (from OMP tool-result events, not model self-report). Assisted mode
-requires one successful structural retrieval. These are operational
+requires one successful retrieval with structural evidence: a `find` needs a
+non-empty match set and a `graph` needs a resolved entity. These are operational
 measurements, not target-hit penalties.
 
 The summary also reads Pier's sibling trial `result.json`: uncached input
 tokens, cached input tokens, output tokens, model cost, agent navigation time,
 cold setup time, and total trial time. It emits raw rows, only explicit
 baseline/treatment replicate pairs, and per-task/stratum/mode delta summaries
-with the inclusive median and IQR. Quality-invalid rows and unsuccessful
-assisted treatment do not receive an efficiency delta.
+with the inclusive median and IQR. Quality-invalid rows, either side exceeding
+the five-call budget, and assisted treatment without evidence-bearing retrieval
+do not receive an efficiency delta.
 
 Each output directory contains Pier's result plus:
 

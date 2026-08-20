@@ -170,6 +170,9 @@ def score_packet(packet: dict[str, Any], target: dict[str, Any] | None) -> dict[
         "loomgraph_retrieval_succeeded": (
             tool.get("retrieval_succeeded") if isinstance(tool, dict) else None
         ),
+        "loomgraph_retrieval_evidence_succeeded": (
+            tool.get("retrieval_evidence_succeeded") if isinstance(tool, dict) else None
+        ),
         "loomgraph_index_only": use["index_only"],
         "tool_call_count": tool_call_count if isinstance(tool_call_count, int) else None,
         "tool_call_budget": packet.get("tool_call_budget"),
@@ -277,12 +280,16 @@ def summarize(output_dir: Path, targets: dict[str, dict[str, Any]]) -> list[dict
 
 
 def _quality_eligible(row: dict[str, object]) -> bool:
-    if not row.get("semantic_packet") or not row.get("source_clean_model_phase"):
+    if (
+        not row.get("semantic_packet")
+        or not row.get("source_clean_model_phase")
+        or row.get("tool_call_budget_overrun") is not False
+    ):
         return False
     return not (
         row.get("condition") == "treatment"
         and row.get("use_mode") == "assisted"
-        and row.get("loomgraph_retrieval_succeeded") is not True
+        and row.get("retrieval_requirement_met") is not True
     )
 
 
@@ -303,6 +310,10 @@ def pair_efficiency(rows: list[dict[str, object]]) -> list[dict[str, object]]:
         if baseline is None or treatment is None:
             continue
         eligible = _quality_eligible(baseline) and _quality_eligible(treatment)
+        budget_compliant = (
+            baseline.get("tool_call_budget_overrun") is False
+            and treatment.get("tool_call_budget_overrun") is False
+        )
         pair: dict[str, object] = {
             "task_id": baseline.get("task_id"),
             "stratum": baseline.get("stratum"),
@@ -310,6 +321,7 @@ def pair_efficiency(rows: list[dict[str, object]]) -> list[dict[str, object]]:
             "replicate": replicate,
             "baseline_run": baseline.get("run"),
             "treatment_run": treatment.get("run"),
+            "tool_call_budget_compliant": budget_compliant,
             "quality_eligible": eligible,
         }
         for field in _EFFICIENCY_FIELDS:
@@ -417,6 +429,7 @@ def main() -> int:
         "loomgraph_invoked",
         "loomgraph_retrieval_used",
         "loomgraph_retrieval_succeeded",
+        "loomgraph_retrieval_evidence_succeeded",
         "loomgraph_index_only",
         "tool_call_count",
         "tool_call_budget",

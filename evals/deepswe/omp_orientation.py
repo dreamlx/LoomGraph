@@ -37,9 +37,9 @@ loomgraph_command_results = []
 tool_call_count = 0
 
 
-def command_success(event):
+def command_result(command, event):
     if event.get("isError") is True:
-        return False
+        return False, False
     result = event.get("result") or {}
     content = result.get("content") or []
     text = "".join(
@@ -50,8 +50,19 @@ def command_success(event):
     try:
         payload, _ = json.JSONDecoder().raw_decode(text)
     except json.JSONDecodeError:
-        return False
-    return payload.get("success") is True if isinstance(payload, dict) else False
+        return False, False
+    if not isinstance(payload, dict) or payload.get("success") is not True:
+        return False, False
+
+    data = payload.get("data")
+    if not isinstance(data, dict):
+        return True, False
+    normalized = command.replace('"', '').replace("'", "")
+    if "loomgraph find" in normalized:
+        return True, isinstance(data.get("matches"), list) and bool(data["matches"])
+    if "loomgraph graph" in normalized:
+        return True, isinstance(data.get("source_id"), str) and bool(data["source_id"])
+    return True, False
 
 
 with open("/logs/agent/omp.txt", encoding="utf-8", errors="replace") as trace:
@@ -63,9 +74,11 @@ with open("/logs/agent/omp.txt", encoding="utf-8", errors="replace") as trace:
         if event.get("type") == "tool_execution_end" and event.get("toolName") == "bash":
             command = loomgraph_command_by_id.get(event.get("toolCallId"))
             if command is not None:
+                success, evidence_bearing = command_result(command, event)
                 loomgraph_command_results.append({
                     "command": command,
-                    "success": command_success(event),
+                    "success": success,
+                    "evidence_bearing": evidence_bearing,
                 })
             continue
         if event.get("type") == "message_end":
@@ -173,6 +186,7 @@ class OmpWithOrientation(Omp):
                 isinstance(result, dict)
                 and isinstance(result.get("command"), str)
                 and isinstance(result.get("success"), bool)
+                and isinstance(result.get("evidence_bearing"), bool)
                 for result in command_results
             )
             or not isinstance(tool_call_count, int)
@@ -189,8 +203,18 @@ class OmpWithOrientation(Omp):
             if retrieval_attempted
             else None
         )
+        retrieval_evidence_succeeded = (
+            any(
+                is_loomgraph_retrieval(result["command"])
+                and result["success"]
+                and result["evidence_bearing"]
+                for result in command_results
+            )
+            if retrieval_attempted
+            else None
+        )
         retrieval_required, retrieval_requirement_met = self._retrieval_requirement(
-            commands, retrieval_succeeded
+            commands, retrieval_succeeded, retrieval_evidence_succeeded
         )
 
         return {
@@ -213,6 +237,7 @@ class OmpWithOrientation(Omp):
                     "used": bool(commands),
                     "commands": commands,
                     "retrieval_succeeded": retrieval_succeeded,
+                    "retrieval_evidence_succeeded": retrieval_evidence_succeeded,
                     "workspace": response["tooling"]["loomgraph"].get("workspace"),
                     "backend": response["tooling"]["loomgraph"].get("backend"),
                     "trust": response["tooling"]["loomgraph"].get("trust"),
@@ -251,7 +276,10 @@ class OmpWithOrientation(Omp):
         )
 
     def _retrieval_requirement(
-        self, commands: list[str], retrieval_succeeded: bool | None
+        self,
+        commands: list[str],
+        retrieval_succeeded: bool | None,
+        retrieval_evidence_succeeded: bool | None,
     ) -> tuple[bool, bool | None]:
         return False, None
 
@@ -276,6 +304,7 @@ class OmpWithOrientation(Omp):
                     "used": False,
                     "commands": [],
                     "retrieval_succeeded": None,
+                    "retrieval_evidence_succeeded": None,
                 }
             },
         }
