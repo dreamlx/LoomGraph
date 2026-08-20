@@ -127,3 +127,21 @@ def test_packet_rejects_malformed_schema_payload() -> None:
     )
 
     assert packet["status"] == "missing_or_invalid_agent_response"
+
+
+def test_packet_records_the_shared_tool_call_budget() -> None:
+    packet = _MODULE.build_packet(
+        condition="treatment",
+        use_mode="voluntary",
+        source_clean=True,
+        return_code=0,
+        summary={
+            "final_result_seen": True,
+            "payload": {"candidates": [{"path": "src/x.py", "evidence": "x"}]},
+            "tool_names": ["mcp__loomgraph__loomgraph_find"] * 6,
+            "loomgraph_tools": ["mcp__loomgraph__loomgraph_find"] * 6,
+        },
+    )
+
+    assert packet["tool_call_budget"] == 5
+    assert packet["tool_call_budget_overrun"] is True

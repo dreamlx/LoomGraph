@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 BASELINE_TOOLS = "Read,Glob,Grep"
+TOOL_CALL_BUDGET = 5
 LOOMGRAPH_TOOLS = [
     "mcp__loomgraph__loomgraph_find",
     "mcp__loomgraph__loomgraph_graph",
@@ -209,6 +210,8 @@ def build_packet(
         "semantic_packet": status == "complete",
         "candidates": payload.get("candidates", []) if isinstance(payload, dict) else [],
         "tool_call_count": len(tool_names),
+        "tool_call_budget": TOOL_CALL_BUDGET,
+        "tool_call_budget_overrun": len(tool_names) > TOOL_CALL_BUDGET,
         "tooling": {
             "loomgraph": {
                 "used": bool(loomgraph_tools),
