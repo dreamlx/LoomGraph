@@ -49,8 +49,16 @@ dependencies = [
     "click>=8.0",
     "rich>=13.0",
 
-    # Code parsing (>=0.35.0: codeindex#154 de-double Java entity ids + edge srcs — Java CALLS orphan 60%->41%. 0.34.0: #147 graph-export exits non-zero on 0-entity — second gate alongside loomgraph's assess_export; #148 unresolved breakdown + ratio warn; #149 init gitignores ndjson. 0.33.3: TS path-alias fix codeindex#144; 0.33.1: graph-export honors include: #137; 0.32.0: IMPORTS edges + Java caller fix #76)
-    "ai-codeindex>=0.35.0",
+    # Code parsing (>=0.40.0: codeindex#187 descend factory return type to
+    # subclass impl — factory-routed ABC method callers resolve (loomgraph
+    # #230 engine-side fix); single in-workspace subclass → resolved, multi
+    # → ambiguous. 0.35.0: codeindex#154 de-double Java entity ids + edge
+    # srcs — Java CALLS orphan 60%->41%. 0.34.0: #147 graph-export exits
+    # non-zero on 0-entity — second gate alongside loomgraph's assess_export;
+    # #148 unresolved breakdown + ratio warn; #149 init gitignores ndjson.
+    # 0.33.3: TS path-alias fix codeindex#144; 0.33.1: graph-export honors
+    # include: #137; 0.32.0: IMPORTS edges + Java caller fix #76)
+    "ai-codeindex>=0.40.0",
     "tree-sitter-python>=0.23",
     "tree-sitter-php>=0.23",
 
