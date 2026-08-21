@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — bump codeindex pin to `>=0.40.0` (codeindex #187, #230 engine-side fix)
+- `ai-codeindex>=0.35.0` → `>=0.40.0`. codeindex #187 extends the GH #185
+  factory-return-type binding to descend to a subclass impl when the factory
+  names an abstract base (`create_graph_store() -> GraphStore(ABC)`) whose
+  `@abstractmethod` has no entity (parser skips abstract methods). Exactly
+  one in-workspace subclass carrying the method resolves to its impl; two or
+  more stays unresolved (ambiguous dynamic dispatch). This is the engine-side
+  fix for #230: self-dogfood now resolves 8/33 `store.*` CALLS edges that
+  were previously orphans, and `loomgraph graph insert_custom_kg` returns
+  `1` caller (`_async_import_export`) instead of `0`. The L0 dishonest-label
+  fix below stays — it guards the 25/33 edges still unresolved (function-
+  parameter receivers / tuple-unpacking, a deeper cross-scope gap codeindex
+  does not yet cover).
+
 ### Fixed — impact `low`/`isolated` risk label is dishonest on a sparse graph (#230)
 - `RiskAssessor` now refuses the `"low: isolated change"` label when the
   graph is sparse: a `resolved_ratio` in the 0.1–0.5 band with zero

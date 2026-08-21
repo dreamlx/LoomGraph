@@ -8,6 +8,10 @@
 
 > **更新方式**: `pipx upgrade loomgraph`（已装 `[embed]` extra 的用 `pipx upgrade loomgraph --include-extra`）。
 
+### 变更 — 升级 codeindex 至 `>=0.40.0`（codeindex #187，#230 引擎侧修复）
+
+- 依赖 `ai-codeindex` 从 `>=0.35.0` 升至 `>=0.40.0`。codeindex #187 扩展了 factory 返回类型绑定：当 factory 返回的是抽象基类（`create_graph_store() -> GraphStore(ABC)`）而方法的实体在子类时（`@abstractmethod` 被 parser 跳过），现在会下钻到唯一的 in-workspace 子类实现并解析 CALLS 边；多个子类则保持未解析（真正的动态分派歧义，不猜测）。这是 #230 的引擎侧修复：self-dogfood 下 `loomgraph graph insert_custom_kg` 从 0 调用方变为 1（`_async_import_export`）。下方的 L0 风险标签修复仍保留，守卫剩余 25/33 条仍未解析的边（函数参数 receiver / tuple 解包，属更深的跨 scope 类型传播 gap，codeindex 尚未覆盖）。
+
 ### 修复 — `impact` 不再对稀疏图谱误报「低风险 / 隔离改动」（#230）
 
 - 当知识图谱的边解析率（`resolved_ratio`）处于 0.1–0.5 区间且未发现调用方时，`impact` 的风险等级从 `low`（隔离改动）上调为 `medium`。该区间下多数 CALLS 边未解析，空调用方列表往往源于 factory / DI 分派的解析盲区（receiver 类型对 AST 静态不可知），而非真正无调用方。等级不再发出「隔离」结论，reason 字符串会点名盲区并提示用 grep 核实 factory 用法。低于 0.1（极盲）维持 `unknown`；高于 0.5（稠密）保持可信的 `low / 隔离`。
