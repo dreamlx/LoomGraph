@@ -740,8 +740,8 @@ class TestResolutionBreakdownSplit:
 
     async def test_persist_writes_three_meta_keys(self, tmp_path):
         """ingest must persist resolved_ratio + the two split keys."""
-        from loomgraph.storage.sqlite_store import SqliteGraphStore
         from loomgraph.core.graph_export_ingest import ingest
+        from loomgraph.storage.sqlite_store import SqliteGraphStore
 
         store = SqliteGraphStore(db_path=tmp_path / "b.db")
         await store.initialize()
@@ -763,8 +763,8 @@ class TestResolutionBreakdownSplit:
         """ingest_incremental must pass the qualifier through (not strip
         edge_data) so the split is recomputed over the full export — mirrors
         the existing full-graph resolved_ratio regression (#158 C1-2)."""
-        from loomgraph.storage.sqlite_store import SqliteGraphStore
         from loomgraph.core.graph_export_ingest import ingest, ingest_incremental
+        from loomgraph.storage.sqlite_store import SqliteGraphStore
 
         store = SqliteGraphStore(db_path=tmp_path / "bi.db")
         await store.initialize()
