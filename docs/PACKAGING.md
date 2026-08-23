@@ -44,6 +44,7 @@ push `v*` tag 前在当前仓跑（.venv 已 `uv sync`，代表用户装机后�
 
 ```bash
 loomgraph index . --clear && loomgraph status && loomgraph debt --with-git
+.venv/bin/pytest tests/ -q          # NOT bare `pytest` — see trap below
 ```
 
 确认三点（任一异常 → **停，先修，不要打 tag**）：
@@ -54,6 +55,12 @@ loomgraph index . --clear && loomgraph status && loomgraph debt --with-git
   类的正反两面都靠这个判据抓）
 - `debt`：`overall_health.breakdown.git` 不是 0-cliff（有 git 信号的仓
   应在 0–100 之间，不是非 0 即 100）；`issues[].source` 字段存在
+
+> **pytest 坑**：PATH 上的 `pytest` 常是 pipx 全局的 py3.14，没装 loomgraph
+> package metadata → 50 个 `PackageNotFoundError: No package metadata was
+> found for loomgraph` collection error，看着像全挂了其实是环境错位。必须
+> 用 `.venv/bin/pytest`（venv py3.12 + editable install）。v0.22.0 发版前
+> 踩过一次。
 
 > 这是人工 gate，不做进 CI。CI 只跑静态测试；self-dogfood 是"装机后真值"
 > 的唯一来源。若自查发现 bug，修完重跑，**bug 修复不进同一 tag**（要么
