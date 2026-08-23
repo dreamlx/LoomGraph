@@ -670,3 +670,124 @@ class TestIncrementalRatioOverFullGraph:
         result = await ingest_incremental(ents2, rels, store, changed_files={"a.py"})
         assert result["resolved_ratio"] == 0.5
         await store.close()
+
+
+class TestResolutionBreakdownSplit:
+    """#208: decompose non-resolved edges into internal_unresolved
+    (qualifier=ambiguous — actionable DI/dynamic-dispatch defect) vs
+    external_unresolved (qualifier=unresolved — expected external calls +
+    non-actionable codeindex-blind). Additive: resolved_ratio stays
+    join-based + backwards-compat; the two new ratios are qualifier counts
+    over the same denominator. No risk-band migration — the #231 factory
+    blind spot lives in the unresolved bucket and the split can't separate
+    it from genuine external calls at this layer."""
+
+    @staticmethod
+    def _ent(name):
+        return EntityData(entity_name=name, entity_data={"source_id": f"{name}.py"})
+
+    @staticmethod
+    def _rel(s, t, qualifier):
+        return RelationData(
+            src_id=s, tgt_id=t,
+            edge_data={"resolution_qualifier": qualifier},
+        )
+
+    def test_breakdown_partitions_qualifiers(self):
+        from loomgraph.core.graph_export_ingest import compute_resolution_breakdown
+
+        ents = [self._ent("A"), self._ent("B")]
+        # A→B resolved (joins); A→C ambiguous (in-repo guess, defect);
+        # A→os.environ.get unresolved (external/expected); A→self.x ambiguous.
+        rels = [
+            self._rel("A", "B", "resolved"),
+            self._rel("A", "C", "ambiguous"),
+            self._rel("A", "os.environ.get", "unresolved"),
+            self._rel("A", "self.x", "ambiguous"),
+        ]
+        rd = [{"src_id": r.src_id, "tgt_id": r.tgt_id, **r.edge_data} for r in rels]
+        ed = [{"entity_name": e.entity_name} for e in ents]
+
+        b = compute_resolution_breakdown(ed, rd)
+        assert b["resolved_ratio"] == 0.25          # 1 of 4 joins
+        assert b["internal_unresolved_ratio"] == 0.5  # 2 ambiguous / 4
+        assert b["external_unresolved_ratio"] == 0.25  # 1 unresolved / 4
+
+    def test_breakdown_none_when_no_relations(self):
+        from loomgraph.core.graph_export_ingest import compute_resolution_breakdown
+
+        b = compute_resolution_breakdown([], [])
+        assert b["resolved_ratio"] is None
+        assert b["internal_unresolved_ratio"] is None
+        assert b["external_unresolved_ratio"] is None
+
+    def test_edges_without_qualifier_count_in_neither_new_bucket(self):
+        """An edge with no resolution_qualifier (e.g. codegraph adapter or
+        legacy _rel) is neither internal nor external — it falls to the
+        resolved-ratio join only. Keeps the split honest: only codeindex's
+        own verdicts populate the two new buckets."""
+        from loomgraph.core.graph_export_ingest import compute_resolution_breakdown
+
+        ents = [self._ent("A"), self._ent("B")]
+        rels = [RelationData(src_id="A", tgt_id="B", edge_data={})]
+        rd = [{"src_id": r.src_id, "tgt_id": r.tgt_id, **r.edge_data} for r in rels]
+        ed = [{"entity_name": e.entity_name} for e in ents]
+
+        b = compute_resolution_breakdown(ed, rd)
+        assert b["resolved_ratio"] == 1.0
+        assert b["internal_unresolved_ratio"] == 0.0
+        assert b["external_unresolved_ratio"] == 0.0
+
+    async def test_persist_writes_three_meta_keys(self, tmp_path):
+        """ingest must persist resolved_ratio + the two split keys."""
+        from loomgraph.storage.sqlite_store import SqliteGraphStore
+        from loomgraph.core.graph_export_ingest import ingest
+
+        store = SqliteGraphStore(db_path=tmp_path / "b.db")
+        await store.initialize()
+
+        ents = [self._ent("A"), self._ent("B")]
+        rels = [
+            self._rel("A", "B", "resolved"),
+            self._rel("A", "C", "ambiguous"),
+            self._rel("A", "os.environ.get", "unresolved"),
+        ]
+        await ingest(ents, rels, store, clear=True)
+
+        assert await store.get_meta("resolved_ratio") == "0.3333"
+        assert await store.get_meta("internal_unresolved_ratio") == "0.3333"
+        assert await store.get_meta("external_unresolved_ratio") == "0.3333"
+        await store.close()
+
+    async def test_incremental_persists_split_over_full_graph(self, tmp_path):
+        """ingest_incremental must pass the qualifier through (not strip
+        edge_data) so the split is recomputed over the full export — mirrors
+        the existing full-graph resolved_ratio regression (#158 C1-2)."""
+        from loomgraph.storage.sqlite_store import SqliteGraphStore
+        from loomgraph.core.graph_export_ingest import ingest, ingest_incremental
+
+        store = SqliteGraphStore(db_path=tmp_path / "bi.db")
+        await store.initialize()
+
+        ents = [self._mk_full("A", "a.py"), self._mk_full("B", "b.py")]
+        rels = [
+            self._rel("A", "B", "resolved"),
+            self._rel("A", "C", "ambiguous"),
+        ]
+        await ingest(ents, rels, store, clear=True)
+        assert await store.get_meta("internal_unresolved_ratio") == "0.5"
+
+        # zero-change update must keep the split (not wipe to '')
+        result = await ingest_incremental(ents, rels, store, changed_files=set())
+        assert result["resolved_ratio"] == 0.5
+        assert await store.get_meta("resolved_ratio") == "0.5"
+        assert await store.get_meta("internal_unresolved_ratio") == "0.5"
+        assert await store.get_meta("external_unresolved_ratio") == "0.0"
+        await store.close()
+
+    @staticmethod
+    def _mk_full(name, source_id, content_hash="h1"):
+        return EntityData(
+            entity_name=name,
+            entity_data={"source_id": source_id, "content_hash": content_hash},
+        )

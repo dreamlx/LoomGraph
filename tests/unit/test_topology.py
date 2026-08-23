@@ -875,3 +875,22 @@ class TestResolutionTrustCalculus:
         d = result.to_dict()
         assert d["resolution"]["resolved_ratio"] == 0.5
         assert "caveat" in d["resolution"]
+
+    async def test_analyze_surfaces_persisted_split_keys(self, tmp_path):
+        """#208: the async ``analyze`` path surfaces the persisted
+        internal/external unresolved ratios alongside resolved_ratio."""
+        from loomgraph.storage.sqlite_store import SqliteGraphStore
+
+        store = SqliteGraphStore(db_path=tmp_path / "t.db")
+        await store.initialize()
+        await store.set_meta("resolved_ratio", "0.2")
+        await store.set_meta("internal_unresolved_ratio", "0.1")
+        await store.set_meta("external_unresolved_ratio", "0.7")
+
+        result = await TopologyAnalyzer(client=store).analyze()
+        d = result.to_dict()
+        assert d["resolution"]["resolved_ratio"] == 0.2
+        assert d["resolution"]["internal_unresolved_ratio"] == 0.1
+        assert d["resolution"]["external_unresolved_ratio"] == 0.7
+        await store.close()
+

@@ -505,16 +505,26 @@ class TopologyAnalyzer:
         # #154: surface persisted resolution quality (written at ingest) so
         # consumers can distrust orphan/score readings on low-resolution
         # graphs (Java DI / TS alias blind spots).
+        # #208: also surface the internal/external unresolved split —
+        # internal_unresolved is the actionable DI/dispatch defect share;
+        # external_unresolved is expected external calls (non-actionable).
         get_meta = getattr(self.client, "get_meta", None)
         if get_meta is not None:
             raw = await get_meta("resolved_ratio")
             # '' = cleared ratio (empty graph, #158 review C1-2) — skip.
             if raw:
                 ratio = float(raw)
-                result.resolution = {
+                resolution: dict[str, Any] = {
                     "resolved_ratio": ratio,
                     "caveat": resolution_caveat(ratio),
                 }
+                iraw = await get_meta("internal_unresolved_ratio")
+                eraw = await get_meta("external_unresolved_ratio")
+                if iraw:
+                    resolution["internal_unresolved_ratio"] = float(iraw)
+                if eraw:
+                    resolution["external_unresolved_ratio"] = float(eraw)
+                result.resolution = resolution
         return result
 
     def analyze_from_data(

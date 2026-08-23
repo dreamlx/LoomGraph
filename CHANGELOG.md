@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — resolved_ratio split into internal/external unresolved (#208)
+- `compute_resolution_breakdown()` decomposes edges into three ratios over
+  the same denominator: `resolved_ratio` (join-based, unchanged) +
+  `internal_unresolved_ratio` (codeindex `ambiguous` qualifier — actionable
+  DI / dynamic-dispatch defect where the parser saw in-repo candidates but
+  couldn't disambiguate) + `external_unresolved_ratio` (codeindex
+  `unresolved` qualifier — expected external / stdlib calls, plus
+  codeindex-blind internal edges that are indistinguishable from external at
+  this layer). All three are persisted as workspace meta on every ingest
+  path (cold `index`, incremental `update`, `import-export`). `topology`
+  and `impact` surface the two new keys alongside `resolved_ratio`.
+- **Additive only — no risk-band migration.** The #231 factory / DI blind
+  spot (receiver type statically unknowable, GH #127) lives in the
+  `unresolved` qualifier bucket; codeindex's qualifier cannot separate it
+  from genuine external calls, so migrating the `impact` risk band from
+  `resolved_ratio` to `internal_unresolved_ratio` (ambiguous-only) would
+  reopen the false-`isolated` label #231 just closed. The split is a
+  read-side diagnostic; the band still reads `resolved_ratio`. A clean
+  band migration would need codeindex to flag unresolved edges with an
+  in-repo target hint — upstream, not loomgraph's layer.
+
 ### Changed — bump codeindex pin to `>=0.40.0` (codeindex #187, #230 engine-side fix)
 - `ai-codeindex>=0.35.0` → `>=0.40.0`. codeindex #187 extends the GH #185
   factory-return-type binding to descend to a subclass impl when the factory

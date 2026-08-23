@@ -218,17 +218,69 @@ def compute_resolved_ratio(
     return round(resolved / len(relation_dicts), 4)
 
 
+def compute_resolution_breakdown(
+    entity_dicts: list[dict[str, Any]],
+    relation_dicts: list[dict[str, Any]],
+) -> dict[str, float | None]:
+    """Decompose edges into resolved + internal/external unresolved (#208).
+
+    Additive to ``resolved_ratio`` — keeps that key join-based and
+    backwards-compatible, and adds two qualifier-based ratios over the same
+    denominator:
+
+    - ``resolved_ratio``: join-based, unchanged (both endpoints stored).
+    - ``internal_unresolved_ratio``: edges codeindex marked ``ambiguous``
+      (in-repo candidates existed but couldn't be disambiguated — DI /
+      dynamic dispatch). **Actionable defect**: the parser saw a target.
+    - ``external_unresolved_ratio``: edges codeindex marked ``unresolved``
+      (no candidate). **Expected** for external/stdlib calls; also contains
+      codeindex-blind internal edges (factory receiver type statically
+      unknowable — GH #127) that are indistinguishable from external at
+      this layer. Non-actionable from loomgraph; the fix is upstream parser.
+
+    The two new buckets do NOT sum with ``resolved_ratio`` to 1.0 in the
+    rare case of a ``resolved``-qualifier edge whose dst entity was
+    excluded from ingest (filtered file) — those join-fail but carry no
+    ``ambiguous``/``unresolved`` verdict, so they fall outside all three.
+    Edges with no ``resolution_qualifier`` (codegraph adapter, legacy
+    relations) populate neither new bucket.
+    """
+    if not relation_dicts:
+        return {
+            "resolved_ratio": None,
+            "internal_unresolved_ratio": None,
+            "external_unresolved_ratio": None,
+        }
+    n = len(relation_dicts)
+    internal = sum(1 for r in relation_dicts
+                   if r.get("resolution_qualifier") == "ambiguous")
+    external = sum(1 for r in relation_dicts
+                   if r.get("resolution_qualifier") == "unresolved")
+    return {
+        "resolved_ratio": compute_resolved_ratio(entity_dicts, relation_dicts),
+        "internal_unresolved_ratio": round(internal / n, 4),
+        "external_unresolved_ratio": round(external / n, 4),
+    }
+
+
 async def persist_resolved_ratio(
     store: Any,
     entity_dicts: list[dict[str, Any]],
     relation_dicts: list[dict[str, Any]],
 ) -> float | None:
-    """Compute + persist the ratio; empty '' clears it (empty graph)."""
-    ratio = compute_resolved_ratio(entity_dicts, relation_dicts)
+    """Compute + persist the resolution breakdown; empty '' clears all.
+
+    Keeps the ``resolved_ratio`` meta key + return value (float) for
+    backwards compatibility with the risk band and existing callers;
+    additionally persists ``internal_unresolved_ratio`` and
+    ``external_unresolved_ratio`` (#208 split)."""
+    breakdown = compute_resolution_breakdown(entity_dicts, relation_dicts)
     set_meta = getattr(store, "set_meta", None)
     if set_meta is not None:
-        await set_meta("resolved_ratio", "" if ratio is None else str(ratio))
-    return ratio
+        empty = not relation_dicts
+        for key, val in breakdown.items():
+            await set_meta(key, "" if empty else ("" if val is None else str(val)))
+    return breakdown["resolved_ratio"]
 
 
 def _file_of(source_id: str) -> str:
@@ -317,10 +369,13 @@ async def ingest_incremental(
     # #154/#158 review C1-2: recompute the ratio over the NEW FULL EXPORT
     # (not the changed subset — a zero-change update must not wipe the
     # ratio, and a small change must not recompute over its subset).
+    # #208: pass full edge_data (carries resolution_qualifier) so the
+    # internal/external unresolved split is computed too — stripping to
+    # {src_id, tgt_id} would lose the qualifier and write 0.0 for both.
     resolved_ratio = await persist_resolved_ratio(
         store,
         [{"entity_name": e.entity_name} for e in entities],
-        [{"src_id": r.src_id, "tgt_id": r.tgt_id} for r in relations],
+        [{"src_id": r.src_id, "tgt_id": r.tgt_id, **r.edge_data} for r in relations],
     )
 
     stats = await store.get_graph_stats()

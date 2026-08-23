@@ -8,6 +8,15 @@
 
 > **更新方式**: `pipx upgrade loomgraph`（已装 `[embed]` extra 的用 `pipx upgrade loomgraph --include-extra`）。
 
+### 新增 — `resolved_ratio` 拆分为内部/外部未解析（#208）
+
+- 索引时把边按 codeindex 的解析判定拆成三个比率（同一分母）：
+  - `resolved_ratio`（两端点都在库内的 join 率，语义不变，向后兼容）；
+  - `internal_unresolved_ratio`（codeindex 标为 `ambiguous` 的边——可操作缺陷：parser 看到了库内候选但无法消歧，典型是 DI / 动态分派）；
+  - `external_unresolved_ratio`（codeindex 标为 `unresolved` 的边——预期的外部 / 标准库调用，也含 parser 盲掉、在本层无法与外部调用区分的内部边）。
+- 三者随每次索引（`index` / `update` / `import-export`）写入 workspace 元数据，`topology` 与 `impact` 输出会一并展示。
+- **仅新增、不改风险带。** #230 的 factory / DI 盲区（receiver 类型静态不可知）住在 `unresolved` 桶里，codeindex 的 qualifier 在本层无法把它和真正的外部调用分开，所以 `impact` 风险带仍读 `resolved_ratio`——迁到 `internal_unresolved_ratio`（仅 ambiguous）会把 #230 刚堵住的「假隔离」标签重新放开。拆分是读侧诊断；干净的带迁移需要 codeindex 侧给 unresolved 边加 in-repo 命中提示，属上游而非本层。
+
 ### 变更 — 升级 codeindex 至 `>=0.40.0`（codeindex #187，#230 引擎侧修复）
 
 - 依赖 `ai-codeindex` 从 `>=0.35.0` 升至 `>=0.40.0`。codeindex #187 扩展了 factory 返回类型绑定：当 factory 返回的是抽象基类（`create_graph_store() -> GraphStore(ABC)`）而方法的实体在子类时（`@abstractmethod` 被 parser 跳过），现在会下钻到唯一的 in-workspace 子类实现并解析 CALLS 边；多个子类则保持未解析（真正的动态分派歧义，不猜测）。这是 #230 的引擎侧修复：self-dogfood 下 `loomgraph graph insert_custom_kg` 从 0 调用方变为 1（`_async_import_export`）。下方的 L0 风险标签修复仍保留，守卫剩余 25/33 条仍未解析的边（函数参数 receiver / tuple 解包，属更深的跨 scope 类型传播 gap，codeindex 尚未覆盖）。

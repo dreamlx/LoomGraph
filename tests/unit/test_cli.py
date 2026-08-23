@@ -1370,6 +1370,59 @@ class TestImpactTrustOutput:
         assert data["risk_assessment"]["level"] == "unknown"
 
     @pytest.mark.asyncio
+    async def test_async_impact_surfaces_resolution_split_keys(self) -> None:
+        """#208: impact surfaces the persisted internal/external unresolved
+        split alongside resolved_ratio (additive — band still reads
+        resolved_ratio)."""
+        from loomgraph.cli import _analysis
+        from loomgraph.core.impact import ChangedSymbol, ChangeType, ImpactResult
+
+        async def fake_get_meta(key):
+            return {
+                "resolved_ratio": "0.2",
+                "internal_unresolved_ratio": "0.1",
+                "external_unresolved_ratio": "0.7",
+            }.get(key)
+
+        store = MagicMock()
+        store.get_meta = AsyncMock(side_effect=fake_get_meta)
+        analyzer = MagicMock()
+        analyzer.analyze_commit = AsyncMock(
+            return_value=ImpactResult(
+                commit="abc123",
+                changed_symbols=[
+                    ChangedSymbol(
+                        name="func",
+                        file="src/a.py",
+                        change_type=ChangeType.MODIFIED,
+                    )
+                ],
+            )
+        )
+
+        with (
+            patch.object(
+                _analysis,
+                "prepare_workspace_store",
+                new=AsyncMock(return_value=("ws", store)),
+            ),
+            patch("loomgraph.core.impact.ImpactAnalyzer", return_value=analyzer),
+        ):
+            data = await _analysis._async_impact(
+                target="abc123",
+                staged=False,
+                base=None,
+                depth=2,
+                file_path=None,
+            )
+
+        assert data["resolution"]["resolved_ratio"] == 0.2
+        assert data["resolution"]["internal_unresolved_ratio"] == 0.1
+        assert data["resolution"]["external_unresolved_ratio"] == 0.7
+        # band still keyed on resolved_ratio (#231 not migrated)
+        assert data["risk_assessment"]["level"] == "medium"
+
+    @pytest.mark.asyncio
     async def test_async_impact_keeps_analysis_when_resolution_meta_fails(self) -> None:
         """Resolution metadata is advisory and cannot make impact fail."""
         from loomgraph.cli import _analysis

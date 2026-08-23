@@ -87,8 +87,8 @@ LoomGraph's index is **pure AST** (entities, relations, call graph) — no LLM, 
 
 ```bash
 # Requires ai_command in .codeindex.yaml (e.g. claude -p, deepseek, etc.)
-codeindex scan . --ai          # enrich README_AI.md via LLM
-codeindex scan-all --ai        # whole tree
+loomgraph codeindex scan . --ai     # enrich README_AI.md via LLM (passthrough)
+loomgraph codeindex scan-all --ai   # whole tree (passthrough)
 ```
 
 - **When you need it**: unfamiliar large codebase where you want an LLM to narrate what each module does, or to fill in missing docstrings.

@@ -96,7 +96,7 @@ async def _async_impact(
 
     resolved_ratio = await _impact_resolved_ratio(store)
     if resolved_ratio is not None:
-        result.resolution = {
+        resolution: dict[str, Any] = {
             "resolved_ratio": resolved_ratio,
             "caveat": (
                 "empty or sparse caller lists cannot establish a limited blast radius"
@@ -104,17 +104,38 @@ async def _async_impact(
                 else None
             ),
         }
+        # #208: surface the internal/external unresolved split alongside
+        # resolved_ratio. internal_unresolved = actionable DI/dispatch
+        # defect share; external_unresolved = expected external calls.
+        # The risk band still reads resolved_ratio (#231: migrating it to
+        # internal_unresolved would reopen false-isolated, since the
+        # factory blind spot lives in the unresolved qualifier bucket).
+        i_ratio = await _read_meta(store, "internal_unresolved_ratio")
+        e_ratio = await _read_meta(store, "external_unresolved_ratio")
+        if i_ratio is not None:
+            resolution["internal_unresolved_ratio"] = i_ratio
+        if e_ratio is not None:
+            resolution["external_unresolved_ratio"] = e_ratio
+        result.resolution = resolution
     result.risk_assessment = RiskAssessor().assess(result, resolved_ratio)
     return result.to_dict()
 
 
 async def _impact_resolved_ratio(store: Any) -> float | None:
     """Read optional graph-resolution metadata without breaking impact analysis."""
+    return await _read_meta(store, "resolved_ratio")
+
+
+async def _read_meta(store: Any, key: str) -> float | None:
+    """Read a float-valued meta key; None when absent/empty/unparseable.
+
+    Resolution metadata is advisory — never let it break impact analysis.
+    """
     get_meta = getattr(store, "get_meta", None)
     if get_meta is None:
         return None
     try:
-        raw = await get_meta("resolved_ratio")
+        raw = await get_meta(key)
         return float(raw) if raw else None
     except Exception:  # noqa: BLE001 - resolution metadata is advisory
         return None
