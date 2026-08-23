@@ -229,14 +229,27 @@ def run_task(task_id: str, work_root: Path) -> list[dict[str, object]]:
     if task.rg is None:
         rg_record: dict[str, object] = {"equivalence": "unsupported", "command": None}
     else:
-        rg_completed, _ = _run(list(task.rg), fixture.path, env)
-        rg_record = {
-            "equivalence": "equivalent",
-            "command": list(task.rg),
-            "exit_code": rg_completed.returncode,
-            "raw_stdout": rg_completed.stdout,
-            "raw_stderr": rg_completed.stderr,
-        }
+        try:
+            rg_completed, _ = _run(list(task.rg), fixture.path, env)
+        except FileNotFoundError:
+            # A missing calibration tool invalidates only the rg arm. It must
+            # not turn a LoomGraph observation into a fake regression or an
+            # implicit claim that rg produced no answer.
+            rg_record = {
+                "equivalence": "equivalent",
+                "command": list(task.rg),
+                "available": False,
+                "infrastructure_error": "rg executable not found",
+            }
+        else:
+            rg_record = {
+                "equivalence": "equivalent",
+                "command": list(task.rg),
+                "available": True,
+                "exit_code": rg_completed.returncode,
+                "raw_stdout": rg_completed.stdout,
+                "raw_stderr": rg_completed.stderr,
+            }
 
     cold = _observation(
         task_id, task, fixture, workspace, "cold", index_command, index_wall_ms,
