@@ -120,6 +120,26 @@ def test_runner_requires_the_fixed_git_hotspot_oracle(tmp_path) -> None:
         assert record["supplemental"]["oracle"]["passed"] is True
 
 
+@pytest.mark.parametrize(
+    "task_id",
+    [
+        "structural-multihop-impact",
+        "structural-topology-debt-git",
+        "trust-annotated-factory-receiver",
+    ],
+)
+def test_runner_records_the_resolution_split_for_trust_sensitive_tasks(tmp_path, task_id) -> None:
+    records = run_task(task_id, tmp_path / task_id)
+
+    for record in records:
+        resolution = record["trust"]["resolution"]
+        assert set(resolution) >= {
+            "resolved_ratio",
+            "internal_unresolved_ratio",
+            "external_unresolved_ratio",
+        }
+
+
 def test_runner_exercises_the_tsconfig_path_alias(tmp_path) -> None:
     records = run_task("trust-alias-barrel", tmp_path / "alias")
 

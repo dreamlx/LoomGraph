@@ -12,6 +12,7 @@ from loomgraph.cli._common import (
     output_error,
     output_success,
     prepare_workspace_store,
+    read_resolution_metadata,
 )
 from loomgraph.cli.main import main
 
@@ -554,5 +555,7 @@ async def _async_graph_query(
 
     result["callers_count"] = len(callers) if direction in ("callers", "both") else None
     result["callees_count"] = len(callees) if direction in ("callees", "both") else None
+    if resolution := await read_resolution_metadata(store):
+        result["resolution"] = resolution
 
     return result

@@ -14,6 +14,7 @@ from loomgraph.cli._common import (
     get_auto_workspace,
     output_error,
     output_success,
+    read_resolution_metadata,
 )
 from loomgraph.cli.main import main
 from loomgraph.core.debt_analyzer import DebtAnalyzer
@@ -167,6 +168,8 @@ async def _async_debt(
         git_since=git_since,
         scope=scope,
     )
+    if store is not None and (resolution := await read_resolution_metadata(store)):
+        report["resolution"] = resolution
 
     # Format output
     if output_format == "json":

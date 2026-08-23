@@ -43,6 +43,7 @@ class _Task:
     comparison_oracle: Callable[[dict[str, Any]], bool] | None = None
     supplemental_query: tuple[str, ...] | None = None
     supplemental_oracle: Callable[[dict[str, Any]], bool] | None = None
+    requires_resolution_split: bool = False
 
 
 def _definition_oracle(data: dict[str, Any]) -> bool:
@@ -146,6 +147,7 @@ _TASKS = {
         query=("impact", "head", "--base", "base", "--depth", "2"),
         rg=None,
         oracle=_impact_oracle,
+        requires_resolution_split=True,
     ),
     "structural-typed-deps": _Task(
         fixture_id="python-core",
@@ -171,6 +173,7 @@ _TASKS = {
             "graph", "app.hub.HubFunc", "--direction", "callers", "--relation-type", "CALLS",
         ),
         supplemental_oracle=_hub_topology_oracle,
+        requires_resolution_split=True,
     ),
     "trust-annotated-factory-receiver": _Task(
         fixture_id="factory-receiver",
@@ -179,6 +182,7 @@ _TASKS = {
         ),
         rg=None,
         oracle=_factory_oracle,
+        requires_resolution_split=True,
     ),
     "trust-alias-barrel": _Task(
         fixture_id="ts-barrel-alias",
@@ -259,6 +263,16 @@ def validate_observation(record: dict[str, object]) -> None:
     _non_empty_string(trust.get("workspace"), "trust.workspace")
     if not isinstance(trust.get("partial"), bool):
         raise ObservationValidationError("trust.partial must be boolean")
+    resolution_value = trust.get("resolution")
+    if resolution_value is not None:
+        resolution = _mapping(resolution_value, "trust.resolution")
+        for key in (
+            "resolved_ratio",
+            "internal_unresolved_ratio",
+            "external_unresolved_ratio",
+        ):
+            if not isinstance(resolution.get(key), (int, float)):
+                raise ObservationValidationError(f"trust.resolution.{key} must be numeric")
 
     oracle = _mapping(record.get("oracle"), "oracle")
     if not isinstance(oracle.get("passed"), bool):
@@ -443,7 +457,20 @@ def _observation(
     supplemental: dict[str, object] | None = None,
 ) -> dict[str, object]:
     data = _json_data(completed.stdout)
-    passed = completed.returncode == 0 and task.oracle(data)
+    resolution = data.get("resolution")
+    has_resolution_split = isinstance(resolution, dict) and all(
+        isinstance(resolution.get(key), (int, float))
+        for key in (
+            "resolved_ratio",
+            "internal_unresolved_ratio",
+            "external_unresolved_ratio",
+        )
+    )
+    passed = (
+        completed.returncode == 0
+        and task.oracle(data)
+        and (not task.requires_resolution_split or has_resolution_split)
+    )
     supplemental_passed = supplemental is None or bool(
         _mapping(supplemental.get("oracle"), "supplemental.oracle").get("passed")
     )
@@ -481,6 +508,10 @@ def _observation(
         },
         "rg": rg,
     }
+    if has_resolution_split:
+        trust = record["trust"]
+        assert isinstance(trust, dict)
+        trust["resolution"] = resolution
     if comparison is not None:
         comparison_record, comparison_trust = comparison
         record["comparison"] = comparison_record

@@ -154,6 +154,27 @@ async def prepare_workspace_store(
     return resolved, store
 
 
+async def read_resolution_metadata(store: Any) -> dict[str, float] | None:
+    """Read the complete persisted resolution split, if the store has one."""
+    get_meta = getattr(store, "get_meta", None)
+    if get_meta is None:
+        return None
+    values: dict[str, float] = {}
+    for key in (
+        "resolved_ratio",
+        "internal_unresolved_ratio",
+        "external_unresolved_ratio",
+    ):
+        try:
+            raw = await get_meta(key)
+            if raw is None or raw == "":
+                return None
+            values[key] = float(raw)
+        except Exception:  # noqa: BLE001 - metadata is advisory
+            return None
+    return values
+
+
 def create_llm_client_for_workspace(workspace: str | None = None) -> Any:
     """Create an `LLMClient` bound to `workspace`."""
     from loomgraph.storage.factory import create_llm_client
