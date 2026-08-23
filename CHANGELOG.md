@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-08-23
+
 ### Added — resolved_ratio split into internal/external unresolved (#208)
 - `compute_resolution_breakdown()` decomposes edges into three ratios over
   the same denominator: `resolved_ratio` (join-based, unchanged) +
@@ -42,7 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   parameter receivers / tuple-unpacking, a deeper cross-scope gap codeindex
   does not yet cover).
 
-### Fixed — impact `low`/`isolated` risk label is dishonest on a sparse graph (#230)
+### Fixed — impact `low`/`isolated` risk label is dishonest on a sparse graph (#225, #230)
 - `RiskAssessor` now refuses the `"low: isolated change"` label when the
   graph is sparse: a `resolved_ratio` in the 0.1–0.5 band with zero
   discovered callers moves to `medium`, not `low`. At that ratio most CALLS
@@ -1809,6 +1811,7 @@ infrastructure was added.
 - Project roadmap, epics, and feature definitions
 
 [Unreleased]: https://github.com/dreamlx/LoomGraph/compare/v0.20.0...HEAD
+[0.22.0]: https://github.com/dreamlx/LoomGraph/compare/v0.21.1...v0.22.0
 [0.21.1]: https://github.com/dreamlx/LoomGraph/compare/v0.21.0...v0.21.1
 [0.21.0]: https://github.com/dreamlx/LoomGraph/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/dreamlx/LoomGraph/compare/v0.19.2...v0.20.0

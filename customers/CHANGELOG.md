@@ -21,7 +21,7 @@
 
 - 依赖 `ai-codeindex` 从 `>=0.35.0` 升至 `>=0.40.0`。codeindex #187 扩展了 factory 返回类型绑定：当 factory 返回的是抽象基类（`create_graph_store() -> GraphStore(ABC)`）而方法的实体在子类时（`@abstractmethod` 被 parser 跳过），现在会下钻到唯一的 in-workspace 子类实现并解析 CALLS 边；多个子类则保持未解析（真正的动态分派歧义，不猜测）。这是 #230 的引擎侧修复：self-dogfood 下 `loomgraph graph insert_custom_kg` 从 0 调用方变为 1（`_async_import_export`）。下方的 L0 风险标签修复仍保留，守卫剩余 25/33 条仍未解析的边（函数参数 receiver / tuple 解包，属更深的跨 scope 类型传播 gap，codeindex 尚未覆盖）。
 
-### 修复 — `impact` 不再对稀疏图谱误报「低风险 / 隔离改动」（#230）
+### 修复 — `impact` 不再对稀疏图谱误报「低风险 / 隔离改动」（#225, #230）
 
 - 当知识图谱的边解析率（`resolved_ratio`）处于 0.1–0.5 区间且未发现调用方时，`impact` 的风险等级从 `low`（隔离改动）上调为 `medium`。该区间下多数 CALLS 边未解析，空调用方列表往往源于 factory / DI 分派的解析盲区（receiver 类型对 AST 静态不可知），而非真正无调用方。等级不再发出「隔离」结论，reason 字符串会点名盲区并提示用 grep 核实 factory 用法。低于 0.1（极盲）维持 `unknown`；高于 0.5（稠密）保持可信的 `low / 隔离`。
 
@@ -31,6 +31,17 @@
   现在会保留 codeindex 原始诊断，并附上对应的 LoomGraph extra 安装命令，例如
   `pipx install "loomgraph[typescript]"`，同时明确提醒在 `.codeindex.yaml` 的
   `languages:` 中启用该语言。未知语言不会猜测不存在的安装包。
+
+## [0.21.1] - 2026-08-23
+
+### 变更 — 区分引导式检索与仅安装评估（#209）
+- DeepSWE orientation 运行标注为 `voluntary`（自愿）或 `assisted`（辅助）；assisted 处理必须、并单独报告一次结构化检索，与可用性/安装索引/目标质量分开。backend-aware 指引让 codegraph 处理直接查询已就绪图谱而非重新索引，codeindex 则在检索前索引一次。
+
+### 修复 — 可直接复制的缺失 grammar 修复命令（#210）
+- parser 缺失警告保留 codeindex 原始诊断，并附上一条去重后的 LoomGraph 安装命令加 `languages:` 配置步骤。零实体失败用同一条已知语言命令；未知语言明确指出，不猜测不存在的包。
+
+### 新增 — Evaluation v1 orientation pilot harness（#206）
+- 增加可复现的 DeepSWE/Pier orientation 协议、冻结目标 manifest、原始 packet schema、以及 codeindex/codegraph 独立 setup gate。记录编辑前候选定位、source-clean 合规、观察到的 LoomGraph 调用/检索。结果按任务/分层报告；这是能力与使用证据，非任务 solve-rate 声明。
 
 ## [0.21.0] - 2026-08-18
 
