@@ -83,6 +83,20 @@ def test_typescript_extra_declared() -> None:
     )
 
 
+def test_dev_extra_declares_typescript_grammar_for_contract_fixture() -> None:
+    """#206: CI must execute, not skip, the TypeScript barrel oracle."""
+    data = _pyproject()
+    project = data.get("project", {})
+    assert isinstance(project, dict)
+    extras = project.get("optional-dependencies", {})
+    assert isinstance(extras, dict)
+    joined = " ".join(extras["dev"])
+    assert "tree-sitter-typescript" in joined, (
+        "`dev` must install the TypeScript grammar so the #206 barrel contract "
+        "runs under CI"
+    )
+
+
 def test_hook_template_lives_inside_package() -> None:
     """#128: the post-commit hook template must ship inside the package.
 
