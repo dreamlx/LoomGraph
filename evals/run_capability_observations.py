@@ -14,10 +14,14 @@ import os
 import subprocess
 import sys
 import time
+from argparse import ArgumentParser
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from evals.capability_fixtures import MaterializedFixture, materialize_fixture
 
@@ -32,6 +36,8 @@ class _Task:
     query: tuple[str, ...]
     rg: tuple[str, ...] | None
     oracle: Callable[[dict[str, Any]], bool]
+    uses_workspace: bool = True
+    parser_distribution: str = "tree-sitter-python"
 
 
 def _definition_oracle(data: dict[str, Any]) -> bool:
@@ -42,12 +48,110 @@ def _definition_oracle(data: dict[str, Any]) -> bool:
     )
 
 
+def _direct_call_oracle(data: dict[str, Any]) -> bool:
+    return any(
+        edge.get("entity") == "app.auth.validate_token"
+        for edge in data.get("callees", [])
+        if isinstance(edge, dict)
+    )
+
+
+def _impact_oracle(data: dict[str, Any]) -> bool:
+    return isinstance(data.get("risk_assessment"), dict) and "resolution" in data
+
+
+def _deps_oracle(data: dict[str, Any]) -> bool:
+    return isinstance(data.get("modules"), list) and bool(data["modules"])
+
+
+def _branch_diff_oracle(data: dict[str, Any]) -> bool:
+    diff = data.get("diff")
+    return isinstance(diff, dict) and isinstance(diff.get("broken_chains"), list)
+
+
+def _factory_oracle(data: dict[str, Any]) -> bool:
+    return any(
+        edge.get("entity") == "consumer.run"
+        for edge in data.get("callers", [])
+        if isinstance(edge, dict)
+    )
+
+
+def _barrel_oracle(data: dict[str, Any]) -> bool:
+    return any(
+        edge.get("entity") == "src.models.Session"
+        for edge in data.get("callees", [])
+        if isinstance(edge, dict)
+    ) and not any(
+        edge.get("entity") == "src.index.Session"
+        for edge in data.get("callees", [])
+        if isinstance(edge, dict)
+    )
+
+
+def _debt_git_oracle(data: dict[str, Any]) -> bool:
+    health = data.get("overall_health")
+    return isinstance(health, dict) and isinstance(health.get("breakdown"), dict) and "git" in health["breakdown"]
+
+
 _TASKS = {
     "overlap-definition": _Task(
         fixture_id="python-core",
         query=("find", "AuthService", "--type", "class", "-n", "1"),
         rg=("rg", "-n", "--glob", "*.py", "^class AuthService\\b", "."),
         oracle=_definition_oracle,
+    ),
+    "overlap-direct-static-call": _Task(
+        fixture_id="python-core",
+        query=(
+            "graph", "app.handlers.handle_login", "--direction", "callees", "--depth", "1",
+            "--relation-type", "CALLS",
+        ),
+        rg=("rg", "-n", "--glob", "*.py", "validate_token\\(token\\)", "app/handlers.py"),
+        oracle=_direct_call_oracle,
+    ),
+    "structural-multihop-impact": _Task(
+        fixture_id="python-history",
+        query=("impact", "head", "--base", "base", "--depth", "2"),
+        rg=None,
+        oracle=_impact_oracle,
+    ),
+    "structural-typed-deps": _Task(
+        fixture_id="python-core",
+        query=("deps", "-d", "2"),
+        rg=None,
+        oracle=_deps_oracle,
+    ),
+    "structural-branch-diff": _Task(
+        fixture_id="python-history",
+        query=("branch-diff", "base..head", "--backend", "codeindex"),
+        rg=None,
+        oracle=_branch_diff_oracle,
+        uses_workspace=False,
+    ),
+    "structural-topology-debt-git": _Task(
+        fixture_id="python-history",
+        query=("debt", "--with-git", "--git-since", "10 years"),
+        rg=None,
+        oracle=_debt_git_oracle,
+    ),
+    "trust-annotated-factory-receiver": _Task(
+        fixture_id="factory-receiver",
+        query=(
+            "graph", "store.Store.create_entity", "--direction", "callers", "--relation-type", "CALLS",
+        ),
+        rg=None,
+        oracle=_factory_oracle,
+    ),
+    "trust-alias-barrel": _Task(
+        fixture_id="ts-barrel-alias",
+        query=(
+            "graph", "src.consumer", "--direction", "callees", "--relation-type", "REFERENCES",
+            "--include-unresolved",
+        ),
+        rg=None,
+        oracle=_barrel_oracle,
+        parser_distribution="tree-sitter-typescript",
     ),
 }
 
@@ -146,11 +250,11 @@ def _json_data(stdout: str) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
-def _toolchain() -> dict[str, object]:
+def _toolchain(task: _Task) -> dict[str, object]:
     return {
         "loomgraph_version": _version("loomgraph"),
         "codeindex_version": _version("ai-codeindex"),
-        "parser_versions": {"python": _version("tree-sitter-python")},
+        "parser_versions": {task.parser_distribution.removeprefix("tree-sitter-"): _version(task.parser_distribution)},
         "backend": "codeindex",
     }
 
@@ -179,7 +283,7 @@ def _observation(
         "fixture": {"id": fixture.fixture_id, "sha": fixture.sha, "git_ref": "head"},
         "task_id": task_id,
         "phase": phase,
-        "toolchain": _toolchain(),
+        "toolchain": _toolchain(task),
         "operation": {
             "index_command": index_command,
             "query_command": query_command,
@@ -223,7 +327,9 @@ def run_task(task_id: str, work_root: Path) -> list[dict[str, object]]:
     command_prefix = [str(Path(sys.executable).with_name("loomgraph"))]
     index_command = [*command_prefix, "index", ".", "--clear", "-w", workspace]
     _, index_wall_ms = _run(index_command, fixture.path, env)
-    query_command = [*command_prefix, *task.query, "-w", workspace]
+    query_command = [*command_prefix, *task.query]
+    if task.uses_workspace:
+        query_command.extend(["-w", workspace])
     cold_completed, cold_query_ms = _run(query_command, fixture.path, env)
 
     if task.rg is None:
@@ -261,3 +367,34 @@ def run_task(task_id: str, work_root: Path) -> list[dict[str, object]]:
         query_command, warm_completed, warm_query_ms, rg_record,
     )
     return [cold, warm]
+
+
+def write_observations(records: list[dict[str, object]], output: Path) -> None:
+    """Write raw rows only; callers decide whether and how to summarize them."""
+    for record in records:
+        validate_observation(record)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text("".join(json.dumps(record, sort_keys=True) + "\n" for record in records))
+
+
+def run_all(work_root: Path, output: Path) -> list[dict[str, object]]:
+    """Run all eight reviewed tasks and write their independent raw rows."""
+    records: list[dict[str, object]] = []
+    for task_id in _TASKS:
+        records.extend(run_task(task_id, work_root / task_id))
+    write_observations(records, output)
+    return records
+
+
+def main() -> int:
+    parser = ArgumentParser(description="Run raw #206 capability observations without scoring")
+    parser.add_argument("--work-root", type=Path, required=True)
+    parser.add_argument("--output", type=Path, required=True)
+    args = parser.parse_args()
+    records = run_all(args.work_root, args.output)
+    print(f"wrote {len(records)} raw capability observations to {args.output}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

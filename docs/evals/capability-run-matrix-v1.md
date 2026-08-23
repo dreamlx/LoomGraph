@@ -1,9 +1,8 @@
-# Capability run matrix v1 — approved protocol, runner pending
+# Capability run matrix v1 — approved executable protocol
 
-> **Status: protocol approved; runner pending.** This document does not add a
-> result artifact, a performance claim, or an agent-use result. It turns the
-> eight reviewed A--C contracts into executable observations; fixture and
-> runner implementation remains a separate change.
+> **Status: protocol and raw-observation runner approved.** This document does
+> not publish a result artifact, a performance claim, or an agent-use result.
+> It turns the eight reviewed A--C contracts into executable observations.
 
 ## Primary question
 
@@ -63,6 +62,19 @@ diagnostic metadata, never a cross-tool speed score.
 the fixture. `warm` uses that exact fixture SHA and workspace without a new
 index. A changed SHA, Git ref, backend, parser or codeindex version invalidates
 the warm record instead of being silently reused.
+
+Run the eight tasks into an adapter-owned directory with:
+
+```bash
+python evals/run_capability_observations.py \
+  --work-root /tmp/loomgraph-capability-v1-work \
+  --output /tmp/loomgraph-capability-v1-observations.jsonl
+```
+
+The output is exactly sixteen raw JSONL rows (eight tasks times `cold`/`warm`).
+The runner does not compute a score. If `rg` is absent, the A row records
+`rg.available=false` plus an infrastructure error; it never treats that as an
+`rg` answer or as a LoomGraph failure.
 
 ## Eight proposed observations
 

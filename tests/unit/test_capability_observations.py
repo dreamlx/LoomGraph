@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from evals.capability_fixtures import materialize_fixture
 from evals.run_capability_observations import (
     ObservationValidationError,
     run_task,
     validate_observation,
+    write_observations,
 )
 
 
@@ -84,3 +87,33 @@ def test_runner_writes_real_cold_and_warm_definition_observations(tmp_path) -> N
     assert records[0]["operation"]["reindexed"] is True
     assert records[1]["operation"]["reindexed"] is False
     assert records[0]["rg"]["equivalence"] == "equivalent"
+
+
+@pytest.mark.parametrize(
+    "task_id",
+    [
+        "overlap-direct-static-call",
+        "structural-multihop-impact",
+        "structural-typed-deps",
+        "structural-branch-diff",
+        "structural-topology-debt-git",
+        "trust-annotated-factory-receiver",
+        "trust-alias-barrel",
+    ],
+)
+def test_runner_writes_real_observations_for_shared_python_tasks(tmp_path, task_id) -> None:
+    records = run_task(task_id, tmp_path / task_id)
+
+    assert [record["phase"] for record in records] == ["cold", "warm"]
+    assert all(record["oracle"]["passed"] is True for record in records)
+
+
+def test_writer_emits_one_raw_json_row_per_observation(tmp_path) -> None:
+    output = tmp_path / "records.jsonl"
+    records = [_record("cold"), _record("warm")]
+
+    write_observations(records, output)
+
+    assert [line["phase"] for line in map(json.loads, output.read_text().splitlines())] == [
+        "cold", "warm"
+    ]
