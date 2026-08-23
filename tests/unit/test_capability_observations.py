@@ -79,6 +79,21 @@ def test_materialized_fixture_has_stable_refs_and_content_hash(tmp_path) -> None
     assert (fixture.path / "app" / "auth.py").is_file()
 
 
+def test_topology_debt_fixture_has_a_deterministic_hub_and_history(tmp_path) -> None:
+    fixture = materialize_fixture("topology-debt-git", tmp_path / "fixture")
+
+    hub = (fixture.path / "app" / "hub.py").read_text()
+    assert "def HubFunc" in hub
+    assert "revision = 12" in hub
+
+
+def test_typescript_adversary_fixture_contains_a_real_path_alias(tmp_path) -> None:
+    fixture = materialize_fixture("ts-barrel-alias", tmp_path / "fixture")
+
+    assert '"@models/*": ["src/*"]' in (fixture.path / "tsconfig.json").read_text()
+    assert 'from "@models/models"' in (fixture.path / "src" / "alias_consumer.ts").read_text()
+
+
 def test_runner_writes_real_cold_and_warm_definition_observations(tmp_path) -> None:
     records = run_task("overlap-definition", tmp_path / "run")
 
@@ -87,6 +102,45 @@ def test_runner_writes_real_cold_and_warm_definition_observations(tmp_path) -> N
     assert records[0]["operation"]["reindexed"] is True
     assert records[1]["operation"]["reindexed"] is False
     assert records[0]["rg"]["equivalence"] == "equivalent"
+
+
+def test_runner_requires_the_fixed_git_hotspot_oracle(tmp_path) -> None:
+    records = run_task("structural-topology-debt-git", tmp_path / "debt")
+
+    for record in records:
+        data = json.loads(record["operation"]["raw_stdout"])["data"]
+        assert any(
+            issue.get("category") == "critical_hotspot"
+            and issue.get("severity") == "P0"
+            and issue.get("entity") == "app/hub.py"
+            for issue in data["issues"]
+        )
+        topology = json.loads(record["supplemental"]["raw_stdout"])["data"]
+        assert len(topology["callers"]) == 8
+        assert record["supplemental"]["oracle"]["passed"] is True
+
+
+def test_runner_exercises_the_tsconfig_path_alias(tmp_path) -> None:
+    records = run_task("trust-alias-barrel", tmp_path / "alias")
+
+    for record in records:
+        assert "src.alias_consumer" in record["operation"]["query_command"]
+        assert "src.consumer" in record["supplemental"]["command"]
+        assert record["supplemental"]["oracle"]["passed"] is True
+
+
+def test_branch_diff_records_the_codegraph_variant_without_mislabeling_l2(tmp_path) -> None:
+    records = run_task("structural-branch-diff", tmp_path / "branch-diff")
+
+    for record in records:
+        comparison = record["comparison"]
+        assert comparison["backend"] == "codegraph"
+        if comparison["availability"] == "available":
+            assert comparison["oracle"]["passed"] is True
+            assert record["trust"]["comparison"]["content_comparison_status"] == "unavailable"
+        else:
+            assert comparison["availability"] == "infrastructure_unavailable"
+            assert "infrastructure_error" in comparison
 
 
 @pytest.mark.parametrize(

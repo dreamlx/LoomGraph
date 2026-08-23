@@ -63,7 +63,7 @@
       "question": "哪个高耦合热点同时具有 Git 变更风险？",
       "rg_single_query": "unsupported",
       "tests": ["tests/unit/test_topology.py::TestTopologyAnalyzerFromData::test_hub_detection", "tests/unit/test_debt_git_integration.py::TestDebtAnalyzerGitIntegration::test_detect_critical_hotspot"],
-      "oracle": {"hub": "HubFunc", "debt_category": "critical_hotspot", "severity": "P0"},
+      "oracle": {"hub": "HubFunc", "hub_consumers": 8, "entity": "app/hub.py", "debt_category": "critical_hotspot", "severity": "P0", "change_frequency": 13, "hotspot_score": 100},
       "trust_fields": ["workspace", "backend", "source_scope", "resolved_ratio", "internal_unresolved_ratio", "external_unresolved_ratio", "git_ref", "analysis_version"],
       "recording": {"cold": "required", "warm": "required"}
     },
@@ -74,8 +74,8 @@
       "question": "base 到 head 出现了哪些结构变化，L2 是否可比较？",
       "rg_single_query": "unsupported",
       "tests": ["tests/unit/test_branch_diff.py::test_broken_chain_tgt_removed", "tests/unit/test_branch_diff.py::test_content_comparison_is_partial_when_only_some_hashes_exist", "tests/unit/test_branch_diff.py::test_content_comparison_is_unavailable_for_codegraph", "tests/unit/test_branch_diff.py::test_content_comparison_rejects_cross_backend_hashes"],
-      "oracle": {"broken_chain": "b->foo", "l2_statuses": ["partial", "unavailable"], "unavailable_is_not_unchanged": true},
-      "trust_fields": ["base_ref", "head_ref", "base_backend", "head_backend", "content_comparison.status", "content_comparison.reason", "comparable_shared", "uncomparable_shared"],
+      "oracle": {"broken_chain": "keep_legacy->legacy_token", "codeindex_l2_status": "available", "codegraph_l2_status": "unavailable", "codegraph_reason": "backend_has_no_per_entity_content_hash", "unavailable_is_not_unchanged": true},
+      "trust_fields": ["base_ref", "head_ref", "base_backend", "head_backend", "codegraph_version", "content_comparison.status", "content_comparison.reason", "comparable_shared", "uncomparable_shared"],
       "recording": {"cold": "required", "warm": "required"}
     },
     {
@@ -93,10 +93,10 @@
       "id": "trust-alias-barrel",
       "track": "C",
       "task_class": "alias or barrel ambiguity adversary",
-      "question": "alias/barrel 的候选解析不确定时，是否避免写入伪造 CALLS 边？",
+      "question": "path alias 与 barrel 的引用能否解析到同一定义，并保留不确定边的限定？",
       "rg_single_query": "unsupported",
       "tests": ["tests/contract/test_codeindex_output_contract.py::TestGraphExportShape::test_typescript_barrel_reference_reaches_definition", "tests/unit/test_export_reader.py::test_map_edge_ambiguous_uses_dst_raw_keeps_candidates", "tests/unit/test_graph_query.py::test_include_unresolved_flag_keeps_phantom_edges"],
-      "oracle": {"barrel_reference": "src.consumer->src.models.Session", "must_not_target": "src.index.Session", "ambiguous_target": "Builder.run", "resolution_qualifier": "ambiguous"},
+      "oracle": {"path_alias_reference": "src.alias_consumer->src.models.Session", "barrel_reference": "src.consumer->src.models.Session", "must_not_target": "src.index.Session", "resolved_qualifier": "resolved", "ambiguous_edges_remain_non_resolved": true},
       "trust_fields": ["workspace", "backend", "source_id", "edge_trust.include_unresolved", "edge_trust.omitted_by_qualifier", "resolution_qualifier", "dst_raw", "candidates", "answer_status", "uncertainty_reason"],
       "recording": {"cold": "required", "warm": "required"}
     }

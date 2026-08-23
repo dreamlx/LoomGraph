@@ -133,9 +133,50 @@ def _factory_receiver(path: Path) -> set[str]:
     return {"head"}
 
 
+def _topology_debt_git(path: Path) -> set[str]:
+    _init(path)
+    _write(
+        path,
+        "app/hub.py",
+        "def HubFunc(value: str) -> str:\n"
+        "    revision = 0\n"
+        "    return f'{revision}:{value}'\n",
+    )
+    for number in range(1, 9):
+        _write(
+            path,
+            f"app/consumer_{number}.py",
+            "from app.hub import HubFunc\n\n"
+            f"def use_{number}(value: str) -> str:\n"
+            "    return HubFunc(value)\n",
+        )
+    _commit(path, "seed hub", "2024-02-01T00:00:00+00:00")
+    for revision in range(1, 13):
+        _write(
+            path,
+            "app/hub.py",
+            "def HubFunc(value: str) -> str:\n"
+            f"    revision = {revision}\n"
+            "    return f'{revision}:{value}'\n",
+        )
+        _commit(path, f"hub revision {revision}", f"2024-02-{revision + 1:02d}T00:00:00+00:00")
+    _git(path, "tag", "head")
+    return {"head"}
+
+
 def _ts_barrel_alias(path: Path) -> set[str]:
     _init(path)
     _write(path, ".codeindex.yaml", "languages:\n  - typescript\n")
+    _write(
+        path,
+        "tsconfig.json",
+        '{\n'
+        '  "compilerOptions": {\n'
+        '    "baseUrl": ".",\n'
+        '    "paths": {"@models/*": ["src/*"]}\n'
+        "  }\n"
+        "}\n",
+    )
     _write(path, "src/models.ts", "export class Session {}\n")
     _write(path, "src/index.ts", 'export { Session } from "./models";\n')
     _write(
@@ -143,6 +184,12 @@ def _ts_barrel_alias(path: Path) -> set[str]:
         "src/consumer.ts",
         'import { Session } from "./index";\n\n'
         "export const useSession = (session: Session) => session;\n",
+    )
+    _write(
+        path,
+        "src/alias_consumer.ts",
+        'import { Session } from "@models/models";\n\n'
+        "export const useAliasSession = (session: Session) => session;\n",
     )
     _commit(path, "barrel", "2024-01-04T00:00:00+00:00")
     _git(path, "tag", "head")
@@ -155,6 +202,7 @@ def materialize_fixture(fixture_id: str, path: Path) -> MaterializedFixture:
         "python-core": _python_history,
         "python-history": _python_history,
         "factory-receiver": _factory_receiver,
+        "topology-debt-git": _topology_debt_git,
         "ts-barrel-alias": _ts_barrel_alias,
     }
     try:

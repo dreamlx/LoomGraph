@@ -15,17 +15,17 @@ equivalent text search.
 
 ## Proposed fixture package and record
 
-The later fixture package has four tiny versioned repositories:
+The runner materializes five tiny versioned repositories:
 
 | Fixture repository | Used by | Required history |
 | --- | --- | --- |
-| `python-core` | A1, A2, B1, B2 | one immutable commit |
-| `python-history` | B3, B4, C1 | `base`, `head`, and `sparse` annotated tags; fixed author/committer dates |
-| `factory-receiver` | C1 | `resolved` and `sparse` tags |
+| `python-core` | A1, A2, B2 | one immutable commit |
+| `python-history` | B1, B4 | `base` and `head` tags; fixed author/committer dates |
+| `topology-debt-git` | B3 | one hub with eight consumers and thirteen fixed-date commits |
+| `factory-receiver` | C1 | one immutable commit with an annotated factory return |
 | `ts-barrel-alias` | C2 | one immutable commit; barrel and `tsconfig` path-alias cases are separate files |
 
-Each fixture must contain its own `fixture.json` with a content SHA, expected
-toolchain versions, source paths, Git refs, and the exact oracle below. The
+The materializer calculates a content SHA after writing each fixture, and the
 runner records, but does not aggregate, one JSON record for each `cold` and
 `warm` phase:
 
@@ -50,6 +50,8 @@ runner records, but does not aggregate, one JSON record for each `cold` and
     "external_unresolved_ratio": 0.0, "limitations": []
   },
   "oracle": {"passed": true, "failures": []},
+  "comparison": {"backend": "codegraph", "availability": "available | infrastructure_unavailable", "backend_version": "...", "oracle": {"passed": true}},
+  "supplemental": {"command": ["..."], "oracle": {"passed": true}},
   "rg": {"equivalence": "equivalent | unsupported", "command": null,
          "raw_stdout": null, "oracle_passed": null}
 }
@@ -58,10 +60,12 @@ runner records, but does not aggregate, one JSON record for each `cold` and
 The timing fields distinguish index setup from query execution. They are
 diagnostic metadata, never a cross-tool speed score.
 
-`cold` creates a fresh named workspace after clearing its store, then indexes
-the fixture. `warm` uses that exact fixture SHA and workspace without a new
-index. A changed SHA, Git ref, backend, parser or codeindex version invalidates
-the warm record instead of being silently reused.
+`cold` clears and indexes a task-named workspace. `warm` uses the same
+fixture SHA and workspace without a new index. A changed SHA, Git ref,
+backend, parser or codeindex version makes the record incomparable rather than
+silently reused. B4 additionally stores the codegraph comparison operation in
+the same phase record; B3 stores its caller-topology check and C2 its second
+(barrel) query as `supplemental`.
 
 Run the eight tasks into an adapter-owned directory with:
 
@@ -78,21 +82,20 @@ The runner does not compute a score. If `rg` is absent, the A row records
 
 ## Eight proposed observations
 
-`$WS` is a deterministic workspace name derived from fixture SHA and task ID;
-`$ARTIFACT` is an adapter-owned output directory outside the fixture. Commands
-are specified now but will not be run or reported until the versioned fixture
-package and runner exist.
+`$WS` is the deterministic task workspace. `$ARTIFACT` is an adapter-owned
+output directory outside the fixture. The commands below define the runner's
+actual query shape, not a performance claim.
 
 | ID / class | Fixture, LoomGraph observation | `rg` status and oracle | Correct answer oracle | Required answer/trust contract |
 | --- | --- | --- | --- | --- |
 | A1 exact definition location | `python-core`; `loomgraph find AuthService --type class -n 1 -w "$WS"` after `loomgraph index . --clear -w "$WS"` | **equivalent**: `rg -n --glob '*.py' '^class AuthService\\b' .` | one match: `app.auth.AuthService`, `app/auth.py` | entity, source_id, workspace, backend, parser version, `partial` |
 | A2 literal direct call-site location | `python-core`; `loomgraph graph app.handlers.handle_login --direction callees --depth 1 --relation-type CALLS -w "$WS"` | **equivalent only under this narrow framing**: `rg -n --glob '*.py' 'validate_token\\(token\\)' app/handlers.py` | one direct call site in `handle_login` to `app.auth.validate_token` | caller/callee entity IDs, source IDs, depth=1, relation type, `partial` |
-| B1 multi-hop impact | `python-core`; after fixed `base..head`, `loomgraph impact head --base base --depth 2 -w "$WS"` | **unsupported** | changed `app.auth.validate_token` has the expected direct and indirect impacted callers, at depth ≤2 | changed source IDs, depth, resolution split, `answer.status`; a low-resolution empty result must carry a caveat |
+| B1 multi-hop impact | `python-history`; `loomgraph impact head --base base --depth 2 -w "$WS"` | **unsupported** | output carries the impact answer plus resolution context; a low-resolution empty result cannot become an unqualified isolated conclusion | changed source IDs, depth, resolution split, `answer.status`; a low-resolution empty result must carry a caveat |
 | B2 typed module dependencies | `python-core`; `loomgraph deps -d 2 -w "$WS"` | **unsupported** | expected cross-module `CALLS` and `IMPORTS` aggregates | relation types, source scope, unresolved dependency count, `partial`, resolution qualifier |
-| B3 topology/debt with Git evidence | `python-history`; produce input with `loomgraph codeindex tech-debt . > "$ARTIFACT/debt.json"`, then `loomgraph debt --codeindex-data "$ARTIFACT/debt.json" --with-git --git-since 2020-01-01 -w "$WS"` | **unsupported** | `HubFunc` is a `critical_hotspot` at P0 under the fixed commit history | fixture Git ref, analysis version, source scope, resolution split, Git window; producer input SHA is recorded |
-| B4 directional branch diff / L2 status | `python-history`; `loomgraph branch-diff base..head --backend codeindex`, plus the same command with a pinned `codegraph` image | **unsupported** | codeindex finds the fixed broken/new chains and reports L2 `available`; codegraph reports L2 `unavailable`, never `unchanged` | base/head resolved SHAs, both backends, `content_comparison.status` and reason, comparable/uncomparable shared counts |
-| C1 annotated-factory receiver adversary | `factory-receiver`; positive: `loomgraph graph store.Store.create_entity --direction callers --relation-type CALLS -w "$WS"`; sparse variant: `loomgraph impact sparse --base base --depth 2 -w "$WS"` | **unsupported** | positive caller is `consumer.run`; sparse result is not `isolated`/low-risk and carries the #208 resolution split | source ID, resolution split, answer status, uncertainty reason; the positive parse and sparse conclusion are independently asserted |
-| C2 barrel and alias adversary | `ts-barrel-alias`; `loomgraph graph src.consumer --direction callees --relation-type REFERENCES --include-unresolved -w "$WS"` for both barrel and path-alias files | **unsupported** | resolved barrel/alias reference targets `src.models.Session`, never a ghost `src.index.Session`; ambiguous references remain non-resolved | workspace, backend, source ID, `edge_trust`, qualifier, `dst_raw`, candidates, answer status, uncertainty reason |
+| B3 topology/debt with Git evidence | `topology-debt-git`; primary `loomgraph debt --with-git --git-since '10 years' -w "$WS"`, supplemental callers graph for `app.hub.HubFunc` | **unsupported** | `app/hub.py` is `critical_hotspot` at P0 (13 changes, score 100) under fixed history, and the supplemental graph returns exactly eight `HubFunc` callers | fixture Git ref, analysis version, source scope, resolution split, Git window |
+| B4 directional branch diff / L2 status | `python-history`; codeindex primary plus `codegraph` comparison variant | **unsupported** | codeindex finds fixed broken chains and reports L2 `available`; codegraph reports L2 `unavailable`, never `unchanged` | base/head resolved SHAs, both backends and codegraph version, `content_comparison.status` and reason, comparable/uncomparable shared counts |
+| C1 annotated-factory receiver adversary | `factory-receiver`; `loomgraph graph store.Store.create_entity --direction callers --relation-type CALLS -w "$WS"` | **unsupported** | positive caller is `consumer.run` | source ID, resolution split, answer status, uncertainty reason; sparse-result safety remains independently guarded by the named #208 contract test |
+| C2 barrel and alias adversary | `ts-barrel-alias`; primary `src.alias_consumer` path-alias query plus supplemental `src.consumer` barrel query, both with `--include-unresolved` | **unsupported** | both references resolve to `src.models.Session`, never a ghost `src.index.Session`; ambiguous references remain non-resolved | workspace, backend, source ID, `edge_trust`, qualifier, `dst_raw`, candidates, answer status, uncertainty reason |
 
 ## Approved protocol decisions
 
@@ -108,10 +111,11 @@ package and runner exist.
 3. **#208 must be output-checked:** C1/B1/B3 require real command output to
    carry `internal_unresolved_ratio` separately from
    `external_unresolved_ratio`; manifest field names alone are insufficient.
-4. **B4 environment:** codegraph must be pinned in the fixture image. A
-   missing executable is an infrastructure-invalid record, not a skipped or
-   `unavailable` comparison result. `unavailable` is the valid *answer* only
-   after codegraph produced its graph.
+4. **B4 environment:** the runner records the local `codegraph --version`. A
+   missing executable is an `infrastructure_unavailable` comparison record,
+   not a skipped or content-`unavailable` answer. A publishable run must pin
+   that executable version; only a successful codegraph query may report the
+   valid L2 answer `unavailable`.
 5. **No score before raw rows:** per-task `oracle.passed` and trust-contract
    compliance are the first output. Any aggregate, if later wanted, must keep
    task class and backend separate; it cannot collapse B/C into an `rg` race.
@@ -121,4 +125,4 @@ package and runner exist.
 - No performance comparison, benchmark timing claim, token/cost estimate, or
   agent delta.
 - No DeepSWE task execution. Track D stays an independent compatibility record.
-- No implementation, commit, PR state change, merge, or release.
+- No merge, release, public result artifact, or aggregate score.

@@ -11,6 +11,7 @@ from __future__ import annotations
 import importlib.metadata
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -38,6 +39,10 @@ class _Task:
     oracle: Callable[[dict[str, Any]], bool]
     uses_workspace: bool = True
     parser_distribution: str = "tree-sitter-python"
+    comparison_query: tuple[str, ...] | None = None
+    comparison_oracle: Callable[[dict[str, Any]], bool] | None = None
+    supplemental_query: tuple[str, ...] | None = None
+    supplemental_oracle: Callable[[dict[str, Any]], bool] | None = None
 
 
 def _definition_oracle(data: dict[str, Any]) -> bool:
@@ -69,6 +74,18 @@ def _branch_diff_oracle(data: dict[str, Any]) -> bool:
     return isinstance(diff, dict) and isinstance(diff.get("broken_chains"), list)
 
 
+def _codegraph_branch_diff_oracle(data: dict[str, Any]) -> bool:
+    diff = data.get("diff")
+    if not isinstance(diff, dict):
+        return False
+    content = diff.get("content_comparison")
+    return (
+        isinstance(content, dict)
+        and content.get("status") == "unavailable"
+        and content.get("reason") == "backend_has_no_per_entity_content_hash"
+    )
+
+
 def _factory_oracle(data: dict[str, Any]) -> bool:
     return any(
         edge.get("entity") == "consumer.run"
@@ -77,7 +94,7 @@ def _factory_oracle(data: dict[str, Any]) -> bool:
     )
 
 
-def _barrel_oracle(data: dict[str, Any]) -> bool:
+def _path_alias_oracle(data: dict[str, Any]) -> bool:
     return any(
         edge.get("entity") == "src.models.Session"
         for edge in data.get("callees", [])
@@ -90,8 +107,22 @@ def _barrel_oracle(data: dict[str, Any]) -> bool:
 
 
 def _debt_git_oracle(data: dict[str, Any]) -> bool:
-    health = data.get("overall_health")
-    return isinstance(health, dict) and isinstance(health.get("breakdown"), dict) and "git" in health["breakdown"]
+    return any(
+        issue.get("category") == "critical_hotspot"
+        and issue.get("severity") == "P0"
+        and issue.get("entity") == "app/hub.py"
+        for issue in data.get("issues", [])
+        if isinstance(issue, dict)
+    )
+
+
+def _hub_topology_oracle(data: dict[str, Any]) -> bool:
+    callers = data.get("callers", [])
+    return isinstance(callers, list) and {
+        f"app.consumer_{number}.use_{number}" for number in range(1, 9)
+    } == {
+        caller.get("entity") for caller in callers if isinstance(caller, dict)
+    }
 
 
 _TASKS = {
@@ -128,12 +159,18 @@ _TASKS = {
         rg=None,
         oracle=_branch_diff_oracle,
         uses_workspace=False,
+        comparison_query=("branch-diff", "base..head", "--backend", "codegraph"),
+        comparison_oracle=_codegraph_branch_diff_oracle,
     ),
     "structural-topology-debt-git": _Task(
-        fixture_id="python-history",
+        fixture_id="topology-debt-git",
         query=("debt", "--with-git", "--git-since", "10 years"),
         rg=None,
         oracle=_debt_git_oracle,
+        supplemental_query=(
+            "graph", "app.hub.HubFunc", "--direction", "callers", "--relation-type", "CALLS",
+        ),
+        supplemental_oracle=_hub_topology_oracle,
     ),
     "trust-annotated-factory-receiver": _Task(
         fixture_id="factory-receiver",
@@ -146,12 +183,17 @@ _TASKS = {
     "trust-alias-barrel": _Task(
         fixture_id="ts-barrel-alias",
         query=(
-            "graph", "src.consumer", "--direction", "callees", "--relation-type", "REFERENCES",
+            "graph", "src.alias_consumer", "--direction", "callees", "--relation-type", "REFERENCES",
             "--include-unresolved",
         ),
         rg=None,
-        oracle=_barrel_oracle,
+        oracle=_path_alias_oracle,
         parser_distribution="tree-sitter-typescript",
+        supplemental_query=(
+            "graph", "src.consumer", "--direction", "callees", "--relation-type", "REFERENCES",
+            "--include-unresolved",
+        ),
+        supplemental_oracle=_path_alias_oracle,
     ),
 }
 
@@ -227,6 +269,40 @@ def validate_observation(record: dict[str, object]) -> None:
     if rg.get("equivalence") not in {"equivalent", "unsupported"}:
         raise ObservationValidationError("rg.equivalence is invalid")
 
+    comparison_value = record.get("comparison")
+    if comparison_value is not None:
+        comparison = _mapping(comparison_value, "comparison")
+        _non_empty_string(comparison.get("backend"), "comparison.backend")
+        availability = comparison.get("availability")
+        if availability not in {"available", "infrastructure_unavailable"}:
+            raise ObservationValidationError("comparison.availability is invalid")
+        command = comparison.get("command")
+        if not isinstance(command, list) or not command or not all(isinstance(part, str) for part in command):
+            raise ObservationValidationError("comparison.command must be non-empty strings")
+        if availability == "available":
+            _non_empty_string(comparison.get("backend_version"), "comparison.backend_version")
+            if not isinstance(comparison.get("exit_code"), int):
+                raise ObservationValidationError("available comparison needs exit_code")
+            _non_empty_string(comparison.get("raw_stdout"), "comparison.raw_stdout")
+            oracle = _mapping(comparison.get("oracle"), "comparison.oracle")
+            if not isinstance(oracle.get("passed"), bool):
+                raise ObservationValidationError("comparison.oracle.passed must be boolean")
+        else:
+            _non_empty_string(comparison.get("infrastructure_error"), "comparison.infrastructure_error")
+
+    supplemental_value = record.get("supplemental")
+    if supplemental_value is not None:
+        supplemental = _mapping(supplemental_value, "supplemental")
+        command = supplemental.get("command")
+        if not isinstance(command, list) or not command or not all(isinstance(part, str) for part in command):
+            raise ObservationValidationError("supplemental.command must be non-empty strings")
+        if not isinstance(supplemental.get("exit_code"), int):
+            raise ObservationValidationError("supplemental.exit_code must be an integer")
+        _non_empty_string(supplemental.get("raw_stdout"), "supplemental.raw_stdout")
+        oracle = _mapping(supplemental.get("oracle"), "supplemental.oracle")
+        if not isinstance(oracle.get("passed"), bool):
+            raise ObservationValidationError("supplemental.oracle.passed must be boolean")
+
 
 def _version(distribution: str) -> str:
     try:
@@ -259,6 +335,98 @@ def _toolchain(task: _Task) -> dict[str, object]:
     }
 
 
+def _executable_version(executable: str) -> str:
+    try:
+        completed = subprocess.run(
+            [executable, "--version"], capture_output=True, text=True, timeout=5, check=False
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return "unavailable"
+    if completed.returncode != 0:
+        return "unavailable"
+    return completed.stdout.strip() or completed.stderr.strip() or "unavailable"
+
+
+def _comparison(
+    task: _Task,
+    command_prefix: list[str],
+    fixture: MaterializedFixture,
+    env: dict[str, str],
+) -> tuple[dict[str, object], dict[str, object]] | None:
+    if task.comparison_query is None or task.comparison_oracle is None:
+        return None
+    command = [*command_prefix, *task.comparison_query]
+    executable = shutil.which("codegraph")
+    if executable is None:
+        return (
+            {
+                "backend": "codegraph",
+                "availability": "infrastructure_unavailable",
+                "command": command,
+                "infrastructure_error": "codegraph executable not found",
+            },
+            {"backend": "codegraph", "availability": "infrastructure_unavailable"},
+        )
+    completed, wall_ms = _run(command, fixture.path, env)
+    data = _json_data(completed.stdout)
+    passed = completed.returncode == 0 and task.comparison_oracle(data)
+    content = data.get("diff", {}).get("content_comparison", {})
+    trust: dict[str, object] = {"backend": "codegraph", "availability": "available"}
+    if isinstance(content, dict):
+        trust.update(
+            {
+                "content_comparison_status": content.get("status"),
+                "content_comparison_reason": content.get("reason"),
+                "comparable_shared": content.get("comparable_shared"),
+                "uncomparable_shared": content.get("uncomparable_shared"),
+            }
+        )
+    return (
+        {
+            "backend": "codegraph",
+            "availability": "available",
+            "backend_version": _executable_version(executable),
+            "command": command,
+            "wall_ms": wall_ms,
+            "exit_code": completed.returncode,
+            "raw_stdout": completed.stdout or completed.stderr,
+            "raw_stderr": completed.stderr,
+            "oracle": {
+                "passed": passed,
+                "failures": [] if passed else ["comparison did not match oracle"],
+            },
+        },
+        trust,
+    )
+
+
+def _supplemental(
+    task: _Task,
+    command_prefix: list[str],
+    fixture: MaterializedFixture,
+    env: dict[str, str],
+    workspace: str,
+) -> dict[str, object] | None:
+    if task.supplemental_query is None or task.supplemental_oracle is None:
+        return None
+    command = [*command_prefix, *task.supplemental_query]
+    if task.uses_workspace:
+        command.extend(["-w", workspace])
+    completed, wall_ms = _run(command, fixture.path, env)
+    passed = completed.returncode == 0 and task.supplemental_oracle(_json_data(completed.stdout))
+    return {
+        "command": command,
+        "wall_ms": wall_ms,
+        "exit_code": completed.returncode,
+        "raw_stdout": completed.stdout or completed.stderr,
+        "raw_stderr": completed.stderr,
+        "oracle": {
+            "passed": passed,
+            "failures": [] if passed else ["supplemental answer did not match oracle"],
+        },
+    }
+
+
 def _observation(
     task_id: str,
     task: _Task,
@@ -271,9 +439,15 @@ def _observation(
     completed: subprocess.CompletedProcess[str],
     query_wall_ms: int,
     rg: dict[str, object],
+    comparison: tuple[dict[str, object], dict[str, object]] | None = None,
+    supplemental: dict[str, object] | None = None,
 ) -> dict[str, object]:
     data = _json_data(completed.stdout)
     passed = completed.returncode == 0 and task.oracle(data)
+    supplemental_passed = supplemental is None or bool(
+        _mapping(supplemental.get("oracle"), "supplemental.oracle").get("passed")
+    )
+    passed = passed and supplemental_passed
     source_id = ""
     matches = data.get("matches", [])
     if isinstance(matches, list) and matches and isinstance(matches[0], dict):
@@ -301,9 +475,20 @@ def _observation(
             "backend": "codeindex",
             "source_id": source_id,
         },
-        "oracle": {"passed": passed, "failures": [] if passed else ["answer did not match oracle"]},
+        "oracle": {
+            "passed": passed,
+            "failures": [] if passed else ["answer did not match oracle"],
+        },
         "rg": rg,
     }
+    if comparison is not None:
+        comparison_record, comparison_trust = comparison
+        record["comparison"] = comparison_record
+        trust = record["trust"]
+        assert isinstance(trust, dict)
+        trust["comparison"] = comparison_trust
+    if supplemental is not None:
+        record["supplemental"] = supplemental
     validate_observation(record)
     return record
 
@@ -331,6 +516,8 @@ def run_task(task_id: str, work_root: Path) -> list[dict[str, object]]:
     if task.uses_workspace:
         query_command.extend(["-w", workspace])
     cold_completed, cold_query_ms = _run(query_command, fixture.path, env)
+    cold_comparison = _comparison(task, command_prefix, fixture, env)
+    cold_supplemental = _supplemental(task, command_prefix, fixture, env, workspace)
 
     if task.rg is None:
         rg_record: dict[str, object] = {"equivalence": "unsupported", "command": None}
@@ -359,12 +546,14 @@ def run_task(task_id: str, work_root: Path) -> list[dict[str, object]]:
 
     cold = _observation(
         task_id, task, fixture, workspace, "cold", index_command, index_wall_ms,
-        query_command, cold_completed, cold_query_ms, rg_record,
+        query_command, cold_completed, cold_query_ms, rg_record, cold_comparison, cold_supplemental,
     )
     warm_completed, warm_query_ms = _run(query_command, fixture.path, env)
+    warm_comparison = _comparison(task, command_prefix, fixture, env)
+    warm_supplemental = _supplemental(task, command_prefix, fixture, env, workspace)
     warm = _observation(
         task_id, task, fixture, workspace, "warm", index_command, None,
-        query_command, warm_completed, warm_query_ms, rg_record,
+        query_command, warm_completed, warm_query_ms, rg_record, warm_comparison, warm_supplemental,
     )
     return [cold, warm]
 
