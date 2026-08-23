@@ -26,8 +26,8 @@
     {
       "id": "overlap-direct-static-call",
       "track": "A",
-      "task_class": "literal direct static caller lookup",
-      "question": "谁直接调用目标函数？",
+      "task_class": "literal direct static call-site lookup",
+      "question": "目标字面直接调用发生在哪里？",
       "rg_single_query": "equivalent",
       "tests": ["tests/unit/test_cli.py::TestAsyncGraphQuery::test_both_directions"],
       "oracle": {"direction": "both", "relation": "CALLS", "callers": ["main", "handler"]},
@@ -95,9 +95,9 @@
       "task_class": "alias or barrel ambiguity adversary",
       "question": "alias/barrel 的候选解析不确定时，是否避免写入伪造 CALLS 边？",
       "rg_single_query": "unsupported",
-      "tests": ["tests/contract/test_codeindex_output_contract.py::TestGraphExportShape::test_typescript_barrel_reference_reaches_definition", "tests/unit/test_export_reader.py::test_map_edge_ambiguous_uses_dst_raw_keeps_candidates"],
+      "tests": ["tests/contract/test_codeindex_output_contract.py::TestGraphExportShape::test_typescript_barrel_reference_reaches_definition", "tests/unit/test_export_reader.py::test_map_edge_ambiguous_uses_dst_raw_keeps_candidates", "tests/unit/test_graph_query.py::test_include_unresolved_flag_keeps_phantom_edges"],
       "oracle": {"barrel_reference": "src.consumer->src.models.Session", "must_not_target": "src.index.Session", "ambiguous_target": "Builder.run", "resolution_qualifier": "ambiguous"},
-      "trust_fields": ["backend", "source_id", "resolution_qualifier", "dst_raw", "candidates", "answer_status", "uncertainty_reason"],
+      "trust_fields": ["workspace", "backend", "source_id", "edge_trust.include_unresolved", "edge_trust.omitted_by_qualifier", "resolution_qualifier", "dst_raw", "candidates", "answer_status", "uncertainty_reason"],
       "recording": {"cold": "required", "warm": "required"}
     }
   ]
