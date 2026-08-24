@@ -335,7 +335,12 @@ def _append_mode_requirement(instruction: str, use_mode: str) -> str:
     if use_mode == "voluntary":
         return instruction
     if use_mode == "assisted":
-        return f"{instruction}\n\nUse at least one available navigation tool before responding."
+        navigation_limit = TOOL_CALL_BUDGET - 1
+        return (
+            f"{instruction}\n\nUse at least one available navigation tool before responding. "
+            f"Use at most {navigation_limit} navigation tool calls; reserve one tool call "
+            "for the required structured response."
+        )
     raise ValueError(f"unknown use mode: {use_mode}")
 
 

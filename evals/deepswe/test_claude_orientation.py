@@ -178,6 +178,13 @@ def test_packet_records_the_shared_tool_call_budget() -> None:
     assert packet["status"] == "tool_call_budget_exceeded"
 
 
+def test_assisted_instruction_reserves_a_slot_for_structured_output() -> None:
+    instruction = _MODULE._append_mode_requirement("orient", "assisted")
+
+    assert "at least one available navigation tool" in instruction
+    assert "at most 4 navigation tool calls" in instruction
+
+
 def test_assisted_treatment_requires_successful_structural_retrieval() -> None:
     packet = _MODULE.build_packet(
         condition="treatment",
