@@ -101,6 +101,10 @@ loomgraph codeindex scan-all --ai   # whole tree (passthrough)
 # Index a repo (uses codeindex under the hood for parsing)
 loomgraph index .
 
+# Optional but recommended for Claude Code projects: add the project-level
+# rule describing when structural navigation is preferable to text lookup.
+loomgraph init
+
 # Structural search — fuzzy match on entity names
 loomgraph find "UserService"
 
@@ -254,6 +258,7 @@ After `pipx install loomgraph` and one-time indexing (`loomgraph index .`):
 
 ```bash
 loomgraph mcp install-config --path ~/.claude/mcp.json
+loomgraph init
 ```
 
 Restart Claude Code. `loomgraph_find` / `loomgraph_graph` /

@@ -240,6 +240,7 @@ llm:
 |------|------|
 | `loomgraph version` | 显示版本信息 |
 | `loomgraph status` | 检查系统状态（storage / codeindex / embedding） |
+| `loomgraph init [--path CLAUDE.md]` | 显式写入项目级 LoomGraph 导航规则（保留已有内容、幂等） |
 | `loomgraph index <path>` | 一键索引代码库（graph-export → embed → insert 内部 pipeline，非独立命令） |
 | `loomgraph index --clear <path>` | Cold Rebuild（清空重建） |
 | `loomgraph update [--since REF]` | Warm Update（per-file 增量，git diff） |
@@ -275,7 +276,7 @@ llm:
 ### MCP 集成
 
 LoomGraph 原生 MCP server（v0.12+）。`loomgraph mcp install-config --path ~/.claude/mcp.json`
-后重启 Claude Code，`loomgraph_find` / `loomgraph_graph` / `loomgraph_topology` /
+后，执行 `loomgraph init` 写入项目级工具选择规则，再重启 Claude Code，`loomgraph_find` / `loomgraph_graph` / `loomgraph_topology` /
 `loomgraph_impact` / `loomgraph_deps` / `loomgraph_debt_audit` 等作为原生工具出现，
 无 subprocess 开销。完整参考见 [docs/api/MCP_DESIGN.md](docs/api/MCP_DESIGN.md)。
 
