@@ -46,8 +46,9 @@ TRUSTED_ORIENTATION_SCHEMA: dict[str, Any] = {
         "trust": {
             "type": "object",
             "additionalProperties": False,
-            "required": ["edge_trust", "resolution"],
+            "required": ["availability", "edge_trust", "resolution"],
             "properties": {
+                "availability": {"type": "string", "enum": ["available", "unavailable"]},
                 "edge_trust": {"type": "string", "minLength": 1},
                 "resolution": {
                     "type": "object",
@@ -58,9 +59,9 @@ TRUSTED_ORIENTATION_SCHEMA: dict[str, Any] = {
                         "external_unresolved_ratio",
                     ],
                     "properties": {
-                        "resolved_ratio": {"type": "number"},
-                        "internal_unresolved_ratio": {"type": "number"},
-                        "external_unresolved_ratio": {"type": "number"},
+                        "resolved_ratio": {"type": ["number", "null"]},
+                        "internal_unresolved_ratio": {"type": ["number", "null"]},
+                        "external_unresolved_ratio": {"type": ["number", "null"]},
                     },
                 },
             },
@@ -273,20 +274,27 @@ def _valid_payload(payload: object, *, require_trust: bool) -> bool:
     if not require_trust:
         return True
     trust = payload.get("trust")
-    if not isinstance(trust, dict) or set(trust) != {"edge_trust", "resolution"}:
+    if not isinstance(trust, dict) or set(trust) != {"availability", "edge_trust", "resolution"}:
         return False
     resolution = trust.get("resolution")
+    availability = trust.get("availability")
+    expected_resolution = {
+        "resolved_ratio",
+        "internal_unresolved_ratio",
+        "external_unresolved_ratio",
+    }
+    valid_resolution = isinstance(resolution, dict) and set(resolution) == expected_resolution
     return (
+        availability in {"available", "unavailable"}
+        and
         isinstance(trust.get("edge_trust"), str)
         and bool(trust["edge_trust"])
-        and isinstance(resolution, dict)
-        and set(resolution)
-        == {
-            "resolved_ratio",
-            "internal_unresolved_ratio",
-            "external_unresolved_ratio",
-        }
-        and all(isinstance(value, (int, float)) for value in resolution.values())
+        and valid_resolution
+        and (
+            all(isinstance(value, (int, float)) for value in resolution.values())
+            if availability == "available"
+            else all(value is None for value in resolution.values())
+        )
     )
 
 

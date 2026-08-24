@@ -10,3 +10,6 @@ exists.
 
 The structured response must include `edge_trust` and the graph
 `resolved_ratio`, `internal_unresolved_ratio`, and `external_unresolved_ratio`.
+When graph-resolution evidence is unavailable in the current condition, set
+trust availability to `unavailable` and all three ratios to `null`; never
+invent graph trust values.

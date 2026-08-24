@@ -63,7 +63,9 @@ impact question with a frozen path oracle and required graph trust fields; an
 `rg` single-query equivalent is explicitly unsupported.
 For a trust-required fixture, those fields must appear in the structured
 agent response: a trust-bearing MCP trace alone is not a trust-qualified
-answer.
+answer. A text-only control reports that graph trust as `unavailable` with
+null ratios rather than inventing values; a graph-backed response must return
+the observed ratios.
 
 ## Runtime fidelity and track scope
 

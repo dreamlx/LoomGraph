@@ -14,6 +14,7 @@
         "vulture/noqa.py"
       ],
       "required_trust_fields": [
+        "availability",
         "edge_trust",
         "resolution.resolved_ratio",
         "resolution.internal_unresolved_ratio",

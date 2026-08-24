@@ -19,6 +19,7 @@ def test_vulture_scan_impact_fixture_has_oracle_and_trust_contract() -> None:
         "vulture/noqa.py",
     ]
     assert fixture["required_trust_fields"] == [
+        "availability",
         "edge_trust",
         "resolution.resolved_ratio",
         "resolution.internal_unresolved_ratio",

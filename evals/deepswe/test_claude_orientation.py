@@ -85,7 +85,11 @@ def test_trust_required_command_exposes_the_trust_output_contract() -> None:
 
     schema = json.loads(_argument(command, "--json-schema"))
     assert schema["required"] == ["candidates", "trust"]
-    assert schema["properties"]["trust"]["required"] == ["edge_trust", "resolution"]
+    assert schema["properties"]["trust"]["required"] == [
+        "availability",
+        "edge_trust",
+        "resolution",
+    ]
     assert schema["properties"]["trust"]["properties"]["resolution"]["required"] == [
         "resolved_ratio",
         "internal_unresolved_ratio",
@@ -214,6 +218,7 @@ def test_trust_required_packet_rejects_a_response_without_trust() -> None:
 
 def test_trust_required_packet_records_a_complete_trust_response() -> None:
     trust = {
+        "availability": "available",
         "edge_trust": "resolved-only; unresolved edges omitted",
         "resolution": {
             "resolved_ratio": 0.2,
@@ -223,6 +228,35 @@ def test_trust_required_packet_records_a_complete_trust_response() -> None:
     }
     packet = _MODULE.build_packet(
         condition="treatment",
+        use_mode="voluntary",
+        source_clean=True,
+        return_code=0,
+        summary={
+            "final_result_seen": True,
+            "payload": {
+                "candidates": [{"path": "src/x.py", "evidence": "x"}],
+                "trust": trust,
+            },
+        },
+        require_trust=True,
+    )
+
+    assert packet["status"] == "complete"
+    assert packet["trust"] == trust
+
+
+def test_trust_required_packet_allows_an_explicit_unavailable_control() -> None:
+    trust = {
+        "availability": "unavailable",
+        "edge_trust": "No graph-resolution evidence is available in this condition.",
+        "resolution": {
+            "resolved_ratio": None,
+            "internal_unresolved_ratio": None,
+            "external_unresolved_ratio": None,
+        },
+    }
+    packet = _MODULE.build_packet(
+        condition="baseline",
         use_mode="voluntary",
         source_clean=True,
         return_code=0,
