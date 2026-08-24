@@ -571,10 +571,12 @@ def _observation(
         _mapping(supplemental.get("oracle"), "supplemental.oracle").get("passed")
     )
     passed = passed and supplemental_passed
-    source_id = ""
-    matches = data.get("matches", [])
-    if isinstance(matches, list) and matches and isinstance(matches[0], dict):
-        source_id = str(matches[0].get("source_id", ""))
+    source_id = data.get("source_id", "")
+    if not isinstance(source_id, str) or not source_id:
+        source_id = ""
+        matches = data.get("matches", [])
+        if isinstance(matches, list) and matches and isinstance(matches[0], dict):
+            source_id = str(matches[0].get("source_id", ""))
     record: dict[str, object] = {
         "schema_version": 1,
         "fixture": {"id": fixture.fixture_id, "sha": fixture.sha, "git_ref": "head"},

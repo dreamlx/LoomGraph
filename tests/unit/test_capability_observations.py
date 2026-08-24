@@ -261,6 +261,7 @@ def test_factory_receiver_sparse_control_never_claims_isolation(tmp_path) -> Non
     records = run_task("trust-annotated-factory-receiver", tmp_path / "factory")
 
     for record in records:
+        assert record["trust"]["source_id"] == "store.py:2"
         primary = json.loads(record["operation"]["raw_stdout"])["data"]
         assert {caller["entity"] for caller in primary["callers"]} == {"consumer.run"}
         sparse = json.loads(record["supplemental"]["raw_stdout"])["data"]
