@@ -133,11 +133,10 @@ def _codegraph_branch_diff_oracle(data: dict[str, Any]) -> bool:
 
 
 def _factory_oracle(data: dict[str, Any]) -> bool:
-    return any(
-        edge.get("entity") == "consumer.run"
-        for edge in data.get("callers", [])
-        if isinstance(edge, dict)
-    )
+    callers = data.get("callers")
+    return isinstance(callers, list) and {
+        edge.get("entity") for edge in callers if isinstance(edge, dict)
+    } == {"consumer.run"}
 
 
 def _sparse_factory_impact_oracle(data: dict[str, Any]) -> bool:

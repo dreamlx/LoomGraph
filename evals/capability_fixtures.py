@@ -146,6 +146,8 @@ def _factory_receiver(path: Path) -> set[str]:
         "factory.py",
         "from store import Store\n\n"
         "async def create_store() -> Store:\n"
+        "    return Store()\n\n"
+        "async def create_store_unannotated():\n"
         "    return Store()\n",
     )
     _write(
@@ -154,6 +156,14 @@ def _factory_receiver(path: Path) -> set[str]:
         "from factory import create_store\n\n"
         "async def run() -> None:\n"
         "    store = await create_store()\n"
+        "    await store.create_entity()\n",
+    )
+    _write(
+        path,
+        "consumer_unannotated.py",
+        "from factory import create_store_unannotated\n\n"
+        "async def run() -> None:\n"
+        "    store = await create_store_unannotated()\n"
         "    await store.create_entity()\n",
     )
     _write(
