@@ -22,7 +22,7 @@ The runner materializes five tiny versioned repositories:
 | `python-core` | A1, A2, B2 | one immutable commit |
 | `python-history` | B1, B4 | `base` and `head` tags; fixed author/committer dates |
 | `topology-debt-git` | B3 | one hub with eight consumers and thirteen fixed-date commits |
-| `factory-receiver` | C1 | one immutable commit with an annotated factory return |
+| `factory-receiver` | C1 | `base`/`head` tags: annotated factory positive plus sparse no-caller change |
 | `ts-barrel-alias` | C2 | one immutable commit; barrel and `tsconfig` path-alias cases are separate files |
 
 The materializer calculates a content SHA after writing each fixture, and the
@@ -94,7 +94,7 @@ actual query shape, not a performance claim.
 | B2 typed module dependencies | `python-core`; `loomgraph deps -d 2 -w "$WS"` | **unsupported** | expected cross-module `CALLS` and `IMPORTS` aggregates | relation types, source scope, unresolved dependency count, `partial`, resolution qualifier |
 | B3 topology/debt with Git evidence | `topology-debt-git`; primary `loomgraph debt --with-git --git-since '10 years' -w "$WS"`, supplemental callers graph for `app.hub.HubFunc` | **unsupported** | `app/hub.py` is `critical_hotspot` at P0 (13 changes, score 100) under fixed history, and the supplemental graph returns exactly eight `HubFunc` callers | fixture Git ref, analysis version, source scope, resolution split, Git window |
 | B4 directional branch diff / L2 status | `python-history`; codeindex primary plus `codegraph` comparison variant | **unsupported** | codeindex finds fixed broken chains and reports L2 `available`; codegraph reports L2 `unavailable`, never `unchanged` | base/head resolved SHAs, both backends and codegraph version, `content_comparison.status` and reason, comparable/uncomparable shared counts |
-| C1 annotated-factory receiver adversary | `factory-receiver`; `loomgraph graph store.Store.create_entity --direction callers --relation-type CALLS -w "$WS"` | **unsupported** | positive caller is `consumer.run` | source ID, resolution split, answer status, uncertainty reason; sparse-result safety remains independently guarded by the named #208 contract test |
+| C1 annotated-factory receiver adversary | `factory-receiver`; primary caller graph plus supplemental `loomgraph impact head --base base --depth 2 -w "$WS"` | **unsupported** | positive caller is `consumer.run`; sparse `only_here` change has zero callers but is `medium`/`unknown`, never isolated/low | source ID, resolution split, answer status, uncertainty reason |
 | C2 barrel and alias adversary | `ts-barrel-alias`; primary `src.alias_consumer` path-alias query plus supplemental `src.consumer` barrel query, both with `--include-unresolved` | **unsupported** | both references resolve to `src.models.Session`, never a ghost `src.index.Session`; ambiguous references remain non-resolved | workspace, backend, source ID, `edge_trust`, qualifier, `dst_raw`, candidates, answer status, uncertainty reason |
 
 ## Approved protocol decisions

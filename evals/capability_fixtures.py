@@ -135,9 +135,39 @@ def _factory_receiver(path: Path) -> set[str]:
         "    store = await create_store()\n"
         "    await store.create_entity()\n",
     )
-    _commit(path, "factory receiver", "2024-01-03T00:00:00+00:00")
+    _write(
+        path,
+        "sparse.py",
+        "def only_here() -> int:\n"
+        "    return 1\n",
+    )
+    _write(
+        path,
+        "unresolved.py",
+        "def probe_one() -> object:\n"
+        "    return vendor_one.send()\n\n"
+        "def probe_two() -> object:\n"
+        "    return vendor_two.send()\n\n"
+        "def probe_three() -> object:\n"
+        "    return vendor_three.send()\n\n"
+        "def probe_four() -> object:\n"
+        "    return vendor_four.send()\n\n"
+        "def probe_five() -> object:\n"
+        "    return vendor_five.send()\n\n"
+        "def probe_six() -> object:\n"
+        "    return vendor_six.send()\n",
+    )
+    _commit(path, "factory base", "2024-01-03T00:00:00+00:00")
+    _git(path, "tag", "base")
+    _write(
+        path,
+        "sparse.py",
+        "def only_here() -> int:\n"
+        "    return 2\n",
+    )
+    _commit(path, "sparse change", "2024-01-04T00:00:00+00:00")
     _git(path, "tag", "head")
-    return {"head"}
+    return {"base", "head"}
 
 
 def _topology_debt_git(path: Path) -> set[str]:

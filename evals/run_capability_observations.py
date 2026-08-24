@@ -113,6 +113,29 @@ def _factory_oracle(data: dict[str, Any]) -> bool:
     )
 
 
+def _sparse_factory_impact_oracle(data: dict[str, Any]) -> bool:
+    impact = data.get("impact_analysis")
+    risk = data.get("risk_assessment")
+    resolution = data.get("resolution")
+    return (
+        isinstance(impact, dict)
+        and impact.get("direct_callers") == []
+        and impact.get("indirect_callers") == []
+        and isinstance(risk, dict)
+        and risk.get("level") in {"unknown", "medium"}
+        and "isolated" not in str(risk.get("reason", ""))
+        and isinstance(resolution, dict)
+        and all(
+            isinstance(resolution.get(key), (int, float))
+            for key in (
+                "resolved_ratio",
+                "internal_unresolved_ratio",
+                "external_unresolved_ratio",
+            )
+        )
+    )
+
+
 def _path_alias_oracle(data: dict[str, Any]) -> bool:
     return any(
         edge.get("entity") == "src.models.Session"
@@ -200,6 +223,8 @@ _TASKS = {
         ),
         rg=None,
         oracle=_factory_oracle,
+        supplemental_query=("impact", "head", "--base", "base", "--depth", "2"),
+        supplemental_oracle=_sparse_factory_impact_oracle,
         requires_resolution_split=True,
     ),
     "trust-alias-barrel": _Task(

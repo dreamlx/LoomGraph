@@ -79,6 +79,13 @@ def test_materialized_fixture_has_stable_refs_and_content_hash(tmp_path) -> None
     assert (fixture.path / "app" / "auth.py").is_file()
 
 
+def test_factory_fixture_has_positive_and_sparse_refs(tmp_path) -> None:
+    fixture = materialize_fixture("factory-receiver", tmp_path / "fixture")
+
+    assert fixture.refs == {"base", "head"}
+    assert "def only_here" in (fixture.path / "sparse.py").read_text()
+
+
 def test_topology_debt_fixture_has_a_deterministic_hub_and_history(tmp_path) -> None:
     fixture = materialize_fixture("topology-debt-git", tmp_path / "fixture")
 
@@ -159,6 +166,19 @@ def test_runner_exercises_the_tsconfig_path_alias(tmp_path) -> None:
     for record in records:
         assert "src.alias_consumer" in record["operation"]["query_command"]
         assert "src.consumer" in record["supplemental"]["command"]
+        assert record["supplemental"]["oracle"]["passed"] is True
+
+
+def test_factory_receiver_sparse_control_never_claims_isolation(tmp_path) -> None:
+    records = run_task("trust-annotated-factory-receiver", tmp_path / "factory")
+
+    for record in records:
+        sparse = json.loads(record["supplemental"]["raw_stdout"])["data"]
+        impact = sparse["impact_analysis"]
+        assert impact["direct_callers"] == []
+        assert impact["indirect_callers"] == []
+        assert sparse["risk_assessment"]["level"] in {"unknown", "medium"}
+        assert "isolated" not in sparse["risk_assessment"]["reason"]
         assert record["supplemental"]["oracle"]["passed"] is True
 
 
