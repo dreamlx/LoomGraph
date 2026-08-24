@@ -67,10 +67,10 @@ start clean; any model-phase change makes the packet invalid.
 
 The two conditions share the same instruction file and JSON Schema. Baseline
 has only `Read`, `Glob`, and `Grep`; treatment has no built-in navigation tools
-and only the native MCP `loomgraph_find` and `loomgraph_graph` tools. Claude
-adds its required `StructuredOutput` tool when the JSON Schema is active. This
-uses Claude Code `--tools` for availability isolation; `--allowedTools` only
-auto-allows the treatment MCP calls.
+and starts LoomGraph with a server-side allowlist containing only native
+`loomgraph_find` and `loomgraph_graph`. Claude adds its required
+`StructuredOutput` tool when the JSON Schema is active. `--allowedTools`
+auto-allows those two calls; the server allowlist is the availability boundary.
 
 ```bash
 python evals/deepswe/claude_orientation.py \
@@ -98,17 +98,17 @@ evidence that the Claude binary itself ran inside a DeepSWE container.
 
 `voluntary` is the default: LoomGraph is available, but the model may choose
 not to retrieve. `assisted` is a separately labelled treatment mode: it must
-run one structural `find` or `graph` query before emitting its packet. They are
-never pooled as one treatment. The tool card is backend-aware: codegraph has
-already been indexed by setup and must not be indexed again; codeindex may be
-indexed once before retrieval.
+complete one evidence-bearing structural `find` or `graph` query before
+emitting its packet. They are never pooled as one treatment. The tool card is
+backend-aware: codegraph has already been indexed by setup and must not be
+indexed again; codeindex may be indexed once before retrieval.
 
-The adapter records observed `tool_call_count`, the five-call budget-overrun
-flag, and structural-retrieval attempts, command success, and evidence-bearing
-retrievals (from OMP tool-result events, not model self-report). Assisted mode
-requires one successful retrieval with structural evidence: a `find` needs a
-non-empty match set and a `graph` needs a resolved entity. These are operational
-measurements, not target-hit penalties.
+The adapter records the requested and observed model identifiers, observed
+`tool_call_count`, structural retrieval evidence, and any unexpected MCP tool.
+A five-call budget overrun, unexpected MCP tool, or assisted treatment without
+evidence-bearing retrieval makes the packet invalid. A successful `find` needs
+a non-empty match set and a `graph` needs a resolved entity. These are
+operational measurements, not target-hit penalties.
 
 The summary also reads Pier's sibling trial `result.json`: uncached input
 tokens, cached input tokens, output tokens, model cost, agent navigation time,

@@ -193,9 +193,10 @@ missing or malformed responses are explicit invalid observations.
 ## Execution order
 
 1. Validate all eight A-C capability/trust fixtures.
-2. Run a Claude Code MCP smoke on one task from each B stratum. Verify that the
-   native LoomGraph tools are registered and that the trace records their use;
-   this is the first product-fidelity gate.
+2. Run a Claude Code MCP smoke on one task from each B stratum. Verify the
+   server-side MCP allowlist, observed model identity, source cleanliness, and
+   evidence-bearing use of the declared native tools; this is the first
+   product-fidelity gate.
 3. Run the OMP CLI smoke only to verify installation, invocation, and artifact
    integrity. Do not promote its assisted results to an efficiency claim.
 4. Add the Pi-native track only after its minimal extension exists, then run a

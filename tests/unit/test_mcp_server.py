@@ -20,6 +20,8 @@ from loomgraph.mcp.server import (
     _CODEGRAPH_OVERLAP_TOOLS,
     _TOOL_HANDLERS,
     _TOOL_SPECS,
+    ALLOWED_TOOLS_ENV,
+    _tool_is_allowed,
     _visible_tool_specs,
     build_server,
 )
@@ -140,6 +142,16 @@ def test_visible_tools_env_all_forces_full_list(monkeypatch):
     )
     names = {t.name for t in _visible_tool_specs()}
     assert _CODEGRAPH_OVERLAP_TOOLS.issubset(names)
+
+
+def test_allowed_tools_env_limits_discovery_and_dispatch(monkeypatch):
+    """A constrained MCP server must not merely hide disallowed tools."""
+    monkeypatch.setenv(ALLOWED_TOOLS_ENV, "loomgraph_find,loomgraph_graph")
+    names = {tool.name for tool in _visible_tool_specs()}
+
+    assert names == {"loomgraph_find", "loomgraph_graph"}
+    assert _tool_is_allowed("loomgraph_find") is True
+    assert _tool_is_allowed("loomgraph_overview") is False
 
 
 def test_overlap_tools_remain_callable_when_unlisted(monkeypatch):

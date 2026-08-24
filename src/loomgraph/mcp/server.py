@@ -89,6 +89,22 @@ _register(t_sync_advice.TOOL_SPEC, t_sync_advice.handle)
 # forces the full list (parity with codegraph's CODEGRAPH_MCP_TOOLS philosophy).
 _CODEGRAPH_OVERLAP_TOOLS = {"loomgraph_find", "loomgraph_graph"}
 ALL_TOOLS_ENV = "LOOMGRAPH_MCP_TOOLS"
+ALLOWED_TOOLS_ENV = "LOOMGRAPH_MCP_ALLOWED_TOOLS"
+
+
+def _allowed_tool_names() -> set[str] | None:
+    """Return an optional fail-closed server allowlist from the environment."""
+    import os
+
+    raw = os.environ.get(ALLOWED_TOOLS_ENV)
+    if raw is None:
+        return None
+    return {name.strip() for name in raw.split(",") if name.strip()} & set(_TOOL_HANDLERS)
+
+
+def _tool_is_allowed(name: str) -> bool:
+    allowed = _allowed_tool_names()
+    return allowed is None or name in allowed
 
 
 def build_server() -> Server:
@@ -104,6 +120,23 @@ def build_server() -> Server:
     async def call_tool(ctx: Any, params: Any) -> CallToolResult:
         name = params.name
         arguments = params.arguments or {}
+        if not _tool_is_allowed(name):
+            return CallToolResult(
+                content=[
+                    TextContent(
+                        type="text",
+                        text=json.dumps(
+                            {
+                                "success": False,
+                                "error": {
+                                    "code": "TOOL_NOT_ALLOWED",
+                                    "message": f"Tool {name!r} is not enabled for this server.",
+                                },
+                            }
+                        ),
+                    )
+                ]
+            )
         handler = _TOOL_HANDLERS.get(name)
         if handler is None:
             return CallToolResult(
@@ -156,6 +189,9 @@ def _visible_tool_specs() -> list[Tool]:
     """
     import os
 
+    allowed = _allowed_tool_names()
+    if allowed is not None:
+        return [tool for tool in _TOOL_SPECS if tool.name in allowed]
     if os.environ.get(ALL_TOOLS_ENV, "").lower() == "all":
         return list(_TOOL_SPECS)
     if not _active_workspace_is_codegraph():
