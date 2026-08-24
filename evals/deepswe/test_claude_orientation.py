@@ -56,6 +56,22 @@ def test_treatment_command_exposes_only_native_loomgraph_tools() -> None:
     assert command[-2:] == ["--", "orient"]
 
 
+def test_additive_treatment_keeps_text_navigation_and_mcp_allowlist() -> None:
+    command = _MODULE.build_command(
+        condition="treatment",
+        instruction="orient",
+        model="sonnet",
+        budget_usd="0.50",
+        loomgraph_binary="/tmp/loomgraph",
+        treatment_surface="additive",
+    )
+
+    assert _argument(command, "--tools") == "Read,Glob,Grep"
+    assert json.loads(_argument(command, "--mcp-config"))["mcpServers"]["loomgraph"]["env"] == {
+        "LOOMGRAPH_MCP_ALLOWED_TOOLS": "loomgraph_find,loomgraph_graph"
+    }
+
+
 def test_stream_summary_reads_structured_result_and_observed_mcp_calls() -> None:
     events = [
         {
@@ -221,3 +237,23 @@ def test_packet_records_observed_model_identity_without_claiming_an_alias() -> N
         "requested": "sonnet",
         "observed": ["glm-5.2[1M]", "glm-5.3"],
     }
+
+
+def test_packet_labels_additive_navigation_surface() -> None:
+    packet = _MODULE.build_packet(
+        condition="treatment",
+        use_mode="assisted",
+        source_clean=True,
+        return_code=0,
+        summary={
+            "final_result_seen": True,
+            "payload": {"candidates": [{"path": "src/x.py", "evidence": "x"}]},
+            "structural_retrievals": [
+                {"tool": "mcp__loomgraph__loomgraph_find", "evidence": "find_matches"}
+            ],
+        },
+        requested_model="sonnet",
+        navigation_surface="additive",
+    )
+
+    assert packet["navigation_surface"] == "additive"
