@@ -118,7 +118,11 @@ baseline answers whether normal development navigation changes when LoomGraph
 is available and used; `mcp-only` answers only whether the native MCP surface
 can stand alone.
 
-The adapter records the requested and observed model identifiers, observed
+The adapter records the requested model identifier plus separate assistant,
+session-event, and aggregated-usage model identifiers. `observed` remains their
+backward-compatible union; only `assistant_observed` identifies models attached
+to assistant events. This prevents session initialization or auxiliary usage
+telemetry from being misreported as the reasoning model. It also records
 `tool_call_count`, structural retrieval evidence, and any unexpected MCP tool.
 A five-call budget overrun, unexpected MCP tool, or assisted treatment without
 evidence-bearing retrieval makes the packet invalid. A successful `find` needs

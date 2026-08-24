@@ -150,17 +150,25 @@ def summarize_stream(events: list[dict[str, Any]]) -> dict[str, object]:
     """Extract the final schema payload and observed native LoomGraph calls."""
     tool_names: list[str] = []
     tool_call_names: dict[str, str] = {}
-    observed_models: list[str] = []
+    assistant_models: list[str] = []
+    session_models: list[str] = []
+    usage_models: list[str] = []
     for event in events:
         model = event.get("model")
         if isinstance(model, str):
-            observed_models.append(model)
+            if event.get("type") == "assistant":
+                assistant_models.append(model)
+            else:
+                session_models.append(model)
         message = event.get("message")
         if not isinstance(message, dict):
             continue
         message_model = message.get("model")
         if isinstance(message_model, str):
-            observed_models.append(message_model)
+            if event.get("type") == "assistant":
+                assistant_models.append(message_model)
+            else:
+                session_models.append(message_model)
         content = message.get("content")
         if not isinstance(content, list):
             continue
@@ -237,7 +245,11 @@ def summarize_stream(events: list[dict[str, Any]]) -> dict[str, object]:
     for event in events:
         model_usage = event.get("modelUsage")
         if isinstance(model_usage, dict):
-            observed_models.extend(name for name in model_usage if isinstance(name, str))
+            usage_models.extend(name for name in model_usage if isinstance(name, str))
+
+    assistant_models = list(dict.fromkeys(assistant_models))
+    session_models = list(dict.fromkeys(session_models))
+    usage_models = list(dict.fromkeys(usage_models))
 
     return {
         "final_result_seen": final_result_seen,
@@ -251,7 +263,12 @@ def summarize_stream(events: list[dict[str, Any]]) -> dict[str, object]:
             if name.startswith("mcp__loomgraph__") and name not in LOOMGRAPH_TOOLS
         ],
         "structural_retrievals": structural_retrievals,
-        "observed_models": list(dict.fromkeys(observed_models)),
+        "observed_models": list(
+            dict.fromkeys([*session_models, *assistant_models, *usage_models])
+        ),
+        "assistant_models": assistant_models,
+        "session_models": session_models,
+        "usage_models": usage_models,
     }
 
 
@@ -357,11 +374,18 @@ def build_packet(
         isinstance(name, str) for name in unexpected_mcp_tools
     ):
         unexpected_mcp_tools = []
-    observed_models = summary.get("observed_models")
-    if not isinstance(observed_models, list) or not all(
-        isinstance(model, str) for model in observed_models
-    ):
-        observed_models = []
+    def model_list(name: str) -> list[str]:
+        models = summary.get(name)
+        return (
+            models
+            if isinstance(models, list) and all(isinstance(model, str) for model in models)
+            else []
+        )
+
+    observed_models = model_list("observed_models")
+    assistant_models = model_list("assistant_models")
+    session_models = model_list("session_models")
+    usage_models = model_list("usage_models")
     tool_call_budget_overrun = len(tool_names) > TOOL_CALL_BUDGET
     if not source_clean:
         status = "invalid_source_mutation"
@@ -403,7 +427,13 @@ def build_packet(
         "tool_call_count": len(tool_names),
         "tool_call_budget": TOOL_CALL_BUDGET,
         "tool_call_budget_overrun": tool_call_budget_overrun,
-        "model": {"requested": requested_model, "observed": observed_models},
+        "model": {
+            "requested": requested_model,
+            "observed": observed_models,
+            "assistant_observed": assistant_models,
+            "session_observed": session_models,
+            "usage_observed": usage_models,
+        },
         "tooling": {
             "loomgraph": {
                 "used": bool(loomgraph_tools),
