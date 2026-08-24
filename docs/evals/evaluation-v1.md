@@ -65,7 +65,8 @@ For a trust-required fixture, those fields must appear in the structured
 agent response: a trust-bearing MCP trace alone is not a trust-qualified
 answer. A text-only control reports that graph trust as `unavailable` with
 null ratios rather than inventing values; a graph-backed response must return
-the observed ratios.
+the observed ratios. A trust-required treatment that reports `unavailable` is
+an invalid observation, not a successful graph-backed answer.
 
 ## Runtime fidelity and track scope
 
