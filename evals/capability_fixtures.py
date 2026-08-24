@@ -257,7 +257,13 @@ def _ts_barrel_alias(path: Path) -> set[str]:
         path,
         "src/alias_consumer.ts",
         'import { Session } from "@models/models";\n\n'
-        "export const useAliasSession = (session: Session) => session;\n",
+        "export function useAliasSession(\n"
+        "  session: Session,\n"
+        "  db: { exec(): void },\n"
+        "): Session {\n"
+        "  db.exec();\n"
+        "  return session;\n"
+        "}\n",
     )
     _commit(path, "barrel", "2024-01-04T00:00:00+00:00")
     _git(path, "tag", "head")

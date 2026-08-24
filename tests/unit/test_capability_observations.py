@@ -123,7 +123,10 @@ def test_typescript_adversary_fixture_contains_a_real_path_alias(tmp_path) -> No
     fixture = materialize_fixture("ts-barrel-alias", tmp_path / "fixture")
 
     assert '"@models/*": ["src/*"]' in (fixture.path / "tsconfig.json").read_text()
-    assert 'from "@models/models"' in (fixture.path / "src" / "alias_consumer.ts").read_text()
+    alias_consumer = (fixture.path / "src" / "alias_consumer.ts").read_text()
+    assert 'from "@models/models"' in alias_consumer
+    assert "function useAliasSession" in alias_consumer
+    assert "db.exec()" in alias_consumer
 
 
 def test_runner_writes_real_cold_and_warm_definition_observations(tmp_path) -> None:
@@ -255,6 +258,17 @@ def test_runner_exercises_the_tsconfig_path_alias(tmp_path) -> None:
         assert "src.alias_consumer" in record["operation"]["query_command"]
         assert "src.consumer" in record["supplemental"]["command"]
         assert record["supplemental"]["oracle"]["passed"] is True
+        dynamic = json.loads(record["adversary"]["raw_stdout"])["data"]
+        assert dynamic["callees"] == [
+            {
+                "entity": "db.exec",
+                "relation": "CALLS",
+                "source_id": "",
+                "resolution_qualifier": "unresolved",
+                "dst_raw": "db.exec",
+            }
+        ]
+        assert record["adversary"]["oracle"]["passed"] is True
 
 
 def test_factory_receiver_sparse_control_never_claims_isolation(tmp_path) -> None:
