@@ -103,6 +103,11 @@ emitting its packet. They are never pooled as one treatment. The tool card is
 backend-aware: codegraph has already been indexed by setup and must not be
 indexed again; codeindex may be indexed once before retrieval.
 
+For the shared five-call budget, the assisted instruction reserves one call for
+Claude's required `StructuredOutput`; it therefore directs the agent to use at
+most four navigation calls. The adapter remains the enforcing authority and
+marks any overflow invalid.
+
 The adapter records the requested and observed model identifiers, observed
 `tool_call_count`, structural retrieval evidence, and any unexpected MCP tool.
 A five-call budget overrun, unexpected MCP tool, or assisted treatment without
