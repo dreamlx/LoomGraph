@@ -27,6 +27,7 @@ def test_baseline_command_exposes_only_text_navigation_tools() -> None:
     )
 
     assert _argument(command, "--tools") == "Read,Glob,Grep"
+    assert _argument(command, "--setting-sources") == "project,local"
     assert json.loads(_argument(command, "--mcp-config")) == {"mcpServers": {}}
     assert "--allowedTools" not in command
 
