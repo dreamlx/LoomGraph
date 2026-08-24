@@ -193,9 +193,11 @@ missing or malformed responses are explicit invalid observations.
 ## Execution order
 
 1. Validate all eight A-C capability/trust fixtures.
-2. Run a Claude Code MCP smoke on one task from each B stratum. Verify the
-   server-side MCP allowlist, observed model identity, source cleanliness, and
-   evidence-bearing use of the declared native tools; this is the first
+2. Run a Claude Code MCP smoke on one task from each B stratum. Keep the
+   MCP-only compatibility surface separate from the development-use pair:
+   `text-only` versus `additive` (the same text tools plus an allowlisted
+   LoomGraph MCP). Verify the server-side allowlist, observed model identity,
+   source cleanliness, and evidence-bearing LoomGraph use; this is the first
    product-fidelity gate.
 3. Run the OMP CLI smoke only to verify installation, invocation, and artifact
    integrity. Do not promote its assisted results to an efficiency claim.

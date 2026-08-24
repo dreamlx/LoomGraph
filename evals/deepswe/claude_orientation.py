@@ -50,6 +50,7 @@ def build_command(
     model: str,
     budget_usd: str,
     loomgraph_binary: str,
+    treatment_surface: str = "mcp-only",
 ) -> list[str]:
     """Build an isolated Claude invocation for exactly one condition."""
     command = [
@@ -79,10 +80,12 @@ def build_command(
             ["--tools", BASELINE_TOOLS, "--mcp-config", _compact_json({"mcpServers": {}})]
         )
     elif condition == "treatment":
+        if treatment_surface not in {"mcp-only", "additive"}:
+            raise ValueError(f"unknown treatment surface: {treatment_surface}")
         command.extend(
             [
                 "--tools",
-                "",
+                BASELINE_TOOLS if treatment_surface == "additive" else "",
                 "--mcp-config",
                 _compact_json(
                     {
@@ -245,6 +248,7 @@ def build_packet(
     return_code: int,
     summary: dict[str, object],
     requested_model: str = "",
+    navigation_surface: str = "mcp-only",
 ) -> dict[str, Any]:
     """Make source cleanliness dominate a syntactically valid agent response."""
     payload = summary.get("payload")
@@ -291,6 +295,7 @@ def build_packet(
         "status": status,
         "condition": condition,
         "orientation_mode": use_mode,
+        "navigation_surface": navigation_surface,
         "pre_edit": source_clean,
         "source_clean": source_clean,
         "source_clean_scope": "model_phase",
@@ -365,6 +370,7 @@ def run(args: argparse.Namespace) -> int:
         model=args.model,
         budget_usd=args.max_budget_usd,
         loomgraph_binary=args.loomgraph_binary,
+        treatment_surface=args.treatment_surface,
     )
     _write_json(output_dir / "command.json", command)
 
@@ -398,6 +404,7 @@ def run(args: argparse.Namespace) -> int:
         return_code=return_code,
         summary=summary,
         requested_model=args.model,
+        navigation_surface=(args.treatment_surface if args.condition == "treatment" else "text-only"),
     )
     _write_json(output_dir / "pre-state.json", before)
     _write_json(output_dir / "post-state.json", after)
@@ -423,6 +430,12 @@ def main() -> int:
     parser.add_argument("--instruction-file", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--use-mode", choices=("voluntary", "assisted"), default="voluntary")
+    parser.add_argument(
+        "--treatment-surface",
+        choices=("mcp-only", "additive"),
+        default="mcp-only",
+        help="Treatment navigation surface; baseline is always text-only.",
+    )
     parser.add_argument("--model", default="sonnet")
     parser.add_argument("--max-budget-usd", default="0.50")
     parser.add_argument("--loomgraph-binary", default="loomgraph")

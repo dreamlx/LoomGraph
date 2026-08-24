@@ -66,11 +66,14 @@ command, pre/post Git state, final run record, and adapter-owned
 start clean; any model-phase change makes the packet invalid.
 
 The two conditions share the same instruction file and JSON Schema. Baseline
-has only `Read`, `Glob`, and `Grep`; treatment has no built-in navigation tools
-and starts LoomGraph with a server-side allowlist containing only native
-`loomgraph_find` and `loomgraph_graph`. Claude adds its required
-`StructuredOutput` tool when the JSON Schema is active. `--allowedTools`
-auto-allows those two calls; the server allowlist is the availability boundary.
+is `text-only` with `Read`, `Glob`, and `Grep`. Treatment defaults to
+`mcp-only`, a compatibility boundary with no built-in navigation tools and a
+server-side allowlist containing only native `loomgraph_find` and
+`loomgraph_graph`. Pass `--treatment-surface additive` for the development-use
+condition: it retains `Read`, `Glob`, and `Grep` and adds the same allowlisted
+MCP tools. Claude adds its required `StructuredOutput` tool when the JSON
+Schema is active. `--allowedTools` auto-allows the MCP calls; the server
+allowlist is the availability boundary.
 
 ```bash
 python evals/deepswe/claude_orientation.py \
@@ -82,6 +85,7 @@ python evals/deepswe/claude_orientation.py \
 
 python evals/deepswe/claude_orientation.py \
   --condition treatment \
+  --treatment-surface additive \
   --task-id psd-tools-blend-range-api \
   --source-dir /tmp/task-source \
   --instruction-file /tmp/orientation.txt \
@@ -107,6 +111,12 @@ For the shared five-call budget, the assisted instruction reserves one call for
 Claude's required `StructuredOutput`; it therefore directs the agent to use at
 most four navigation calls. The adapter remains the enforcing authority and
 marks any overflow invalid.
+
+`mcp-only` and `additive` are different treatment surfaces and are never
+pooled. Only an `additive` treatment paired with the same-task `text-only`
+baseline answers whether normal development navigation changes when LoomGraph
+is available and used; `mcp-only` answers only whether the native MCP surface
+can stand alone.
 
 The adapter records the requested and observed model identifiers, observed
 `tool_call_count`, structural retrieval evidence, and any unexpected MCP tool.
