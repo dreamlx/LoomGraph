@@ -27,6 +27,14 @@ For users who only consume artifacts (no local indexing): skip `ai-codeindex`
 install. Use `loomgraph import-export <artifact>.ndjson` to load a
 graph artifact someone else produced, then the MCP server serves it.
 
+At MCP initialization, LoomGraph also advertises a concise tool-selection
+instruction: use LoomGraph for cross-file structure, impact, dependencies,
+topology, and time/branch questions; use ordinary text navigation for exact
+text or single-file lookup. This is standard MCP server metadata, not a
+modification of the repository's `CLAUDE.md`; clients decide how to surface
+server instructions. Teams that need a guaranteed project policy should also
+keep an equivalent rule in their project instructions.
+
 ## Why MCP (vs subprocess CLI)
 
 The CLI already emits JSON. So what's MCP buying?

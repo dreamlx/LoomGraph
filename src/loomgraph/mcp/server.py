@@ -44,6 +44,15 @@ from loomgraph.mcp.tools import workspace as t_workspace
 logger = logging.getLogger(__name__)
 
 SERVER_NAME = "loomgraph"
+SERVER_INSTRUCTIONS = (
+    "LoomGraph is for structure and time, not line-oriented lookup. Use it for "
+    "cross-file relationships, caller/callee or change impact, module dependencies "
+    "and topology, or branch/history comparison. Use loomgraph_find to resolve an "
+    "entity before loomgraph_graph. Use ordinary text tools for an exact text, string, "
+    "or single-file lookup. Check freshness when the working tree may have changed, "
+    "and report any trust or uncertainty fields returned by the tool. Do not treat an "
+    "empty, failed, stale, or partial graph result as evidence that no relationship exists."
+)
 
 # Registry of available tools. Each entry: (Tool spec, async handler).
 # When adding a new tool, add its module to loomgraph.mcp.tools and
@@ -163,6 +172,7 @@ def build_server() -> Server:
     return Server(
         SERVER_NAME,
         version=__version__,
+        instructions=SERVER_INSTRUCTIONS,
         on_list_tools=list_tools,
         on_call_tool=call_tool,
     )
