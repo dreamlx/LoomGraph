@@ -43,7 +43,11 @@ def test_treatment_command_exposes_only_native_loomgraph_tools() -> None:
     assert _argument(command, "--tools") == ""
     assert json.loads(_argument(command, "--mcp-config")) == {
         "mcpServers": {
-            "loomgraph": {"command": "/tmp/loomgraph", "args": ["mcp", "serve"]}
+            "loomgraph": {
+                "command": "/tmp/loomgraph",
+                "args": ["mcp", "serve"],
+                "env": {"LOOMGRAPH_MCP_ALLOWED_TOOLS": "loomgraph_find,loomgraph_graph"},
+            }
         }
     }
     assert _argument(command, "--allowedTools") == (
@@ -60,8 +64,31 @@ def test_stream_summary_reads_structured_result_and_observed_mcp_calls() -> None
                 "content": [
                     {
                         "type": "tool_use",
+                        "id": "find-1",
                         "name": "mcp__loomgraph__loomgraph_find",
                         "input": {"query": "Layer"},
+                    }
+                ]
+            },
+        },
+        {
+            "type": "user",
+            "message": {
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "find-1",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": json.dumps(
+                                    {
+                                        "success": True,
+                                        "data": {"matches": [{"entity": "Layer"}]},
+                                    }
+                                ),
+                            }
+                        ],
                     }
                 ]
             },
@@ -83,6 +110,9 @@ def test_stream_summary_reads_structured_result_and_observed_mcp_calls() -> None
     }
     assert summary["final_result"] == events[-1]
     assert summary["loomgraph_tools"] == ["mcp__loomgraph__loomgraph_find"]
+    assert summary["structural_retrievals"] == [
+        {"tool": "mcp__loomgraph__loomgraph_find", "evidence": "find_matches"}
+    ]
 
 
 def test_stream_summary_accepts_json_result_fallback() -> None:
@@ -145,3 +175,42 @@ def test_packet_records_the_shared_tool_call_budget() -> None:
 
     assert packet["tool_call_budget"] == 5
     assert packet["tool_call_budget_overrun"] is True
+    assert packet["status"] == "tool_call_budget_exceeded"
+
+
+def test_assisted_treatment_requires_successful_structural_retrieval() -> None:
+    packet = _MODULE.build_packet(
+        condition="treatment",
+        use_mode="assisted",
+        source_clean=True,
+        return_code=0,
+        summary={
+            "final_result_seen": True,
+            "payload": {"candidates": [{"path": "src/x.py", "evidence": "x"}]},
+            "loomgraph_tools": ["mcp__loomgraph__loomgraph_find"],
+            "structural_retrievals": [],
+        },
+        requested_model="sonnet",
+    )
+
+    assert packet["status"] == "missing_assisted_structural_retrieval"
+
+
+def test_packet_records_observed_model_identity_without_claiming_an_alias() -> None:
+    packet = _MODULE.build_packet(
+        condition="treatment",
+        use_mode="voluntary",
+        source_clean=True,
+        return_code=0,
+        summary={
+            "final_result_seen": True,
+            "payload": {"candidates": [{"path": "src/x.py", "evidence": "x"}]},
+            "observed_models": ["glm-5.2[1M]", "glm-5.3"],
+        },
+        requested_model="sonnet",
+    )
+
+    assert packet["model"] == {
+        "requested": "sonnet",
+        "observed": ["glm-5.2[1M]", "glm-5.3"],
+    }
