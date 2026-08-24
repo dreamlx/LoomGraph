@@ -21,6 +21,7 @@ from loomgraph.mcp.server import (
     _TOOL_HANDLERS,
     _TOOL_SPECS,
     ALLOWED_TOOLS_ENV,
+    SERVER_INSTRUCTIONS,
     _tool_is_allowed,
     _visible_tool_specs,
     build_server,
@@ -102,6 +103,16 @@ def test_build_server_version_tracks_package():
     server = build_server()
     assert server.version == __version__
     assert server.version != "0.15.3" or __version__ == "0.15.3"  # not hardcoded
+
+
+def test_server_initialization_advertises_tool_selection_guidance():
+    """Clients receive a concise scope rule without a client-specific prompt."""
+    options = build_server().create_initialization_options()
+
+    assert options.instructions == SERVER_INSTRUCTIONS
+    assert "cross-file relationships" in SERVER_INSTRUCTIONS
+    assert "exact text" in SERVER_INSTRUCTIONS
+    assert "Do not treat an empty, failed, stale, or partial graph" in SERVER_INSTRUCTIONS
 
 
 # ---- #152: adaptive MCP surface (unlist codegraph-overlap tools) ----------
