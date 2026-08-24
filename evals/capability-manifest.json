@@ -84,8 +84,8 @@
       "task_class": "annotated factory receiver adversary",
       "question": "factory 返回 receiver 的空 callers 能否被误判为 isolated？",
       "rg_single_query": "unsupported",
-      "tests": ["tests/contract/test_codeindex_output_contract.py::TestGraphExportShape::test_annotated_factory_receiver_resolves_method_call", "tests/unit/test_impact.py::TestRiskAssessor::test_sparse_resolution_empty_callers_not_isolated"],
-      "oracle": {"resolved_call": "consumer.run->store.Store.create_entity", "sparse_changed_symbol": "only_here", "sparse_callers": 0, "sparse_risk_levels": ["unknown", "medium"], "must_not_claim": "isolated change"},
+      "tests": ["tests/contract/test_codeindex_output_contract.py::TestGraphExportShape::test_annotated_factory_receiver_resolves_method_call", "tests/unit/test_impact.py::TestRiskAssessor::test_sparse_resolution_empty_callers_not_isolated", "tests/unit/test_capability_observations.py::test_factory_receiver_sparse_control_never_claims_isolation"],
+      "oracle": {"resolved_call": "consumer.run->store.Store.create_entity", "must_not_resolve": "consumer_unannotated.run->store.Store.create_entity", "sparse_changed_symbol": "only_here", "sparse_callers": 0, "sparse_risk_levels": ["unknown", "medium"], "must_not_claim": "isolated change"},
       "trust_fields": ["workspace", "backend", "source_id", "resolved_ratio", "internal_unresolved_ratio", "external_unresolved_ratio", "answer_status", "uncertainty_reason"],
       "recording": {"cold": "required", "warm": "required"}
     },

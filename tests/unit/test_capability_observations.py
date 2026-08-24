@@ -10,6 +10,7 @@ from evals.run_capability_observations import (
     ObservationValidationError,
     _branch_diff_oracle,
     _deps_oracle,
+    _factory_oracle,
     _path_alias_oracle,
     run_task,
     validate_observation,
@@ -107,6 +108,7 @@ def test_factory_fixture_has_positive_and_sparse_refs(tmp_path) -> None:
 
     assert fixture.refs == {"base", "head"}
     assert "def only_here" in (fixture.path / "sparse.py").read_text()
+    assert "async def run" in (fixture.path / "consumer_unannotated.py").read_text()
 
 
 def test_topology_debt_fixture_has_a_deterministic_hub_and_history(tmp_path) -> None:
@@ -212,6 +214,17 @@ def test_path_alias_oracle_rejects_a_correct_target_without_edge_trust() -> None
     )
 
 
+def test_factory_oracle_rejects_an_unannotated_receiver_as_a_confirmed_caller() -> None:
+    assert not _factory_oracle(
+        {
+            "callers": [
+                {"entity": "consumer.run"},
+                {"entity": "consumer_unannotated.run"},
+            ]
+        }
+    )
+
+
 @pytest.mark.parametrize(
     "task_id",
     [
@@ -248,6 +261,8 @@ def test_factory_receiver_sparse_control_never_claims_isolation(tmp_path) -> Non
     records = run_task("trust-annotated-factory-receiver", tmp_path / "factory")
 
     for record in records:
+        primary = json.loads(record["operation"]["raw_stdout"])["data"]
+        assert {caller["entity"] for caller in primary["callers"]} == {"consumer.run"}
         sparse = json.loads(record["supplemental"]["raw_stdout"])["data"]
         impact = sparse["impact_analysis"]
         assert impact["direct_callers"] == []
