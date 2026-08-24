@@ -19,7 +19,10 @@ loomgraph index .
 # 3. tell Claude Code where to find loomgraph (writes ~/.claude/mcp.json)
 loomgraph mcp install-config --path ~/.claude/mcp.json
 
-# 4. restart Claude Code — done.
+# 4. opt in to project-level tool-selection guidance (writes CLAUDE.md)
+loomgraph init
+
+# 5. restart Claude Code — done.
 # Tools auto-discovered: loomgraph_find / loomgraph_graph / ...
 ```
 
@@ -33,7 +36,7 @@ topology, and time/branch questions; use ordinary text navigation for exact
 text or single-file lookup. This is standard MCP server metadata, not a
 modification of the repository's `CLAUDE.md`; clients decide how to surface
 server instructions. Teams that need a guaranteed project policy should also
-keep an equivalent rule in their project instructions.
+run `loomgraph init` to keep an equivalent rule in their project instructions.
 
 ## Why MCP (vs subprocess CLI)
 

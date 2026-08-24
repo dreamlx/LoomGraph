@@ -2453,3 +2453,33 @@ class TestSetupConfigDeprecated:
         # No prompt abort (exit 0), no "LightRAG API URL" prompt text.
         assert result.exit_code == 0
         assert "LightRAG API URL" not in (result.output or "")
+
+
+class TestInitGuidance:
+    def test_init_writes_project_guidance(self, runner: CliRunner, tmp_path: Path) -> None:
+        guidance_path = tmp_path / "CLAUDE.md"
+
+        result = runner.invoke(main, ["init", "--path", str(guidance_path)])
+
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert data["data"]["updated"] is True
+        guidance = guidance_path.read_text()
+        assert "## LoomGraph navigation policy" in guidance
+        assert "cross-file relationships" in guidance
+        assert "exact text" in guidance
+
+    def test_init_preserves_existing_content_and_is_idempotent(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
+        guidance_path = tmp_path / "CLAUDE.md"
+        guidance_path.write_text("# Existing project guidance\n")
+
+        first = runner.invoke(main, ["init", "--path", str(guidance_path)])
+        second = runner.invoke(main, ["init", "--path", str(guidance_path)])
+
+        assert first.exit_code == second.exit_code == 0
+        assert json.loads(second.stdout)["data"]["updated"] is False
+        guidance = guidance_path.read_text()
+        assert guidance.startswith("# Existing project guidance\n")
+        assert guidance.count("## LoomGraph navigation policy") == 1

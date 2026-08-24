@@ -30,6 +30,17 @@ _CODEGRAPH_STRONG_LANGS = {
     "typescript", "javascript", "java", "swift", "objc",
 }
 
+_PROJECT_GUIDANCE_HEADING = "## LoomGraph navigation policy"
+_PROJECT_GUIDANCE = f"""{_PROJECT_GUIDANCE_HEADING}
+
+- Use ordinary text navigation for exact text, string, or single-file lookup.
+- For cross-file relationships, caller/callee or change impact, module dependencies
+  or topology, and branch/history comparison, use LoomGraph first.
+- Resolve an entity with `loomgraph_find` before `loomgraph_graph`.
+- Check index freshness when the working tree may have changed. Do not treat an
+  empty, failed, stale, or partial graph result as proof that no relationship exists.
+"""
+
 
 def _backend_recommendation() -> dict[str, Any] | None:
     """Non-enforcing extraction-backend hint based on the repo's language
@@ -197,6 +208,28 @@ def install_skills() -> None:
         "skills_dir": str(skills_dest),
         "count": len(installed),
     })
+
+
+@main.command("init")
+@click.option(
+    "--path",
+    type=click.Path(path_type=Path),
+    default=Path("CLAUDE.md"),
+    show_default=True,
+    help="Project instruction file to add LoomGraph navigation guidance to.",
+)
+def init_guidance(path: Path) -> None:
+    """Add opt-in LoomGraph tool-selection guidance to a project instruction file."""
+    path = path.resolve()
+    existing = path.read_text(encoding="utf-8") if path.exists() else ""
+    if _PROJECT_GUIDANCE_HEADING in existing:
+        output_success({"path": str(path), "updated": False})
+        return
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    separator = "" if not existing or existing.endswith("\n\n") else "\n\n"
+    path.write_text(f"{existing}{separator}{_PROJECT_GUIDANCE}\n", encoding="utf-8")
+    output_success({"path": str(path), "updated": True})
 
 
 @main.command("setup-config")
