@@ -97,6 +97,28 @@ def test_trust_required_command_exposes_the_trust_output_contract() -> None:
     ]
 
 
+def test_normalizes_source_absolute_candidate_paths_to_repo_relative() -> None:
+    payload = {
+        "candidates": [
+            {"path": "/tmp/source/vulture/core.py", "evidence": "caller"},
+            {"path": "vulture/utils.py", "evidence": "utility"},
+        ]
+    }
+
+    assert _MODULE.normalize_candidate_paths(payload, Path("/tmp/source")) == {
+        "candidates": [
+            {"path": "vulture/core.py", "evidence": "caller"},
+            {"path": "vulture/utils.py", "evidence": "utility"},
+        ]
+    }
+
+
+def test_rejects_candidate_path_outside_the_source_root() -> None:
+    payload = {"candidates": [{"path": "/tmp/other/secrets.py", "evidence": "outside"}]}
+
+    assert _MODULE.normalize_candidate_paths(payload, Path("/tmp/source")) is None
+
+
 def test_stream_summary_reads_structured_result_and_observed_mcp_calls() -> None:
     events = [
         {
