@@ -7,3 +7,6 @@ existing production source files. For each candidate, give concise relationship
 evidence. State any graph-resolution uncertainty from the available navigation
 tools; do not treat an incomplete graph as proof that no other relationship
 exists.
+
+The structured response must include `edge_trust` and the graph
+`resolved_ratio`, `internal_unresolved_ratio`, and `external_unresolved_ratio`.

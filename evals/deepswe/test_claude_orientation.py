@@ -73,6 +73,26 @@ def test_additive_treatment_keeps_text_navigation_and_mcp_allowlist() -> None:
     }
 
 
+def test_trust_required_command_exposes_the_trust_output_contract() -> None:
+    command = _MODULE.build_command(
+        condition="treatment",
+        instruction="orient",
+        model="sonnet",
+        budget_usd="0.50",
+        loomgraph_binary="/tmp/loomgraph",
+        require_trust=True,
+    )
+
+    schema = json.loads(_argument(command, "--json-schema"))
+    assert schema["required"] == ["candidates", "trust"]
+    assert schema["properties"]["trust"]["required"] == ["edge_trust", "resolution"]
+    assert schema["properties"]["trust"]["properties"]["resolution"]["required"] == [
+        "resolved_ratio",
+        "internal_unresolved_ratio",
+        "external_unresolved_ratio",
+    ]
+
+
 def test_stream_summary_reads_structured_result_and_observed_mcp_calls() -> None:
     events = [
         {
@@ -174,6 +194,50 @@ def test_packet_rejects_malformed_schema_payload() -> None:
     )
 
     assert packet["status"] == "missing_or_invalid_agent_response"
+
+
+def test_trust_required_packet_rejects_a_response_without_trust() -> None:
+    packet = _MODULE.build_packet(
+        condition="treatment",
+        use_mode="voluntary",
+        source_clean=True,
+        return_code=0,
+        summary={
+            "final_result_seen": True,
+            "payload": {"candidates": [{"path": "src/x.py", "evidence": "x"}]},
+        },
+        require_trust=True,
+    )
+
+    assert packet["status"] == "missing_or_invalid_agent_response"
+
+
+def test_trust_required_packet_records_a_complete_trust_response() -> None:
+    trust = {
+        "edge_trust": "resolved-only; unresolved edges omitted",
+        "resolution": {
+            "resolved_ratio": 0.2,
+            "internal_unresolved_ratio": 0.3,
+            "external_unresolved_ratio": 0.4,
+        },
+    }
+    packet = _MODULE.build_packet(
+        condition="treatment",
+        use_mode="voluntary",
+        source_clean=True,
+        return_code=0,
+        summary={
+            "final_result_seen": True,
+            "payload": {
+                "candidates": [{"path": "src/x.py", "evidence": "x"}],
+                "trust": trust,
+            },
+        },
+        require_trust=True,
+    )
+
+    assert packet["status"] == "complete"
+    assert packet["trust"] == trust
 
 
 def test_packet_records_the_shared_tool_call_budget() -> None:

@@ -27,3 +27,5 @@ def test_vulture_scan_impact_fixture_has_oracle_and_trust_contract() -> None:
     prompt = (root / fixture["instruction_file"]).read_text()
     assert "direct caller" in prompt
     assert "uncertainty" in prompt
+    assert "edge_trust" in prompt
+    assert "resolved_ratio" in prompt
