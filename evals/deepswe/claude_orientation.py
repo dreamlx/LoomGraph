@@ -37,6 +37,36 @@ ORIENTATION_SCHEMA: dict[str, Any] = {
         }
     },
 }
+TRUSTED_ORIENTATION_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["candidates", "trust"],
+    "properties": {
+        **ORIENTATION_SCHEMA["properties"],
+        "trust": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["edge_trust", "resolution"],
+            "properties": {
+                "edge_trust": {"type": "string", "minLength": 1},
+                "resolution": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": [
+                        "resolved_ratio",
+                        "internal_unresolved_ratio",
+                        "external_unresolved_ratio",
+                    ],
+                    "properties": {
+                        "resolved_ratio": {"type": "number"},
+                        "internal_unresolved_ratio": {"type": "number"},
+                        "external_unresolved_ratio": {"type": "number"},
+                    },
+                },
+            },
+        },
+    },
+}
 
 
 def _compact_json(value: object) -> str:
@@ -51,6 +81,7 @@ def build_command(
     budget_usd: str,
     loomgraph_binary: str,
     treatment_surface: str = "mcp-only",
+    require_trust: bool = False,
 ) -> list[str]:
     """Build an isolated Claude invocation for exactly one condition."""
     command = [
@@ -72,7 +103,7 @@ def build_command(
         "--max-budget-usd",
         budget_usd,
         "--json-schema",
-        _compact_json(ORIENTATION_SCHEMA),
+        _compact_json(TRUSTED_ORIENTATION_SCHEMA if require_trust else ORIENTATION_SCHEMA),
         "--strict-mcp-config",
     ]
     if condition == "baseline":
@@ -223,13 +254,12 @@ def summarize_stream(events: list[dict[str, Any]]) -> dict[str, object]:
     }
 
 
-def _valid_payload(payload: object) -> bool:
-    if not isinstance(payload, dict) or set(payload) != {"candidates"}:
+def _valid_payload(payload: object, *, require_trust: bool) -> bool:
+    expected_fields = {"candidates", "trust"} if require_trust else {"candidates"}
+    if not isinstance(payload, dict) or set(payload) != expected_fields:
         return False
     candidates = payload.get("candidates")
-    if not isinstance(candidates, list) or not 1 <= len(candidates) <= 5:
-        return False
-    return all(
+    valid_candidates = isinstance(candidates, list) and 1 <= len(candidates) <= 5 and all(
         isinstance(candidate, dict)
         and set(candidate) == {"path", "evidence"}
         and isinstance(candidate["path"], str)
@@ -237,6 +267,26 @@ def _valid_payload(payload: object) -> bool:
         and isinstance(candidate["evidence"], str)
         and bool(candidate["evidence"])
         for candidate in candidates
+    )
+    if not valid_candidates:
+        return False
+    if not require_trust:
+        return True
+    trust = payload.get("trust")
+    if not isinstance(trust, dict) or set(trust) != {"edge_trust", "resolution"}:
+        return False
+    resolution = trust.get("resolution")
+    return (
+        isinstance(trust.get("edge_trust"), str)
+        and bool(trust["edge_trust"])
+        and isinstance(resolution, dict)
+        and set(resolution)
+        == {
+            "resolved_ratio",
+            "internal_unresolved_ratio",
+            "external_unresolved_ratio",
+        }
+        and all(isinstance(value, (int, float)) for value in resolution.values())
     )
 
 
@@ -249,6 +299,7 @@ def build_packet(
     summary: dict[str, object],
     requested_model: str = "",
     navigation_surface: str = "mcp-only",
+    require_trust: bool = False,
 ) -> dict[str, Any]:
     """Make source cleanliness dominate a syntactically valid agent response."""
     payload = summary.get("payload")
@@ -280,7 +331,9 @@ def build_packet(
         status = "invalid_source_mutation"
     elif return_code != 0:
         status = "agent_error"
-    elif summary.get("final_result_seen") is not True or not _valid_payload(payload):
+    elif summary.get("final_result_seen") is not True or not _valid_payload(
+        payload, require_trust=require_trust
+    ):
         status = "missing_or_invalid_agent_response"
     elif tool_call_budget_overrun:
         status = "tool_call_budget_exceeded"
@@ -302,6 +355,7 @@ def build_packet(
         "response_format": "json_schema",
         "semantic_packet": status == "complete",
         "candidates": payload.get("candidates", []) if isinstance(payload, dict) else [],
+        "trust": payload.get("trust") if require_trust and isinstance(payload, dict) else None,
         "tool_call_count": len(tool_names),
         "tool_call_budget": TOOL_CALL_BUDGET,
         "tool_call_budget_overrun": tool_call_budget_overrun,
@@ -371,6 +425,7 @@ def run(args: argparse.Namespace) -> int:
         budget_usd=args.max_budget_usd,
         loomgraph_binary=args.loomgraph_binary,
         treatment_surface=args.treatment_surface,
+        require_trust=args.require_trust,
     )
     _write_json(output_dir / "command.json", command)
 
@@ -405,6 +460,7 @@ def run(args: argparse.Namespace) -> int:
         summary=summary,
         requested_model=args.model,
         navigation_surface=(args.treatment_surface if args.condition == "treatment" else "text-only"),
+        require_trust=args.require_trust,
     )
     _write_json(output_dir / "pre-state.json", before)
     _write_json(output_dir / "post-state.json", after)
@@ -438,6 +494,11 @@ def main() -> int:
     )
     parser.add_argument("--model", default="sonnet")
     parser.add_argument("--max-budget-usd", default="0.50")
+    parser.add_argument(
+        "--require-trust",
+        action="store_true",
+        help="Require edge and resolution trust fields in the structured response.",
+    )
     parser.add_argument("--loomgraph-binary", default="loomgraph")
     return run(parser.parse_args())
 

@@ -61,6 +61,9 @@ The native-agent adoption pilot uses the versioned
 generic feature-owner prompt. Its first fixture asks a declared structural
 impact question with a frozen path oracle and required graph trust fields; an
 `rg` single-query equivalent is explicitly unsupported.
+For a trust-required fixture, those fields must appear in the structured
+agent response: a trust-bearing MCP trace alone is not a trust-qualified
+answer.
 
 ## Runtime fidelity and track scope
 
