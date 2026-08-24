@@ -343,6 +343,14 @@ def build_packet(
         payload, require_trust=require_trust
     ):
         status = "missing_or_invalid_agent_response"
+    elif (
+        require_trust
+        and condition == "treatment"
+        and isinstance(payload, dict)
+        and isinstance(payload.get("trust"), dict)
+        and payload["trust"].get("availability") != "available"
+    ):
+        status = "missing_treatment_trust_evidence"
     elif tool_call_budget_overrun:
         status = "tool_call_budget_exceeded"
     elif unexpected_mcp_tools:

@@ -274,6 +274,33 @@ def test_trust_required_packet_allows_an_explicit_unavailable_control() -> None:
     assert packet["trust"] == trust
 
 
+def test_trust_required_treatment_rejects_unavailable_graph_evidence() -> None:
+    packet = _MODULE.build_packet(
+        condition="treatment",
+        use_mode="voluntary",
+        source_clean=True,
+        return_code=0,
+        summary={
+            "final_result_seen": True,
+            "payload": {
+                "candidates": [{"path": "src/x.py", "evidence": "x"}],
+                "trust": {
+                    "availability": "unavailable",
+                    "edge_trust": "The graph was not queried for trust.",
+                    "resolution": {
+                        "resolved_ratio": None,
+                        "internal_unresolved_ratio": None,
+                        "external_unresolved_ratio": None,
+                    },
+                },
+            },
+        },
+        require_trust=True,
+    )
+
+    assert packet["status"] == "missing_treatment_trust_evidence"
+
+
 def test_packet_records_the_shared_tool_call_budget() -> None:
     packet = _MODULE.build_packet(
         condition="treatment",
