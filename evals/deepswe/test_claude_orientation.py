@@ -363,6 +363,22 @@ def test_packet_records_the_shared_tool_call_budget() -> None:
     assert packet["status"] == "tool_call_budget_exceeded"
 
 
+def test_packet_records_raw_agent_execution_seconds() -> None:
+    packet = _MODULE.build_packet(
+        condition="baseline",
+        use_mode="voluntary",
+        source_clean=True,
+        return_code=0,
+        summary={
+            "final_result_seen": True,
+            "payload": {"candidates": [{"path": "src/x.py", "evidence": "x"}]},
+        },
+        agent_execution_seconds=12.5,
+    )
+
+    assert packet["agent_execution_seconds"] == 12.5
+
+
 def test_assisted_instruction_reserves_a_slot_for_structured_output() -> None:
     instruction = _MODULE._append_mode_requirement("orient", "assisted")
 

@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
+import time
 from pathlib import Path
 from typing import Any
 
@@ -353,6 +354,7 @@ def build_packet(
     requested_model: str = "",
     navigation_surface: str = "mcp-only",
     require_trust: bool = False,
+    agent_execution_seconds: float | None = None,
 ) -> dict[str, Any]:
     """Make source cleanliness dominate a syntactically valid agent response."""
     payload = summary.get("payload")
@@ -427,6 +429,7 @@ def build_packet(
         "tool_call_count": len(tool_names),
         "tool_call_budget": TOOL_CALL_BUDGET,
         "tool_call_budget_overrun": tool_call_budget_overrun,
+        "agent_execution_seconds": agent_execution_seconds,
         "model": {
             "requested": requested_model,
             "observed": observed_models,
@@ -504,6 +507,7 @@ def run(args: argparse.Namespace) -> int:
     _write_json(output_dir / "command.json", command)
 
     events: list[dict[str, Any]] = []
+    started_at = time.monotonic()
     with (output_dir / "claude.stream.jsonl").open("w") as stream:
         process = subprocess.Popen(
             command,
@@ -522,6 +526,7 @@ def run(args: argparse.Namespace) -> int:
             if isinstance(event, dict):
                 events.append(event)
         return_code = process.wait()
+    agent_execution_seconds = time.monotonic() - started_at
 
     after = _repo_state(source_dir)
     source_clean = before == after and not after["porcelain"]
@@ -536,6 +541,7 @@ def run(args: argparse.Namespace) -> int:
         requested_model=args.model,
         navigation_surface=(args.treatment_surface if args.condition == "treatment" else "text-only"),
         require_trust=args.require_trust,
+        agent_execution_seconds=agent_execution_seconds,
     )
     _write_json(output_dir / "pre-state.json", before)
     _write_json(output_dir / "post-state.json", after)
@@ -546,6 +552,7 @@ def run(args: argparse.Namespace) -> int:
         {
             "return_code": return_code,
             "final_result_seen": summary["final_result_seen"],
+            "agent_execution_seconds": agent_execution_seconds,
             "task_id": args.task_id,
         },
     )

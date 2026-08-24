@@ -123,7 +123,9 @@ session-event, and aggregated-usage model identifiers. `observed` remains their
 backward-compatible union; only `assistant_observed` identifies models attached
 to assistant events. This prevents session initialization or auxiliary usage
 telemetry from being misreported as the reasoning model. It also records
-`tool_call_count`, structural retrieval evidence, and any unexpected MCP tool.
+`tool_call_count`, raw `agent_execution_seconds`, structural retrieval evidence,
+and any unexpected MCP tool. A raw duration is not an efficiency claim: compare
+only predeclared, valid, same-task pairs with separately declared cold setup.
 A five-call budget overrun, unexpected MCP tool, or assisted treatment without
 evidence-bearing retrieval makes the packet invalid. A successful `find` needs
 a non-empty match set and a `graph` needs a resolved entity. These are
