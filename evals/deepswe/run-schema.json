@@ -58,7 +58,7 @@
           "type": "array",
           "items": {"type": "string"}
         },
-        "response_format": {"enum": ["raw_json", "markdown_fenced", "invalid"]},
+        "response_format": {"enum": ["raw_json", "markdown_fenced", "json_schema", "invalid"]},
         "semantic_packet": {"type": "boolean"},
         "candidate_paths": {"type": "array", "items": {"type": "string"}},
         "target_hit_at_5": {"type": ["boolean", "null"]},
