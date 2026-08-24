@@ -201,6 +201,15 @@ def test_assisted_instruction_reserves_a_slot_for_structured_output() -> None:
     assert "at most 4 navigation tool calls" in instruction
 
 
+def test_assisted_treatment_instruction_requires_loomgraph_retrieval() -> None:
+    instruction = _MODULE._append_mode_requirement(
+        "orient", "assisted", condition="treatment"
+    )
+
+    assert "LoomGraph MCP navigation tool" in instruction
+    assert "returns structural evidence" in instruction
+
+
 def test_assisted_treatment_requires_successful_structural_retrieval() -> None:
     packet = _MODULE.build_packet(
         condition="treatment",

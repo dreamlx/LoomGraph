@@ -112,6 +112,10 @@ Claude's required `StructuredOutput`; it therefore directs the agent to use at
 most four navigation calls. The adapter remains the enforcing authority and
 marks any overflow invalid.
 
+For an assisted treatment, the instruction explicitly requires a LoomGraph MCP
+navigation call that returns structural evidence. Merely retaining text tools
+in the additive surface is not counted as LoomGraph use.
+
 `mcp-only` and `additive` are different treatment surfaces and are never
 pooled. Only an `additive` treatment paired with the same-task `text-only`
 baseline answers whether normal development navigation changes when LoomGraph

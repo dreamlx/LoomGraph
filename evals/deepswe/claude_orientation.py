@@ -336,13 +336,21 @@ def _repo_state(source_dir: Path) -> dict[str, str]:
     return {"head": head, "porcelain": porcelain}
 
 
-def _append_mode_requirement(instruction: str, use_mode: str) -> str:
+def _append_mode_requirement(
+    instruction: str, use_mode: str, *, condition: str | None = None
+) -> str:
     if use_mode == "voluntary":
         return instruction
     if use_mode == "assisted":
         navigation_limit = TOOL_CALL_BUDGET - 1
+        retrieval_requirement = "Use at least one available navigation tool before responding."
+        if condition == "treatment":
+            retrieval_requirement = (
+                "Use at least one LoomGraph MCP navigation tool that returns structural evidence "
+                "before responding."
+            )
         return (
-            f"{instruction}\n\nUse at least one available navigation tool before responding. "
+            f"{instruction}\n\n{retrieval_requirement} "
             f"Use at most {navigation_limit} navigation tool calls; reserve one tool call "
             "for the required structured response."
         )
@@ -363,7 +371,9 @@ def run(args: argparse.Namespace) -> int:
     if before["porcelain"]:
         raise ValueError("source directory must be clean before the model phase")
 
-    instruction = _append_mode_requirement(args.instruction_file.read_text(), args.use_mode)
+    instruction = _append_mode_requirement(
+        args.instruction_file.read_text(), args.use_mode, condition=args.condition
+    )
     command = build_command(
         condition=args.condition,
         instruction=instruction,
