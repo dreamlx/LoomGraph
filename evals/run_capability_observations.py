@@ -43,6 +43,8 @@ class _Task:
     comparison_oracle: Callable[[dict[str, Any]], bool] | None = None
     supplemental_query: tuple[str, ...] | None = None
     supplemental_oracle: Callable[[dict[str, Any]], bool] | None = None
+    adversary_query: tuple[str, ...] | None = None
+    adversary_oracle: Callable[[dict[str, Any]], bool] | None = None
     requires_resolution_split: bool = False
 
 
@@ -185,6 +187,26 @@ def _path_alias_oracle(data: dict[str, Any]) -> bool:
     )
 
 
+def _dynamic_receiver_oracle(data: dict[str, Any]) -> bool:
+    callees = data.get("callees")
+    edge_trust = data.get("edge_trust")
+    return (
+        isinstance(callees, list)
+        and callees
+        == [
+            {
+                "entity": "db.exec",
+                "relation": "CALLS",
+                "source_id": "",
+                "resolution_qualifier": "unresolved",
+                "dst_raw": "db.exec",
+            }
+        ]
+        and isinstance(edge_trust, dict)
+        and edge_trust.get("include_unresolved") is True
+    )
+
+
 def _debt_git_oracle(data: dict[str, Any]) -> bool:
     return any(
         issue.get("category") == "critical_hotspot"
@@ -278,6 +300,11 @@ _TASKS = {
             "--include-unresolved",
         ),
         supplemental_oracle=_path_alias_oracle,
+        adversary_query=(
+            "graph", "src.alias_consumer.useAliasSession", "--direction", "callees",
+            "--relation-type", "CALLS", "--include-unresolved",
+        ),
+        adversary_oracle=_dynamic_receiver_oracle,
     ),
 }
 
@@ -401,18 +428,20 @@ def validate_observation(record: dict[str, object]) -> None:
         else:
             _non_empty_string(comparison.get("infrastructure_error"), "comparison.infrastructure_error")
 
-    supplemental_value = record.get("supplemental")
-    if supplemental_value is not None:
-        supplemental = _mapping(supplemental_value, "supplemental")
-        command = supplemental.get("command")
+    for field in ("supplemental", "adversary"):
+        value = record.get(field)
+        if value is None:
+            continue
+        auxiliary = _mapping(value, field)
+        command = auxiliary.get("command")
         if not isinstance(command, list) or not command or not all(isinstance(part, str) for part in command):
-            raise ObservationValidationError("supplemental.command must be non-empty strings")
-        if not isinstance(supplemental.get("exit_code"), int):
-            raise ObservationValidationError("supplemental.exit_code must be an integer")
-        _non_empty_string(supplemental.get("raw_stdout"), "supplemental.raw_stdout")
-        oracle = _mapping(supplemental.get("oracle"), "supplemental.oracle")
+            raise ObservationValidationError(f"{field}.command must be non-empty strings")
+        if not isinstance(auxiliary.get("exit_code"), int):
+            raise ObservationValidationError(f"{field}.exit_code must be an integer")
+        _non_empty_string(auxiliary.get("raw_stdout"), f"{field}.raw_stdout")
+        oracle = _mapping(auxiliary.get("oracle"), f"{field}.oracle")
         if not isinstance(oracle.get("passed"), bool):
-            raise ObservationValidationError("supplemental.oracle.passed must be boolean")
+            raise ObservationValidationError(f"{field}.oracle.passed must be boolean")
 
 
 def _version(distribution: str) -> str:
@@ -511,20 +540,23 @@ def _comparison(
     )
 
 
-def _supplemental(
-    task: _Task,
+def _auxiliary(
+    query: tuple[str, ...] | None,
+    oracle: Callable[[dict[str, Any]], bool] | None,
     command_prefix: list[str],
     fixture: MaterializedFixture,
     env: dict[str, str],
     workspace: str,
+    uses_workspace: bool,
+    failure: str,
 ) -> dict[str, object] | None:
-    if task.supplemental_query is None or task.supplemental_oracle is None:
+    if query is None or oracle is None:
         return None
-    command = [*command_prefix, *task.supplemental_query]
-    if task.uses_workspace:
+    command = [*command_prefix, *query]
+    if uses_workspace and "-w" not in command and "--workspace" not in command:
         command.extend(["-w", workspace])
     completed, wall_ms = _run(command, fixture.path, env)
-    passed = completed.returncode == 0 and task.supplemental_oracle(_json_data(completed.stdout))
+    passed = completed.returncode == 0 and oracle(_json_data(completed.stdout))
     return {
         "command": command,
         "wall_ms": wall_ms,
@@ -533,7 +565,7 @@ def _supplemental(
         "raw_stderr": completed.stderr,
         "oracle": {
             "passed": passed,
-            "failures": [] if passed else ["supplemental answer did not match oracle"],
+            "failures": [] if passed else [failure],
         },
     }
 
@@ -551,6 +583,7 @@ def _observation(
     rg: dict[str, object],
     comparison: tuple[dict[str, object], dict[str, object]] | None = None,
     supplemental: dict[str, object] | None = None,
+    adversary: dict[str, object] | None = None,
 ) -> dict[str, object]:
     data = _json_data(completed.stdout)
     resolution = data.get("resolution")
@@ -570,7 +603,10 @@ def _observation(
     supplemental_passed = supplemental is None or bool(
         _mapping(supplemental.get("oracle"), "supplemental.oracle").get("passed")
     )
-    passed = passed and supplemental_passed
+    adversary_passed = adversary is None or bool(
+        _mapping(adversary.get("oracle"), "adversary.oracle").get("passed")
+    )
+    passed = passed and supplemental_passed and adversary_passed
     source_id = data.get("source_id", "")
     if not isinstance(source_id, str) or not source_id:
         source_id = ""
@@ -620,6 +656,8 @@ def _observation(
         trust["comparison"] = comparison_trust
     if supplemental is not None:
         record["supplemental"] = supplemental
+    if adversary is not None:
+        record["adversary"] = adversary
     validate_observation(record)
     return record
 
@@ -666,7 +704,16 @@ def run_task(task_id: str, work_root: Path) -> list[dict[str, object]]:
             "raw_stderr": cold_completed.stderr,
         }
     cold_comparison = _comparison(task, command_prefix, fixture, env)
-    cold_supplemental = _supplemental(task, command_prefix, fixture, env, workspace)
+    cold_supplemental = _auxiliary(
+        task.supplemental_query, task.supplemental_oracle, command_prefix, fixture, env, workspace,
+        task.uses_workspace,
+        "supplemental answer did not match oracle",
+    )
+    cold_adversary = _auxiliary(
+        task.adversary_query, task.adversary_oracle, command_prefix, fixture, env, workspace,
+        task.uses_workspace,
+        "adversary answer did not match oracle",
+    )
 
     if task.rg is None:
         rg_record: dict[str, object] = {"equivalence": "unsupported", "command": None}
@@ -696,13 +743,24 @@ def run_task(task_id: str, work_root: Path) -> list[dict[str, object]]:
     cold = _observation(
         task_id, task, fixture, workspace, "cold", cold_setup,
         query_command, cold_completed, cold_query_ms, rg_record, cold_comparison, cold_supplemental,
+        cold_adversary,
     )
     warm_completed, warm_query_ms = _run(query_command, fixture.path, env)
     warm_comparison = _comparison(task, command_prefix, fixture, env)
-    warm_supplemental = _supplemental(task, command_prefix, fixture, env, workspace)
+    warm_supplemental = _auxiliary(
+        task.supplemental_query, task.supplemental_oracle, command_prefix, fixture, env, workspace,
+        task.uses_workspace,
+        "supplemental answer did not match oracle",
+    )
+    warm_adversary = _auxiliary(
+        task.adversary_query, task.adversary_oracle, command_prefix, fixture, env, workspace,
+        task.uses_workspace,
+        "adversary answer did not match oracle",
+    )
     warm = _observation(
         task_id, task, fixture, workspace, "warm", None,
         query_command, warm_completed, warm_query_ms, rg_record, warm_comparison, warm_supplemental,
+        warm_adversary,
     )
     return [cold, warm]
 

@@ -92,12 +92,12 @@
     {
       "id": "trust-alias-barrel",
       "track": "C",
-      "task_class": "alias or barrel ambiguity adversary",
-      "question": "path alias 与 barrel 的引用能否解析到同一定义，并保留不确定边的限定？",
+      "task_class": "alias, barrel, and dynamic receiver trust adversary",
+      "question": "path alias 与 barrel 的引用能否解析到同一定义，并且动态 receiver 保持为未解析边？",
       "rg_single_query": "unsupported",
       "tests": ["tests/contract/test_codeindex_output_contract.py::TestGraphExportShape::test_typescript_barrel_reference_reaches_definition", "tests/unit/test_export_reader.py::test_map_edge_ambiguous_uses_dst_raw_keeps_candidates", "tests/unit/test_graph_query.py::test_include_unresolved_flag_keeps_phantom_edges", "tests/unit/test_capability_observations.py::test_runner_exercises_the_tsconfig_path_alias"],
-      "oracle": {"path_alias_reference": "src.alias_consumer->src.models.Session", "barrel_reference": "src.consumer->src.models.Session", "must_not_target": "src.index.Session", "resolved_qualifier": "resolved", "ambiguous_edges_remain_non_resolved": true},
-      "trust_fields": ["workspace", "backend", "source_id", "edge_trust.include_unresolved", "edge_trust.omitted_by_qualifier", "resolution_qualifier", "dst_raw", "candidates", "answer_status", "uncertainty_reason"],
+      "oracle": {"path_alias_reference": "src.alias_consumer->src.models.Session", "barrel_reference": "src.consumer->src.models.Session", "must_not_target": "src.index.Session", "resolved_qualifier": "resolved", "dynamic_receiver": "src.alias_consumer.useAliasSession->db.exec", "dynamic_qualifier": "unresolved", "unresolved_must_not_upgrade": true},
+      "trust_fields": ["workspace", "backend", "source_id", "edge_trust.include_unresolved", "edge_trust.omitted_by_qualifier", "edge_trust.returned_by_qualifier", "resolution.resolved_ratio", "resolution.internal_unresolved_ratio", "resolution.external_unresolved_ratio", "resolution_qualifier", "dst_raw", "answer.status"],
       "recording": {"cold": "required", "warm": "required"}
     }
   ]
