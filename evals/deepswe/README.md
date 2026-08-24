@@ -125,6 +125,10 @@ evidence-bearing retrieval makes the packet invalid. A successful `find` needs
 a non-empty match set and a `graph` needs a resolved entity. These are
 operational measurements, not target-hit penalties.
 
+The runner loads Claude Code's `project,local` setting sources so a fixture's
+project `CLAUDE.md` is part of the evaluated integration. `--strict-mcp-config`
+still confines MCP availability to the adapter-owned configuration.
+
 The summary also reads Pier's sibling trial `result.json`: uncached input
 tokens, cached input tokens, output tokens, model cost, agent navigation time,
 cold setup time, and total trial time. It emits raw rows, only explicit

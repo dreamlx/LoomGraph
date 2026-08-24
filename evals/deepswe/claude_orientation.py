@@ -64,7 +64,7 @@ def build_command(
         "stream-json",
         "--verbose",
         "--setting-sources",
-        "local",
+        "project,local",
         "--disable-slash-commands",
         "--permission-mode",
         "dontAsk",
