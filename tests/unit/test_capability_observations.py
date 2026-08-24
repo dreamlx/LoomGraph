@@ -120,6 +120,19 @@ def test_runner_requires_the_fixed_git_hotspot_oracle(tmp_path) -> None:
         assert record["supplemental"]["oracle"]["passed"] is True
 
 
+def test_runner_requires_the_fixed_multihop_impact_chain(tmp_path) -> None:
+    records = run_task("structural-multihop-impact", tmp_path / "impact")
+
+    for record in records:
+        data = json.loads(record["operation"]["raw_stdout"])["data"]["impact_analysis"]
+        assert "app.handlers.handle_login" in {
+            caller["name"] for caller in data["direct_callers"]
+        }
+        assert "app.api.dispatch" in {
+            caller["name"] for caller in data["indirect_callers"]
+        }
+
+
 @pytest.mark.parametrize(
     "task_id",
     [

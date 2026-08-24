@@ -86,6 +86,13 @@ def _python_history(path: Path) -> set[str]:
         "def keep_legacy(token: str) -> bool:\n"
         "    return legacy_token(token)\n",
     )
+    _write(
+        path,
+        "app/api.py",
+        "from app.handlers import handle_login\n\n"
+        "def dispatch(token: str) -> bool:\n"
+        "    return handle_login(token)\n",
+    )
     _commit(path, "base", "2024-01-01T00:00:00+00:00")
     _git(path, "tag", "base")
     _write(
@@ -95,7 +102,7 @@ def _python_history(path: Path) -> set[str]:
         "    def validate(self, token: str) -> bool:\n"
         "        return validate_token(token)\n\n"
         "def validate_token(token: str) -> bool:\n"
-        "    return token == 'ok'\n\n"
+        "    return token.startswith('ok')\n\n"
         "def validate_token_v2(token: str) -> bool:\n"
         "    return validate_token(token)\n",
     )

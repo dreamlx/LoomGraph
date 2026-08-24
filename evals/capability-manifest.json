@@ -41,7 +41,7 @@
       "question": "目标变更会经由哪些调用层影响哪些模块？",
       "rg_single_query": "unsupported",
       "tests": ["tests/unit/test_impact.py::TestQueryCallersNameQualification::test_indirect_callers_still_resolve_with_qualified_name"],
-      "oracle": {"max_depth": 2, "direct_and_indirect_callers": "qualified graph ids"},
+      "oracle": {"max_depth": 2, "direct_caller": "app.handlers.handle_login", "indirect_caller": "app.api.dispatch", "resolution_split_required": true},
       "trust_fields": ["workspace", "backend", "source_id", "max_depth", "resolution_qualifier", "resolved_ratio", "internal_unresolved_ratio", "external_unresolved_ratio", "answer_status"],
       "recording": {"cold": "required", "warm": "required"}
     },

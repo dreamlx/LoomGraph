@@ -63,7 +63,25 @@ def _direct_call_oracle(data: dict[str, Any]) -> bool:
 
 
 def _impact_oracle(data: dict[str, Any]) -> bool:
-    return isinstance(data.get("risk_assessment"), dict) and "resolution" in data
+    impact = data.get("impact_analysis")
+    if not isinstance(impact, dict):
+        return False
+    direct = impact.get("direct_callers", [])
+    indirect = impact.get("indirect_callers", [])
+    return (
+        isinstance(data.get("risk_assessment"), dict)
+        and "resolution" in data
+        and any(
+            caller.get("name") == "app.handlers.handle_login"
+            for caller in direct
+            if isinstance(caller, dict)
+        )
+        and any(
+            caller.get("name") == "app.api.dispatch"
+            for caller in indirect
+            if isinstance(caller, dict)
+        )
+    )
 
 
 def _deps_oracle(data: dict[str, Any]) -> bool:
