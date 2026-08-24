@@ -56,6 +56,12 @@ not part of any A-C score. It records runtime, tool surface, packet validity,
 source cleanliness, and evidence-bearing retrieval only. This change creates
 no agent, token, cost, or performance deltas.
 
+The native-agent adoption pilot uses the versioned
+[agent-use-fixtures.json](../../evals/deepswe/agent-use-fixtures.json), not a
+generic feature-owner prompt. Its first fixture asks a declared structural
+impact question with a frozen path oracle and required graph trust fields; an
+`rg` single-query equivalent is explicitly unsupported.
+
 ## Runtime fidelity and track scope
 
 An agent-use run measures the combination of an agent runtime and its

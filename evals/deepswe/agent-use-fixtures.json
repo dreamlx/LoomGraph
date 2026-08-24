@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "fixtures": [
+    {
+      "id": "vulture-scan-impact",
+      "task_class": "structural-impact",
+      "repository": "jendrikseipp/vulture",
+      "base_commit": "1eb212f0a0707ad6f4c720bb2010c2b7517cf0f9",
+      "instruction_file": "fixtures/vulture-scan-impact.md",
+      "rg_equivalent_single_query": false,
+      "oracle_existing_paths": [
+        "vulture/core.py",
+        "vulture/utils.py",
+        "vulture/noqa.py"
+      ],
+      "required_trust_fields": [
+        "edge_trust",
+        "resolution.resolved_ratio",
+        "resolution.internal_unresolved_ratio",
+        "resolution.external_unresolved_ratio"
+      ],
+      "cold_setup_fields": [
+        "index_duration_seconds",
+        "backend",
+        "workspace"
+      ],
+      "warm_run_fields": [
+        "tool_call_count",
+        "agent_execution_seconds"
+      ]
+    }
+  ]
+}
