@@ -8,6 +8,9 @@ import pytest
 from evals.capability_fixtures import materialize_fixture
 from evals.run_capability_observations import (
     ObservationValidationError,
+    _branch_diff_oracle,
+    _deps_oracle,
+    _path_alias_oracle,
     run_task,
     validate_observation,
     write_observations,
@@ -163,6 +166,52 @@ def test_runner_requires_the_fixed_multihop_impact_chain(tmp_path) -> None:
         }
 
 
+def test_deps_oracle_rejects_modules_without_fixed_typed_dependency() -> None:
+    assert not _deps_oracle({"modules": ["src/cli", "src/core"], "dependencies": []})
+
+
+def test_runner_requires_the_fixed_cross_module_call_dependency(tmp_path) -> None:
+    records = run_task("structural-typed-deps", tmp_path / "deps")
+
+    for record in records:
+        data = json.loads(record["operation"]["raw_stdout"])["data"]
+        assert data["dependencies"] == [
+            {"from": "src/cli", "to": "src/core", "count": 1, "types": {"CALLS": 1}}
+        ]
+        assert record["oracle"]["passed"] is True
+
+
+def test_branch_diff_oracle_rejects_unavailable_l2_or_wrong_broken_chain() -> None:
+    assert not _branch_diff_oracle(
+        {
+            "diff": {
+                "broken_chains": [
+                    {"src": "app.handlers.keep_legacy", "tgt": "app.auth.legacy_token", "keywords": "CALLS"}
+                ],
+                "content_comparison": {"status": "unavailable"},
+            }
+        }
+    )
+    assert not _branch_diff_oracle(
+        {
+            "diff": {
+                "broken_chains": [],
+                "content_comparison": {"status": "available"},
+            }
+        }
+    )
+
+
+def test_path_alias_oracle_rejects_a_correct_target_without_edge_trust() -> None:
+    assert not _path_alias_oracle(
+        {
+            "callees": [
+                {"entity": "src.models.Session", "resolution_qualifier": "resolved"}
+            ]
+        }
+    )
+
+
 @pytest.mark.parametrize(
     "task_id",
     [
@@ -187,6 +236,9 @@ def test_runner_exercises_the_tsconfig_path_alias(tmp_path) -> None:
     records = run_task("trust-alias-barrel", tmp_path / "alias")
 
     for record in records:
+        primary = json.loads(record["operation"]["raw_stdout"])["data"]
+        assert primary["edge_trust"]["include_unresolved"] is True
+        assert primary["edge_trust"]["returned_by_qualifier"]["resolved"] >= 1
         assert "src.alias_consumer" in record["operation"]["query_command"]
         assert "src.consumer" in record["supplemental"]["command"]
         assert record["supplemental"]["oracle"]["passed"] is True
@@ -209,6 +261,15 @@ def test_branch_diff_records_the_codegraph_variant_without_mislabeling_l2(tmp_pa
     records = run_task("structural-branch-diff", tmp_path / "branch-diff")
 
     for record in records:
+        primary = json.loads(record["operation"]["raw_stdout"])["data"]["diff"]
+        assert primary["broken_chains"] == [
+            {
+                "src": "app.handlers.keep_legacy",
+                "tgt": "app.auth.legacy_token",
+                "keywords": "CALLS",
+            }
+        ]
+        assert primary["content_comparison"]["status"] == "available"
         if record["phase"] == "cold":
             setup = record["operation"]["cold_setup"]
             assert setup["kind"] == "branch_diff_snapshot"

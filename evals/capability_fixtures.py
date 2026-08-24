@@ -111,6 +111,27 @@ def _python_history(path: Path) -> set[str]:
     return {"base", "head"}
 
 
+def _python_deps(path: Path) -> set[str]:
+    """A two-module fixture with one resolved import and call edge."""
+    _init(path)
+    _write(
+        path,
+        "src/core/service.py",
+        "def authenticate(token: str) -> bool:\n"
+        "    return token == 'ok'\n",
+    )
+    _write(
+        path,
+        "src/cli/handler.py",
+        "from src.core.service import authenticate\n\n"
+        "def handle(token: str) -> bool:\n"
+        "    return authenticate(token)\n",
+    )
+    _commit(path, "typed dependencies", "2024-01-05T00:00:00+00:00")
+    _git(path, "tag", "head")
+    return {"head"}
+
+
 def _factory_receiver(path: Path) -> set[str]:
     _init(path)
     _write(
@@ -238,6 +259,7 @@ def materialize_fixture(fixture_id: str, path: Path) -> MaterializedFixture:
     builders = {
         "python-core": _python_history,
         "python-history": _python_history,
+        "python-deps": _python_deps,
         "factory-receiver": _factory_receiver,
         "topology-debt-git": _topology_debt_git,
         "ts-barrel-alias": _ts_barrel_alias,

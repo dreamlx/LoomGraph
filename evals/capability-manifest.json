@@ -48,11 +48,11 @@
     {
       "id": "structural-typed-deps",
       "track": "B",
-      "task_class": "typed module dependencies",
-      "question": "模块间有哪些解析出的 IMPORTS 依赖？",
+      "task_class": "typed cross-module dependency",
+      "question": "模块间有哪些解析出的跨模块 CALLS 依赖？",
       "rg_single_query": "unsupported",
-      "tests": ["tests/unit/test_deps.py::TestDepsAnalyzer::test_multiple_relation_types_aggregated"],
-      "oracle": {"relation_types": ["CALLS", "IMPORTS"], "aggregation": "cross-module"},
+      "tests": ["tests/unit/test_deps.py::TestDepsAnalyzer::test_multiple_relation_types_aggregated", "tests/unit/test_capability_observations.py::test_runner_requires_the_fixed_cross_module_call_dependency"],
+      "oracle": {"from": "src/cli", "to": "src/core", "relation_types": ["CALLS"], "aggregation": "cross-module"},
       "trust_fields": ["workspace", "backend", "relation_type", "resolution_qualifier", "partial", "unresolved_dependency_count"],
       "recording": {"cold": "required", "warm": "required"}
     },
@@ -73,7 +73,7 @@
       "task_class": "directional branch diff",
       "question": "base 到 head 出现了哪些结构变化，L2 是否可比较？",
       "rg_single_query": "unsupported",
-      "tests": ["tests/unit/test_branch_diff.py::test_broken_chain_tgt_removed", "tests/unit/test_branch_diff.py::test_content_comparison_is_partial_when_only_some_hashes_exist", "tests/unit/test_branch_diff.py::test_content_comparison_is_unavailable_for_codegraph", "tests/unit/test_branch_diff.py::test_content_comparison_rejects_cross_backend_hashes"],
+      "tests": ["tests/unit/test_branch_diff.py::test_broken_chain_tgt_removed", "tests/unit/test_branch_diff.py::test_content_comparison_is_partial_when_only_some_hashes_exist", "tests/unit/test_branch_diff.py::test_content_comparison_is_unavailable_for_codegraph", "tests/unit/test_branch_diff.py::test_content_comparison_rejects_cross_backend_hashes", "tests/unit/test_capability_observations.py::test_branch_diff_records_the_codegraph_variant_without_mislabeling_l2"],
       "oracle": {"broken_chain": "keep_legacy->legacy_token", "codeindex_l2_status": "available", "codegraph_l2_status": "unavailable", "codegraph_reason": "backend_has_no_per_entity_content_hash", "unavailable_is_not_unchanged": true},
       "trust_fields": ["base_ref", "head_ref", "base_backend", "head_backend", "codegraph_version", "content_comparison.status", "content_comparison.reason", "comparable_shared", "uncomparable_shared"],
       "recording": {"cold": "required", "warm": "required"}
@@ -95,7 +95,7 @@
       "task_class": "alias or barrel ambiguity adversary",
       "question": "path alias 与 barrel 的引用能否解析到同一定义，并保留不确定边的限定？",
       "rg_single_query": "unsupported",
-      "tests": ["tests/contract/test_codeindex_output_contract.py::TestGraphExportShape::test_typescript_barrel_reference_reaches_definition", "tests/unit/test_export_reader.py::test_map_edge_ambiguous_uses_dst_raw_keeps_candidates", "tests/unit/test_graph_query.py::test_include_unresolved_flag_keeps_phantom_edges"],
+      "tests": ["tests/contract/test_codeindex_output_contract.py::TestGraphExportShape::test_typescript_barrel_reference_reaches_definition", "tests/unit/test_export_reader.py::test_map_edge_ambiguous_uses_dst_raw_keeps_candidates", "tests/unit/test_graph_query.py::test_include_unresolved_flag_keeps_phantom_edges", "tests/unit/test_capability_observations.py::test_runner_exercises_the_tsconfig_path_alias"],
       "oracle": {"path_alias_reference": "src.alias_consumer->src.models.Session", "barrel_reference": "src.consumer->src.models.Session", "must_not_target": "src.index.Session", "resolved_qualifier": "resolved", "ambiguous_edges_remain_non_resolved": true},
       "trust_fields": ["workspace", "backend", "source_id", "edge_trust.include_unresolved", "edge_trust.omitted_by_qualifier", "resolution_qualifier", "dst_raw", "candidates", "answer_status", "uncertainty_reason"],
       "recording": {"cold": "required", "warm": "required"}

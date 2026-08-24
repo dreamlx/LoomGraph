@@ -15,11 +15,12 @@ equivalent text search.
 
 ## Proposed fixture package and record
 
-The runner materializes five tiny versioned repositories:
+The runner materializes six tiny versioned repositories:
 
 | Fixture repository | Used by | Required history |
 | --- | --- | --- |
-| `python-core` | A1, A2, B2 | one immutable commit |
+| `python-core` | A1, A2 | one immutable commit |
+| `python-deps` | B2 | one immutable commit; one resolved cross-module call |
 | `python-history` | B1, B4 | `base` and `head` tags; fixed author/committer dates |
 | `topology-debt-git` | B3 | one hub with eight consumers and thirteen fixed-date commits |
 | `factory-receiver` | C1 | `base`/`head` tags: annotated factory positive plus sparse no-caller change |
@@ -97,7 +98,7 @@ actual query shape, not a performance claim.
 | A1 exact definition location | `python-core`; `loomgraph find AuthService --type class -n 1 -w "$WS"` after `loomgraph index . --clear -w "$WS"` | **equivalent**: `rg -n --glob '*.py' '^class AuthService\\b' .` | one match: `app.auth.AuthService`, `app/auth.py` | entity, source_id, workspace, backend, parser version, `partial` |
 | A2 literal direct call-site location | `python-core`; `loomgraph graph app.handlers.handle_login --direction callees --depth 1 --relation-type CALLS -w "$WS"` | **equivalent only under this narrow framing**: `rg -n --glob '*.py' 'validate_token\\(token\\)' app/handlers.py` | one direct call site in `handle_login` to `app.auth.validate_token` | caller/callee entity IDs, source IDs, depth=1, relation type, `partial` |
 | B1 multi-hop impact | `python-history`; `loomgraph impact head --base base --depth 2 -w "$WS"` | **unsupported** | modified `app.auth.validate_token` has direct caller `app.handlers.handle_login` and indirect caller `app.api.dispatch`; it also carries the resolution split | changed source IDs, depth, resolution split, `answer.status`; a low-resolution empty result must carry a caveat |
-| B2 typed module dependencies | `python-core`; `loomgraph deps -d 2 -w "$WS"` | **unsupported** | expected cross-module `CALLS` and `IMPORTS` aggregates | relation types, source scope, unresolved dependency count, `partial`, resolution qualifier |
+| B2 typed cross-module dependency | `python-deps`; `loomgraph deps -d 2 -w "$WS"` | **unsupported** | exactly one resolved `src/cli → src/core` `CALLS` aggregate | relation type, source scope, `partial`, resolution qualifier |
 | B3 topology/debt with Git evidence | `topology-debt-git`; primary `loomgraph debt --with-git --git-since '10 years' -w "$WS"`, supplemental callers graph for `app.hub.HubFunc` | **unsupported** | `app/hub.py` is `critical_hotspot` at P0 (13 changes, score 100) under fixed history, and the supplemental graph returns exactly eight `HubFunc` callers | fixture Git ref, analysis version, source scope, resolution split, Git window |
 | B4 directional branch diff / L2 status | `python-history`; codeindex primary plus `codegraph` comparison variant | **unsupported** | codeindex finds fixed broken chains and reports L2 `available`; codegraph reports L2 `unavailable`, never `unchanged` | base/head resolved SHAs, both backends and codegraph version, `content_comparison.status` and reason, comparable/uncomparable shared counts |
 | C1 annotated-factory receiver adversary | `factory-receiver`; primary caller graph plus supplemental `loomgraph impact head --base base --depth 2 -w "$WS"` | **unsupported** | positive caller is `consumer.run`; sparse `only_here` change has zero callers but is `medium`/`unknown`, never isolated/low | source ID, resolution split, answer status, uncertainty reason |
@@ -125,6 +126,11 @@ actual query shape, not a performance claim.
 5. **No score before raw rows:** per-task `oracle.passed` and trust-contract
    compliance are the first output. Any aggregate, if later wanted, must keep
    task class and backend separate; it cannot collapse B/C into an `rg` race.
+6. **B2 scope:** the Python slice exercises the resolved `CALLS` aggregate.
+   codeindex also emits module-level `IMPORTS` edges, but `loomgraph deps`
+   currently aggregates only edges whose endpoints map to source-bearing
+   entities; that import-edge behavior is an explicit follow-up, not a passed
+   v1 assertion.
 
 ## Explicit non-goals of this draft
 
