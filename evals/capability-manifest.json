@@ -3,8 +3,8 @@
   "purpose": "machine-readable structural capability and trust assertions; no aggregate score",
   "primary_question": "面对一个已声明的结构/时间/比较问题，LoomGraph 能否给出正确、且附带可信度限定的回答；而 rg 是否存在等价的单查询答案？",
   "recording_contract": {
-    "cold": ["fixture_id", "fixture_sha", "git_ref", "loomgraph_version", "parser_version", "backend", "index_clear_wall_ms", "entity_count", "relation_count", "resolved_ratio", "internal_unresolved_ratio", "external_unresolved_ratio", "raw_output"],
-    "warm": ["fixture_id", "workspace_or_snapshot_id", "query_command", "query_wall_ms", "reindexed", "raw_output"]
+    "cold": ["fixture.id", "fixture.sha", "fixture.git_ref", "toolchain", "operation.cold_setup.kind", "operation.cold_setup.command", "operation.cold_setup.wall_ms", "operation.cold_setup.exit_code", "operation.cold_setup.raw_stdout", "operation.query_command", "operation.query_wall_ms", "operation.raw_stdout", "trust.resolution when required"],
+    "warm": ["fixture.id", "fixture.sha", "fixture.git_ref", "toolchain", "operation.query_command", "operation.query_wall_ms", "operation.reindexed=false", "operation.raw_stdout", "trust.resolution when required"]
   },
   "agent_use_compatibility": {
     "purpose": "runtime and adapter compatibility dogfood only",

@@ -39,8 +39,10 @@ runner records, but does not aggregate, one JSON record for each `cold` and
     "parser_versions": {"python": "..."}, "backend": "codeindex"
   },
   "operation": {
-    "index_command": ["..."], "query_command": ["..."],
-    "index_clear_wall_ms": 0, "query_wall_ms": 0, "reindexed": false,
+    "cold_setup": {"kind": "workspace_index | branch_diff_snapshot",
+                   "command": ["..."], "wall_ms": 0, "exit_code": 0,
+                   "raw_stdout": "...", "raw_stderr": "..."},
+    "query_command": ["..."], "query_wall_ms": 0, "reindexed": true,
     "exit_code": 0, "raw_stdout": "...", "raw_stderr": "..."
   },
   "answer": {"status": "complete | partial | ambiguous | unavailable | error"},
@@ -60,12 +62,16 @@ runner records, but does not aggregate, one JSON record for each `cold` and
 The timing fields distinguish index setup from query execution. They are
 diagnostic metadata, never a cross-tool speed score.
 
-`cold` clears and indexes a task-named workspace. `warm` uses the same
-fixture SHA and workspace without a new index. A changed SHA, Git ref,
-backend, parser or codeindex version makes the record incomparable rather than
-silently reused. B4 additionally stores the codegraph comparison operation in
-the same phase record; B3 stores its caller-topology check and C2 its second
-(barrel) query as `supplemental`.
+`cold` records the actual setup that makes the following answer meaningful:
+ordinary tasks run a `workspace_index`; B4 records its primary
+`branch_diff_snapshot` operation, which both provisions snapshots and answers
+the comparison question. Its setup command is intentionally not an unrelated
+pre-index. `warm` uses the same fixture SHA and workspace or snapshots without
+new setup and omits `cold_setup`. A changed SHA, Git ref, backend, parser or
+codeindex version makes the record incomparable rather than silently reused.
+B4 additionally stores the codegraph comparison operation in the same phase
+record; B3 stores its caller-topology check and C2 its second (barrel) query as
+`supplemental`.
 
 Run the eight tasks into an adapter-owned directory with:
 

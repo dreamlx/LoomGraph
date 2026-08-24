@@ -280,10 +280,13 @@ def validate_observation(record: dict[str, object]) -> None:
         raise ObservationValidationError("toolchain.parser_versions must not be empty")
 
     operation = _mapping(record.get("operation"), "operation")
-    for field in ("index_command", "query_command"):
-        value = operation.get(field)
-        if not isinstance(value, list) or not value or not all(isinstance(part, str) for part in value):
-            raise ObservationValidationError(f"operation.{field} must be non-empty strings")
+    query_command = operation.get("query_command")
+    if (
+        not isinstance(query_command, list)
+        or not query_command
+        or not all(isinstance(part, str) for part in query_command)
+    ):
+        raise ObservationValidationError("operation.query_command must be non-empty strings")
     if not isinstance(operation.get("query_wall_ms"), int):
         raise ObservationValidationError("operation.query_wall_ms must be an integer")
     if not isinstance(operation.get("exit_code"), int):
@@ -294,10 +297,24 @@ def validate_observation(record: dict[str, object]) -> None:
     if phase == "cold":
         if operation.get("reindexed") is not True:
             raise ObservationValidationError("cold observation must reindex")
-        if not isinstance(operation.get("index_clear_wall_ms"), int):
-            raise ObservationValidationError("cold observation needs index_clear_wall_ms")
-    elif operation.get("reindexed") is not False:
-        raise ObservationValidationError("warm observation must not be reindexed")
+        setup = _mapping(operation.get("cold_setup"), "operation.cold_setup")
+        if setup.get("kind") not in {"workspace_index", "branch_diff_snapshot"}:
+            raise ObservationValidationError("operation.cold_setup.kind is invalid")
+        command = setup.get("command")
+        if not isinstance(command, list) or not command or not all(isinstance(part, str) for part in command):
+            raise ObservationValidationError("operation.cold_setup.command must be non-empty strings")
+        if not isinstance(setup.get("wall_ms"), int):
+            raise ObservationValidationError("operation.cold_setup.wall_ms must be an integer")
+        if setup.get("exit_code") != 0:
+            raise ObservationValidationError("operation.cold_setup.exit_code must be 0")
+        _non_empty_string(setup.get("raw_stdout"), "operation.cold_setup.raw_stdout")
+        if not isinstance(setup.get("raw_stderr"), str):
+            raise ObservationValidationError("operation.cold_setup.raw_stderr must be a string")
+    else:
+        if operation.get("reindexed") is not False:
+            raise ObservationValidationError("warm observation must not be reindexed")
+        if "cold_setup" in operation:
+            raise ObservationValidationError("warm observation must not include cold_setup")
 
     answer = _mapping(record.get("answer"), "answer")
     if answer.get("status") not in {"complete", "partial", "ambiguous", "unavailable", "error"}:
@@ -490,8 +507,7 @@ def _observation(
     fixture: MaterializedFixture,
     workspace: str,
     phase: str,
-    index_command: list[str],
-    index_wall_ms: int | None,
+    cold_setup: dict[str, object] | None,
     query_command: list[str],
     completed: subprocess.CompletedProcess[str],
     query_wall_ms: int,
@@ -529,9 +545,7 @@ def _observation(
         "phase": phase,
         "toolchain": _toolchain(task),
         "operation": {
-            "index_command": index_command,
             "query_command": query_command,
-            "index_clear_wall_ms": index_wall_ms,
             "query_wall_ms": query_wall_ms,
             "reindexed": phase == "cold",
             "exit_code": completed.returncode,
@@ -551,6 +565,10 @@ def _observation(
         },
         "rg": rg,
     }
+    if cold_setup is not None:
+        operation = record["operation"]
+        assert isinstance(operation, dict)
+        operation["cold_setup"] = cold_setup
     if has_resolution_split:
         trust = record["trust"]
         assert isinstance(trust, dict)
@@ -584,12 +602,30 @@ def run_task(task_id: str, work_root: Path) -> list[dict[str, object]]:
     # Exercise the installed product entrypoint. Running cli.main as a module
     # imports ``loomgraph.cli`` first and can skip Click command registration.
     command_prefix = [str(Path(sys.executable).with_name("loomgraph"))]
-    index_command = [*command_prefix, "index", ".", "--clear", "-w", workspace]
-    _, index_wall_ms = _run(index_command, fixture.path, env)
     query_command = [*command_prefix, *task.query]
     if task.uses_workspace:
         query_command.extend(["-w", workspace])
-    cold_completed, cold_query_ms = _run(query_command, fixture.path, env)
+        index_command = [*command_prefix, "index", ".", "--clear", "-w", workspace]
+        index_completed, index_wall_ms = _run(index_command, fixture.path, env)
+        cold_setup: dict[str, object] = {
+            "kind": "workspace_index",
+            "command": index_command,
+            "wall_ms": index_wall_ms,
+            "exit_code": index_completed.returncode,
+            "raw_stdout": index_completed.stdout or index_completed.stderr,
+            "raw_stderr": index_completed.stderr,
+        }
+        cold_completed, cold_query_ms = _run(query_command, fixture.path, env)
+    else:
+        cold_completed, cold_query_ms = _run(query_command, fixture.path, env)
+        cold_setup = {
+            "kind": "branch_diff_snapshot",
+            "command": query_command,
+            "wall_ms": cold_query_ms,
+            "exit_code": cold_completed.returncode,
+            "raw_stdout": cold_completed.stdout or cold_completed.stderr,
+            "raw_stderr": cold_completed.stderr,
+        }
     cold_comparison = _comparison(task, command_prefix, fixture, env)
     cold_supplemental = _supplemental(task, command_prefix, fixture, env, workspace)
 
@@ -619,14 +655,14 @@ def run_task(task_id: str, work_root: Path) -> list[dict[str, object]]:
             }
 
     cold = _observation(
-        task_id, task, fixture, workspace, "cold", index_command, index_wall_ms,
+        task_id, task, fixture, workspace, "cold", cold_setup,
         query_command, cold_completed, cold_query_ms, rg_record, cold_comparison, cold_supplemental,
     )
     warm_completed, warm_query_ms = _run(query_command, fixture.path, env)
     warm_comparison = _comparison(task, command_prefix, fixture, env)
     warm_supplemental = _supplemental(task, command_prefix, fixture, env, workspace)
     warm = _observation(
-        task_id, task, fixture, workspace, "warm", index_command, None,
+        task_id, task, fixture, workspace, "warm", None,
         query_command, warm_completed, warm_query_ms, rg_record, warm_comparison, warm_supplemental,
     )
     return [cold, warm]

@@ -15,7 +15,7 @@ from evals.run_capability_observations import (
 
 
 def _record(phase: str) -> dict[str, object]:
-    return {
+    record: dict[str, object] = {
         "schema_version": 1,
         "fixture": {"id": "python-core", "sha": "a" * 64, "git_ref": "HEAD"},
         "task_id": "overlap-definition",
@@ -27,9 +27,7 @@ def _record(phase: str) -> dict[str, object]:
             "backend": "codeindex",
         },
         "operation": {
-            "index_command": ["loomgraph", "index", "."],
             "query_command": ["loomgraph", "find", "AuthService"],
-            "index_clear_wall_ms": 1 if phase == "cold" else None,
             "query_wall_ms": 1,
             "reindexed": phase == "cold",
             "exit_code": 0,
@@ -41,6 +39,16 @@ def _record(phase: str) -> dict[str, object]:
         "oracle": {"passed": True, "failures": []},
         "rg": {"equivalence": "equivalent", "command": ["rg", "AuthService"]},
     }
+    if phase == "cold":
+        record["operation"]["cold_setup"] = {
+            "kind": "workspace_index",
+            "command": ["loomgraph", "index", ".", "--clear"],
+            "wall_ms": 1,
+            "exit_code": 0,
+            "raw_stdout": '{"success": true}',
+            "raw_stderr": "",
+        }
+    return record
 
 
 def test_validates_independent_cold_and_warm_records() -> None:
@@ -59,6 +67,18 @@ def test_rejects_warm_record_that_reindexed() -> None:
 
     with pytest.raises(ObservationValidationError, match="warm.*reindexed"):
         validate_observation(warm)
+
+
+def test_rejects_a_cold_record_without_successful_setup_evidence() -> None:
+    cold = _record("cold")
+    operation = cold["operation"]
+    assert isinstance(operation, dict)
+    setup = operation["cold_setup"]
+    assert isinstance(setup, dict)
+    setup["exit_code"] = 1
+
+    with pytest.raises(ObservationValidationError, match="cold_setup.exit_code"):
+        validate_observation(cold)
 
 
 def test_rejects_a_claim_without_raw_answer_or_trust() -> None:
@@ -108,6 +128,9 @@ def test_runner_writes_real_cold_and_warm_definition_observations(tmp_path) -> N
     assert all(record["oracle"]["passed"] is True for record in records)
     assert records[0]["operation"]["reindexed"] is True
     assert records[1]["operation"]["reindexed"] is False
+    assert records[0]["operation"]["cold_setup"]["kind"] == "workspace_index"
+    assert records[0]["operation"]["cold_setup"]["exit_code"] == 0
+    assert "cold_setup" not in records[1]["operation"]
     assert records[0]["rg"]["equivalence"] == "equivalent"
 
 
@@ -186,6 +209,10 @@ def test_branch_diff_records_the_codegraph_variant_without_mislabeling_l2(tmp_pa
     records = run_task("structural-branch-diff", tmp_path / "branch-diff")
 
     for record in records:
+        if record["phase"] == "cold":
+            setup = record["operation"]["cold_setup"]
+            assert setup["kind"] == "branch_diff_snapshot"
+            assert setup["command"] == record["operation"]["query_command"]
         comparison = record["comparison"]
         assert comparison["backend"] == "codegraph"
         if comparison["availability"] == "available":
