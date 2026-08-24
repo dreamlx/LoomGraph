@@ -298,6 +298,34 @@ def _valid_payload(payload: object, *, require_trust: bool) -> bool:
     )
 
 
+def normalize_candidate_paths(payload: object, source_dir: Path) -> dict[str, Any] | None:
+    """Keep scored candidate paths repo-relative without rewriting raw output."""
+    if not isinstance(payload, dict):
+        return None
+    candidates = payload.get("candidates")
+    if not isinstance(candidates, list):
+        return None
+
+    source_root = source_dir.resolve()
+    normalized_candidates: list[dict[str, Any]] = []
+    for candidate in candidates:
+        if not isinstance(candidate, dict):
+            return None
+        path = candidate.get("path")
+        if not isinstance(path, str):
+            return None
+        candidate_path = Path(path)
+        if candidate_path.is_absolute():
+            try:
+                candidate_path = candidate_path.resolve().relative_to(source_root)
+            except ValueError:
+                return None
+        if not candidate_path.parts or ".." in candidate_path.parts:
+            return None
+        normalized_candidates.append({**candidate, "path": candidate_path.as_posix()})
+    return {**payload, "candidates": normalized_candidates}
+
+
 def build_packet(
     *,
     condition: str,
@@ -468,6 +496,7 @@ def run(args: argparse.Namespace) -> int:
     after = _repo_state(source_dir)
     source_clean = before == after and not after["porcelain"]
     summary = summarize_stream(events)
+    summary["payload"] = normalize_candidate_paths(summary.get("payload"), source_dir)
     packet = build_packet(
         condition=args.condition,
         use_mode=args.use_mode,
