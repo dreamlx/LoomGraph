@@ -37,6 +37,7 @@ class _Task:
     query: tuple[str, ...]
     rg: tuple[str, ...] | None
     oracle: Callable[[dict[str, Any]], bool]
+    rg_oracle: Callable[[str], bool] | None = None
     uses_workspace: bool = True
     parser_distribution: str = "tree-sitter-python"
     comparison_query: tuple[str, ...] | None = None
@@ -62,6 +63,14 @@ def _direct_call_oracle(data: dict[str, Any]) -> bool:
         for edge in data.get("callees", [])
         if isinstance(edge, dict)
     )
+
+
+def _rg_definition_oracle(stdout: str) -> bool:
+    return "app/auth.py:1:class AuthService" in stdout
+
+
+def _rg_direct_call_oracle(stdout: str) -> bool:
+    return "4:" in stdout and "validate_token(token)" in stdout
 
 
 def _impact_oracle(data: dict[str, Any]) -> bool:
@@ -232,6 +241,7 @@ _TASKS = {
         query=("find", "AuthService", "--type", "class", "-n", "1"),
         rg=("rg", "-n", "--glob", "*.py", "^class AuthService\\b", "."),
         oracle=_definition_oracle,
+        rg_oracle=_rg_definition_oracle,
     ),
     "overlap-direct-static-call": _Task(
         fixture_id="python-core",
@@ -241,6 +251,7 @@ _TASKS = {
         ),
         rg=("rg", "-n", "--glob", "*.py", "validate_token\\(token\\)", "app/handlers.py"),
         oracle=_direct_call_oracle,
+        rg_oracle=_rg_direct_call_oracle,
     ),
     "structural-multihop-impact": _Task(
         fixture_id="python-history",
@@ -406,6 +417,23 @@ def validate_observation(record: dict[str, object]) -> None:
     rg = _mapping(record.get("rg"), "rg")
     if rg.get("equivalence") not in {"equivalent", "unsupported"}:
         raise ObservationValidationError("rg.equivalence is invalid")
+    if rg.get("equivalence") == "equivalent":
+        command = rg.get("command")
+        if not isinstance(command, list) or not command or not all(isinstance(part, str) for part in command):
+            raise ObservationValidationError("rg.command must be non-empty strings")
+        available = rg.get("available")
+        if not isinstance(available, bool):
+            raise ObservationValidationError("rg.available must be boolean")
+        if available:
+            if not isinstance(rg.get("exit_code"), int):
+                raise ObservationValidationError("rg.exit_code must be an integer")
+            if not isinstance(rg.get("raw_stdout"), str) or not isinstance(rg.get("raw_stderr"), str):
+                raise ObservationValidationError("rg raw output must be strings")
+            rg_oracle = _mapping(rg.get("oracle"), "rg.oracle")
+            if not isinstance(rg_oracle.get("passed"), bool):
+                raise ObservationValidationError("rg.oracle.passed must be boolean")
+        else:
+            _non_empty_string(rg.get("infrastructure_error"), "rg.infrastructure_error")
 
     comparison_value = record.get("comparison")
     if comparison_value is not None:
@@ -717,6 +745,8 @@ def run_task(task_id: str, work_root: Path) -> list[dict[str, object]]:
 
     if task.rg is None:
         rg_record: dict[str, object] = {"equivalence": "unsupported", "command": None}
+    elif task.rg_oracle is None:
+        raise ValueError(f"equivalent rg task {task_id} has no oracle")
     else:
         try:
             rg_completed, _ = _run(list(task.rg), fixture.path, env)
@@ -731,6 +761,7 @@ def run_task(task_id: str, work_root: Path) -> list[dict[str, object]]:
                 "infrastructure_error": "rg executable not found",
             }
         else:
+            passed = rg_completed.returncode == 0 and task.rg_oracle(rg_completed.stdout)
             rg_record = {
                 "equivalence": "equivalent",
                 "command": list(task.rg),
@@ -738,6 +769,10 @@ def run_task(task_id: str, work_root: Path) -> list[dict[str, object]]:
                 "exit_code": rg_completed.returncode,
                 "raw_stdout": rg_completed.stdout,
                 "raw_stderr": rg_completed.stderr,
+                "oracle": {
+                    "passed": passed,
+                    "failures": [] if passed else ["rg answer did not match calibration oracle"],
+                },
             }
 
     cold = _observation(

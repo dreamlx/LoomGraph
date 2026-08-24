@@ -41,7 +41,15 @@ def _record(phase: str) -> dict[str, object]:
         "answer": {"status": "complete"},
         "trust": {"workspace": "capability-a1", "partial": False},
         "oracle": {"passed": True, "failures": []},
-        "rg": {"equivalence": "equivalent", "command": ["rg", "AuthService"]},
+        "rg": {
+            "equivalence": "equivalent",
+            "command": ["rg", "AuthService"],
+            "available": True,
+            "exit_code": 0,
+            "raw_stdout": "app/auth.py:1:class AuthService:",
+            "raw_stderr": "",
+            "oracle": {"passed": True, "failures": []},
+        },
     }
     if phase == "cold":
         record["operation"]["cold_setup"] = {
@@ -140,6 +148,37 @@ def test_runner_writes_real_cold_and_warm_definition_observations(tmp_path) -> N
     assert records[0]["operation"]["cold_setup"]["exit_code"] == 0
     assert "cold_setup" not in records[1]["operation"]
     assert records[0]["rg"]["equivalence"] == "equivalent"
+    if records[0]["rg"]["available"]:
+        assert records[0]["rg"]["oracle"]["passed"] is True
+    else:
+        assert records[0]["rg"]["infrastructure_error"] == "rg executable not found"
+
+
+def test_runner_validates_the_narrow_rg_direct_call_calibration(tmp_path) -> None:
+    records = run_task("overlap-direct-static-call", tmp_path / "direct-call")
+
+    assert all(record["rg"]["equivalence"] == "equivalent" for record in records)
+    for record in records:
+        rg = record["rg"]
+        if rg["available"]:
+            assert rg["oracle"]["passed"] is True
+        else:
+            assert rg["infrastructure_error"] == "rg executable not found"
+
+
+def test_rejects_an_available_rg_calibration_without_an_oracle() -> None:
+    record = _record("cold")
+    record["rg"] = {
+        "equivalence": "equivalent",
+        "command": ["rg", "AuthService"],
+        "available": True,
+        "exit_code": 0,
+        "raw_stdout": "app/auth.py:1:class AuthService:",
+        "raw_stderr": "",
+    }
+
+    with pytest.raises(ObservationValidationError, match="rg.oracle"):
+        validate_observation(record)
 
 
 def test_runner_requires_the_fixed_git_hotspot_oracle(tmp_path) -> None:
