@@ -178,6 +178,27 @@ def test_stream_summary_reads_structured_result_and_observed_mcp_calls() -> None
     ]
 
 
+def test_stream_summary_separates_assistant_models_from_session_and_usage_telemetry() -> None:
+    summary = _MODULE.summarize_stream(
+        [
+            {"type": "system", "subtype": "init", "model": "glm-5.2[1M]"},
+            {"type": "assistant", "message": {"model": "glm-5.3", "content": []}},
+            {
+                "type": "result",
+                "modelUsage": {"glm-4.7": {}, "glm-5.2[1M]": {}},
+                "structured_output": {
+                    "candidates": [{"path": "src/x.py", "evidence": "x"}]
+                },
+            },
+        ]
+    )
+
+    assert summary["assistant_models"] == ["glm-5.3"]
+    assert summary["session_models"] == ["glm-5.2[1M]"]
+    assert summary["usage_models"] == ["glm-4.7", "glm-5.2[1M]"]
+    assert summary["observed_models"] == ["glm-5.2[1M]", "glm-5.3", "glm-4.7"]
+
+
 def test_stream_summary_accepts_json_result_fallback() -> None:
     summary = _MODULE.summarize_stream(
         [
@@ -377,6 +398,9 @@ def test_packet_records_observed_model_identity_without_claiming_an_alias() -> N
             "final_result_seen": True,
             "payload": {"candidates": [{"path": "src/x.py", "evidence": "x"}]},
             "observed_models": ["glm-5.2[1M]", "glm-5.3"],
+            "assistant_models": ["glm-5.3"],
+            "session_models": ["glm-5.2[1M]"],
+            "usage_models": ["glm-4.7", "glm-5.2[1M]"],
         },
         requested_model="sonnet",
     )
@@ -384,6 +408,9 @@ def test_packet_records_observed_model_identity_without_claiming_an_alias() -> N
     assert packet["model"] == {
         "requested": "sonnet",
         "observed": ["glm-5.2[1M]", "glm-5.3"],
+        "assistant_observed": ["glm-5.3"],
+        "session_observed": ["glm-5.2[1M]"],
+        "usage_observed": ["glm-4.7", "glm-5.2[1M]"],
     }
 
 
