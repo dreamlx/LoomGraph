@@ -1,45 +1,104 @@
 {
-  "schema_version": 1,
-  "purpose": "machine-readable capability assertions; no aggregate score",
+  "schema_version": 2,
+  "purpose": "machine-readable structural capability and trust assertions; no aggregate score",
+  "primary_question": "面对一个已声明的结构/时间/比较问题，LoomGraph 能否给出正确、且附带可信度限定的回答；而 rg 是否存在等价的单查询答案？",
+  "recording_contract": {
+    "cold": ["fixture.id", "fixture.sha", "fixture.git_ref", "toolchain", "operation.cold_setup.kind", "operation.cold_setup.command", "operation.cold_setup.wall_ms", "operation.cold_setup.exit_code", "operation.cold_setup.raw_stdout", "operation.query_command", "operation.query_wall_ms", "operation.raw_stdout", "trust.resolution when required"],
+    "warm": ["fixture.id", "fixture.sha", "fixture.git_ref", "toolchain", "operation.query_command", "operation.query_wall_ms", "operation.reindexed=false", "operation.raw_stdout", "trust.resolution when required"]
+  },
+  "agent_use_compatibility": {
+    "purpose": "runtime and adapter compatibility dogfood only",
+    "not_scored": true,
+    "required_fields": ["host", "runtime", "mode", "tool_surface", "packet_schema_valid", "source_clean", "loomgraph_retrieval_evidence"]
+  },
   "fixtures": [
     {
-      "id": "codeindex-l2-available",
-      "test": "tests/unit/test_branch_diff.py::test_identical_graphs_all_zero",
-      "backend_pair": ["codeindex", "codeindex"],
-      "expected": {
-        "content_comparison.status": "available",
-        "content_comparison.changed": []
-      }
+      "id": "overlap-definition",
+      "track": "A",
+      "task_class": "exact definition lookup",
+      "question": "目标定义位于何处？",
+      "rg_single_query": "equivalent",
+      "tests": ["tests/unit/test_cli.py::TestAsyncFind::test_exact_match"],
+      "oracle": {"match": "AuthService", "score": 1.0},
+      "trust_fields": ["workspace", "backend", "source_id", "partial", "parser_version"],
+      "recording": {"cold": "required", "warm": "required"}
     },
     {
-      "id": "codeindex-l2-partial",
-      "test": "tests/unit/test_branch_diff.py::test_content_comparison_is_partial_when_only_some_hashes_exist",
-      "backend_pair": ["codeindex", "codeindex"],
-      "expected": {
-        "content_comparison.status": "partial",
-        "content_comparison.changed_is_not_null": true,
-        "content_comparison.uncomparable_shared": 1
-      }
+      "id": "overlap-direct-static-call",
+      "track": "A",
+      "task_class": "literal direct static call-site lookup",
+      "question": "目标字面直接调用发生在哪里？",
+      "rg_single_query": "equivalent",
+      "tests": ["tests/unit/test_cli.py::TestAsyncGraphQuery::test_both_directions"],
+      "oracle": {"direction": "both", "relation": "CALLS", "callers": ["main", "handler"]},
+      "trust_fields": ["workspace", "backend", "source_id", "resolution_qualifier", "partial"],
+      "recording": {"cold": "required", "warm": "required"}
     },
     {
-      "id": "codegraph-l2-unavailable",
-      "test": "tests/unit/test_branch_diff.py::test_content_comparison_is_unavailable_for_codegraph",
-      "backend_pair": ["codegraph", "codegraph"],
-      "expected": {
-        "content_comparison.status": "unavailable",
-        "content_comparison.changed": null,
-        "content_comparison.reason": "backend_has_no_per_entity_content_hash"
-      }
+      "id": "structural-multihop-impact",
+      "track": "B",
+      "task_class": "multi-hop impact",
+      "question": "目标变更会经由哪些调用层影响哪些模块？",
+      "rg_single_query": "unsupported",
+      "tests": ["tests/unit/test_impact.py::TestQueryCallersNameQualification::test_indirect_callers_still_resolve_with_qualified_name"],
+      "oracle": {"max_depth": 2, "direct_caller": "app.handlers.handle_login", "indirect_caller": "app.api.dispatch", "resolution_split_required": true},
+      "trust_fields": ["workspace", "backend", "source_id", "max_depth", "resolution_qualifier", "resolved_ratio", "internal_unresolved_ratio", "external_unresolved_ratio", "answer_status"],
+      "recording": {"cold": "required", "warm": "required"}
     },
     {
-      "id": "cross-backend-l2-unavailable",
-      "test": "tests/unit/test_branch_diff.py::test_content_comparison_rejects_cross_backend_hashes",
-      "backend_pair": ["codeindex", "codegraph"],
-      "expected": {
-        "content_comparison.status": "unavailable",
-        "content_comparison.changed": null,
-        "content_comparison.reason": "cross_backend_comparison_not_supported"
-      }
+      "id": "structural-typed-deps",
+      "track": "B",
+      "task_class": "typed module dependencies",
+      "question": "模块间有哪些解析出的 IMPORTS 依赖？",
+      "rg_single_query": "unsupported",
+      "tests": ["tests/unit/test_deps.py::TestDepsAnalyzer::test_multiple_relation_types_aggregated"],
+      "oracle": {"relation_types": ["CALLS", "IMPORTS"], "aggregation": "cross-module"},
+      "trust_fields": ["workspace", "backend", "relation_type", "resolution_qualifier", "partial", "unresolved_dependency_count"],
+      "recording": {"cold": "required", "warm": "required"}
+    },
+    {
+      "id": "structural-topology-debt-git",
+      "track": "B",
+      "task_class": "topology and debt with git evidence",
+      "question": "哪个高耦合热点同时具有 Git 变更风险？",
+      "rg_single_query": "unsupported",
+      "tests": ["tests/unit/test_topology.py::TestTopologyAnalyzerFromData::test_hub_detection", "tests/unit/test_debt_git_integration.py::TestDebtAnalyzerGitIntegration::test_detect_critical_hotspot"],
+      "oracle": {"hub": "HubFunc", "hub_consumers": 8, "entity": "app/hub.py", "debt_category": "critical_hotspot", "severity": "P0", "change_frequency": 13, "hotspot_score": 100},
+      "trust_fields": ["workspace", "backend", "source_scope", "resolved_ratio", "internal_unresolved_ratio", "external_unresolved_ratio", "git_ref", "analysis_version"],
+      "recording": {"cold": "required", "warm": "required"}
+    },
+    {
+      "id": "structural-branch-diff",
+      "track": "B",
+      "task_class": "directional branch diff",
+      "question": "base 到 head 出现了哪些结构变化，L2 是否可比较？",
+      "rg_single_query": "unsupported",
+      "tests": ["tests/unit/test_branch_diff.py::test_broken_chain_tgt_removed", "tests/unit/test_branch_diff.py::test_content_comparison_is_partial_when_only_some_hashes_exist", "tests/unit/test_branch_diff.py::test_content_comparison_is_unavailable_for_codegraph", "tests/unit/test_branch_diff.py::test_content_comparison_rejects_cross_backend_hashes"],
+      "oracle": {"broken_chain": "keep_legacy->legacy_token", "codeindex_l2_status": "available", "codegraph_l2_status": "unavailable", "codegraph_reason": "backend_has_no_per_entity_content_hash", "unavailable_is_not_unchanged": true},
+      "trust_fields": ["base_ref", "head_ref", "base_backend", "head_backend", "codegraph_version", "content_comparison.status", "content_comparison.reason", "comparable_shared", "uncomparable_shared"],
+      "recording": {"cold": "required", "warm": "required"}
+    },
+    {
+      "id": "trust-annotated-factory-receiver",
+      "track": "C",
+      "task_class": "annotated factory receiver adversary",
+      "question": "factory 返回 receiver 的空 callers 能否被误判为 isolated？",
+      "rg_single_query": "unsupported",
+      "tests": ["tests/contract/test_codeindex_output_contract.py::TestGraphExportShape::test_annotated_factory_receiver_resolves_method_call", "tests/unit/test_impact.py::TestRiskAssessor::test_sparse_resolution_empty_callers_not_isolated"],
+      "oracle": {"resolved_call": "consumer.run->store.Store.create_entity", "sparse_changed_symbol": "only_here", "sparse_callers": 0, "sparse_risk_levels": ["unknown", "medium"], "must_not_claim": "isolated change"},
+      "trust_fields": ["workspace", "backend", "source_id", "resolved_ratio", "internal_unresolved_ratio", "external_unresolved_ratio", "answer_status", "uncertainty_reason"],
+      "recording": {"cold": "required", "warm": "required"}
+    },
+    {
+      "id": "trust-alias-barrel",
+      "track": "C",
+      "task_class": "alias or barrel ambiguity adversary",
+      "question": "path alias 与 barrel 的引用能否解析到同一定义，并保留不确定边的限定？",
+      "rg_single_query": "unsupported",
+      "tests": ["tests/contract/test_codeindex_output_contract.py::TestGraphExportShape::test_typescript_barrel_reference_reaches_definition", "tests/unit/test_export_reader.py::test_map_edge_ambiguous_uses_dst_raw_keeps_candidates", "tests/unit/test_graph_query.py::test_include_unresolved_flag_keeps_phantom_edges"],
+      "oracle": {"path_alias_reference": "src.alias_consumer->src.models.Session", "barrel_reference": "src.consumer->src.models.Session", "must_not_target": "src.index.Session", "resolved_qualifier": "resolved", "ambiguous_edges_remain_non_resolved": true},
+      "trust_fields": ["workspace", "backend", "source_id", "edge_trust.include_unresolved", "edge_trust.omitted_by_qualifier", "resolution_qualifier", "dst_raw", "candidates", "answer_status", "uncertainty_reason"],
+      "recording": {"cold": "required", "warm": "required"}
     }
   ]
 }

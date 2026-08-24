@@ -41,6 +41,43 @@ def contract_repo(tmp_path: Path) -> Path:
     return tmp_path
 
 
+@pytest.fixture
+def factory_receiver_repo(tmp_path: Path) -> Path:
+    """#185 fixture: a local receiver is bound from an annotated factory."""
+    (tmp_path / "store.py").write_text(
+        "class Store:\n"
+        "    async def create_entity(self) -> None:\n"
+        "        pass\n"
+    )
+    (tmp_path / "factory.py").write_text(
+        "from store import Store\n\n"
+        "async def create_store() -> Store:\n"
+        "    return Store()\n"
+    )
+    (tmp_path / "consumer.py").write_text(
+        "from factory import create_store\n\n"
+        "async def run() -> None:\n"
+        "    store = await create_store()\n"
+        "    await store.create_entity()\n"
+    )
+    return tmp_path
+
+
+@pytest.fixture
+def typescript_barrel_repo(tmp_path: Path) -> Path:
+    """#140 fixture: a named import reaches its definition through a barrel."""
+    src = tmp_path / "src"
+    src.mkdir()
+    (tmp_path / ".codeindex.yaml").write_text("languages:\n  - typescript\n")
+    (src / "models.ts").write_text("export class Session {}\n")
+    (src / "index.ts").write_text('export { Session } from "./models";\n')
+    (src / "consumer.ts").write_text(
+        'import { Session } from "./index";\n\n'
+        "export const useSession = (session: Session) => session;\n"
+    )
+    return tmp_path
+
+
 def _export_ndjson(repo: Path) -> list[dict]:
     proc = _run_codeindex("graph-export", "--root", str(repo), "-o", "-")
     assert proc.returncode == 0, f"graph-export failed: {proc.stderr[:300]}"
@@ -133,6 +170,42 @@ class TestGraphExportShape:
                 )
             elif qualifier == "unresolved":
                 assert e.get("dst") is None and e.get("dst_raw"), e
+
+    def test_annotated_factory_receiver_resolves_method_call(
+        self, factory_receiver_repo: Path
+    ) -> None:
+        """#185: ``store = await create_store()`` resolves ``store.method``.
+
+        This is a producer-boundary contract: LoomGraph may rely on the
+        resolved edge, but must not recreate this inference itself.
+        """
+        rows = _export_ndjson(factory_receiver_repo)
+        calls = [row for row in rows if row.get("type") == "edge" and row.get("kind") == "CALLS"]
+
+        assert any(
+            edge.get("src") == "consumer.run"
+            and edge.get("dst") == "store.Store.create_entity"
+            and edge.get("resolution_qualifier") == "resolved"
+            for edge in calls
+        ), calls
+
+    def test_typescript_barrel_reference_reaches_definition(
+        self, typescript_barrel_repo: Path
+    ) -> None:
+        """#140: a barrel re-export resolves to the defining entity, not a ghost."""
+        rows = _export_ndjson(typescript_barrel_repo)
+        references = [
+            row for row in rows
+            if row.get("type") == "edge" and row.get("kind") == "REFERENCES"
+        ]
+
+        assert any(
+            edge.get("src") == "src.consumer"
+            and edge.get("dst") == "src.models.Session"
+            and edge.get("resolution_qualifier") == "resolved"
+            for edge in references
+        ), references
+        assert not any(edge.get("dst") == "src.index.Session" for edge in references)
 
     def test_edge_kinds_are_the_known_set(self, contract_repo: Path) -> None:
         """Edge kinds are exactly CALLS/INHERITS/IMPORTS/REFERENCES — the

@@ -12,6 +12,7 @@ from loomgraph.cli._common import (
     output_error,
     output_success,
     prepare_workspace_store,
+    read_resolution_metadata,
 )
 from loomgraph.cli.main import main
 
@@ -320,9 +321,9 @@ def _attach_relations(
 
 def _bfs_collect(
     start: str,
-    adj: dict[str, list[dict[str, str]]],
+    adj: dict[str, list[dict[str, Any]]],
     depth: int,
-) -> list[dict[str, str]]:
+) -> list[dict[str, Any]]:
     """BFS from start entity along adjacency edges up to given depth.
 
     Returns deduplicated list of {entity, relation} dicts (excludes start itself).
@@ -355,8 +356,37 @@ def _edge_is_trusted(rel: dict[str, Any], include_unresolved: bool) -> bool:
     as resolved (old data / pre-#113 fixtures never get filtered)."""
     if include_unresolved:
         return True
-    qualifier = str(rel.get("resolution_qualifier", "resolved"))
-    return qualifier == "resolved"
+    return _resolution_qualifier(rel) == "resolved"
+
+
+def _resolution_qualifier(rel: dict[str, Any]) -> str:
+    """Return the persisted edge-resolution qualifier (legacy edges resolve)."""
+    return str(rel.get("resolution_qualifier", "resolved"))
+
+
+def _query_edge(
+    entity: str,
+    relation: str,
+    source_id: str,
+    rel: dict[str, Any],
+) -> dict[str, Any]:
+    """Preserve edge provenance when a graph query returns it.
+
+    ``dst_raw`` and ``candidates`` are most useful for low-trust edges, but
+    keeping them whenever the producer supplied them makes the response a
+    faithful view of the stored relation rather than a second resolver.
+    """
+    result: dict[str, Any] = {
+        "entity": entity,
+        "relation": relation,
+        "source_id": source_id,
+        "resolution_qualifier": _resolution_qualifier(rel),
+    }
+    if "dst_raw" in rel:
+        result["dst_raw"] = rel["dst_raw"]
+    if "candidates" in rel:
+        result["candidates"] = rel["candidates"]
+    return result
 
 
 def _resolve_simple_name(
@@ -460,28 +490,30 @@ async def _async_graph_query(
     # (#103): previously `--depth` was a no-op (graph() dropped it before
     # calling here). depth=1 == direct neighbours (prior behaviour); depth>1
     # expands callers/callees transitively, deduped, never revisiting start.
-    from collections import defaultdict
+    from collections import Counter, defaultdict
 
-    outgoing: dict[str, list[dict[str, str]]] = defaultdict(list)
-    incoming: dict[str, list[dict[str, str]]] = defaultdict(list)
+    outgoing: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    incoming: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    omitted_by_qualifier: Counter[str] = Counter()
+    returned_by_qualifier: Counter[str] = Counter()
     for rel in relations:
         src = rel.get("src_id", "") or rel.get("source", "")
         tgt = rel.get("tgt_id", "") or rel.get("target", "")
         keywords = rel.get("keywords", "UNKNOWN")
         if relation_type != "all" and keywords != relation_type:
             continue
+        if not (src and tgt):
+            continue
         # #113: skip low-trust (unresolved/ambiguous) edges by default — their
         # tgt is a call expression (dst_raw), not an in-repo entity, so they'd
         # surface as phantom callees/callers with source_id="". --include-unresolved
         # brings them back for raw-call inspection.
         if not _edge_is_trusted(rel, include_unresolved):
+            omitted_by_qualifier[_resolution_qualifier(rel)] += 1
             continue
-        if not (src and tgt):
-            continue
-        outgoing[src].append({"entity": tgt, "relation": keywords,
-                              "source_id": source_id_map.get(tgt, "")})
-        incoming[tgt].append({"entity": src, "relation": keywords,
-                              "source_id": source_id_map.get(src, "")})
+        returned_by_qualifier[_resolution_qualifier(rel)] += 1
+        outgoing[src].append(_query_edge(tgt, keywords, source_id_map.get(tgt, ""), rel))
+        incoming[tgt].append(_query_edge(src, keywords, source_id_map.get(src, ""), rel))
 
     callees = _bfs_collect(resolved, outgoing, depth)
     callers = _bfs_collect(resolved, incoming, depth)
@@ -504,6 +536,16 @@ async def _async_graph_query(
     result: dict[str, Any] = {
         "entity": resolved,
         "source_id": source_id_map.get(resolved, ""),
+        "workspace": ws,
+        # These counts cover all traversable edges in the selected workspace
+        # and relation-type filter, not just edges reached by the BFS. That
+        # scope prevents an empty caller list from being read as exhaustive.
+        "edge_trust": {
+            "scope": {"workspace": ws, "relation_type": relation_type},
+            "include_unresolved": include_unresolved,
+            "omitted_by_qualifier": dict(sorted(omitted_by_qualifier.items())),
+            "returned_by_qualifier": dict(sorted(returned_by_qualifier.items())),
+        },
     }
 
     if direction in ("callers", "both"):
@@ -513,5 +555,7 @@ async def _async_graph_query(
 
     result["callers_count"] = len(callers) if direction in ("callers", "both") else None
     result["callees_count"] = len(callees) if direction in ("callees", "both") else None
+    if resolution := await read_resolution_metadata(store):
+        result["resolution"] = resolution
 
     return result

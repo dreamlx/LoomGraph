@@ -151,9 +151,11 @@ def _phantom_fixture():
         {"src_id": "app.output_error", "tgt_id": "app.real_callee",
          "keywords": "CALLS", "resolution_qualifier": "resolved"},
         {"src_id": "app.output_error", "tgt_id": "click.echo",
-         "keywords": "CALLS", "resolution_qualifier": "unresolved"},
+         "keywords": "CALLS", "resolution_qualifier": "unresolved",
+         "dst_raw": "click.echo"},
         {"src_id": "app.output_error", "tgt_id": "json.dumps",
-         "keywords": "CALLS", "resolution_qualifier": "ambiguous"},
+         "keywords": "CALLS", "resolution_qualifier": "ambiguous",
+         "dst_raw": "json.dumps", "candidates": ["app.json.dumps"]},
     ]
     return entities, relations
 
@@ -174,6 +176,12 @@ async def test_phantom_unresolved_callees_filtered_by_default(monkeypatch):
     assert result["callees_count"] == 1
     # No phantom (source_id="") entries leak through.
     assert all(c["source_id"] for c in result["callees"])
+    assert result["edge_trust"] == {
+        "scope": {"workspace": "ws", "relation_type": "all"},
+        "include_unresolved": False,
+        "omitted_by_qualifier": {"ambiguous": 1, "unresolved": 1},
+        "returned_by_qualifier": {"resolved": 1},
+    }
 
 
 @pytest.mark.asyncio
@@ -195,6 +203,16 @@ async def test_include_unresolved_flag_keeps_phantom_edges(monkeypatch):
     phantom = {c["entity"]: c["source_id"] for c in result["callees"]}
     assert phantom["click.echo"] == ""
     assert phantom["json.dumps"] == ""
+    ambiguous = next(c for c in result["callees"] if c["entity"] == "json.dumps")
+    assert ambiguous["resolution_qualifier"] == "ambiguous"
+    assert ambiguous["dst_raw"] == "json.dumps"
+    assert ambiguous["candidates"] == ["app.json.dumps"]
+    assert result["edge_trust"] == {
+        "scope": {"workspace": "ws", "relation_type": "all"},
+        "include_unresolved": True,
+        "omitted_by_qualifier": {},
+        "returned_by_qualifier": {"ambiguous": 1, "resolved": 1, "unresolved": 1},
+    }
 
 
 @pytest.mark.asyncio

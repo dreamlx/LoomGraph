@@ -99,6 +99,8 @@ dev = [
     "mypy>=1.19",  # CI type gate floor — 与验证过的本地版本一致
     "types-PyYAML>=6.0",
     "pre-commit>=3.6",
+    # #206's TypeScript barrel contract must run in the CI dev environment.
+    "tree-sitter-typescript>=0.23",
 ]
 
 [project.scripts]
