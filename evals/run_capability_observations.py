@@ -85,12 +85,39 @@ def _impact_oracle(data: dict[str, Any]) -> bool:
 
 
 def _deps_oracle(data: dict[str, Any]) -> bool:
-    return isinstance(data.get("modules"), list) and bool(data["modules"])
+    dependencies = data.get("dependencies")
+    if not isinstance(dependencies, list):
+        return False
+    return any(
+        dependency.get("from") == "src/cli"
+        and dependency.get("to") == "src/core"
+        and isinstance(dependency.get("types"), dict)
+        and dependency["types"].get("CALLS", 0) >= 1
+        for dependency in dependencies
+        if isinstance(dependency, dict)
+    )
 
 
 def _branch_diff_oracle(data: dict[str, Any]) -> bool:
     diff = data.get("diff")
-    return isinstance(diff, dict) and isinstance(diff.get("broken_chains"), list)
+    if not isinstance(diff, dict):
+        return False
+    broken_chains = diff.get("broken_chains")
+    content = diff.get("content_comparison")
+    return (
+        isinstance(broken_chains, list)
+        and any(
+            chain.get("src") == "app.handlers.keep_legacy"
+            and chain.get("tgt") == "app.auth.legacy_token"
+            and chain.get("keywords") == "CALLS"
+            for chain in broken_chains
+            if isinstance(chain, dict)
+        )
+        and isinstance(content, dict)
+        and content.get("status") == "available"
+        and content.get("base_backend") == "codeindex"
+        and content.get("head_backend") == "codeindex"
+    )
 
 
 def _codegraph_branch_diff_oracle(data: dict[str, Any]) -> bool:
@@ -137,14 +164,25 @@ def _sparse_factory_impact_oracle(data: dict[str, Any]) -> bool:
 
 
 def _path_alias_oracle(data: dict[str, Any]) -> bool:
-    return any(
-        edge.get("entity") == "src.models.Session"
-        for edge in data.get("callees", [])
-        if isinstance(edge, dict)
-    ) and not any(
-        edge.get("entity") == "src.index.Session"
-        for edge in data.get("callees", [])
-        if isinstance(edge, dict)
+    callees = data.get("callees")
+    edge_trust = data.get("edge_trust")
+    return (
+        isinstance(callees, list)
+        and isinstance(edge_trust, dict)
+        and edge_trust.get("include_unresolved") is True
+        and isinstance(edge_trust.get("returned_by_qualifier"), dict)
+        and edge_trust["returned_by_qualifier"].get("resolved", 0) >= 1
+        and any(
+            edge.get("entity") == "src.models.Session"
+            and edge.get("resolution_qualifier") == "resolved"
+            for edge in callees
+            if isinstance(edge, dict)
+        )
+        and not any(
+            edge.get("entity") == "src.index.Session"
+            for edge in callees
+            if isinstance(edge, dict)
+        )
     )
 
 
@@ -191,7 +229,7 @@ _TASKS = {
         requires_resolution_split=True,
     ),
     "structural-typed-deps": _Task(
-        fixture_id="python-core",
+        fixture_id="python-deps",
         query=("deps", "-d", "2"),
         rg=None,
         oracle=_deps_oracle,
