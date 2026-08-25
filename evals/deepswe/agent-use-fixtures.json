@@ -29,6 +29,35 @@
         "tool_call_count",
         "agent_execution_seconds"
       ]
+    },
+    {
+      "id": "vulture-reachability-condition-impact",
+      "task_class": "trust-adversary-dynamic-receiver",
+      "repository": "jendrikseipp/vulture",
+      "base_commit": "1eb212f0a0707ad6f4c720bb2010c2b7517cf0f9",
+      "instruction_file": "fixtures/vulture-reachability-condition-impact.md",
+      "rg_equivalent_single_query": false,
+      "oracle_existing_paths": [
+        "vulture/utils.py",
+        "vulture/reachability.py",
+        "vulture/core.py"
+      ],
+      "required_trust_fields": [
+        "availability",
+        "edge_trust",
+        "resolution.resolved_ratio",
+        "resolution.internal_unresolved_ratio",
+        "resolution.external_unresolved_ratio"
+      ],
+      "cold_setup_fields": [
+        "index_duration_seconds",
+        "backend",
+        "workspace"
+      ],
+      "warm_run_fields": [
+        "tool_call_count",
+        "agent_execution_seconds"
+      ]
     }
   ]
 }
