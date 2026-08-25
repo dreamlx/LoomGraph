@@ -344,6 +344,57 @@ def normalize_candidate_paths(payload: object, source_dir: Path) -> dict[str, An
     return {**payload, "candidates": normalized_candidates}
 
 
+def score_agent_use_fixture(
+    task_id: str, candidates: object
+) -> dict[str, object] | None:
+    """Record a frozen path-oracle observation without changing packet validity."""
+    manifest_path = Path(__file__).with_name("agent-use-fixtures.json")
+    manifest = json.loads(manifest_path.read_text())
+    fixtures = manifest.get("fixtures") if isinstance(manifest, dict) else None
+    if not isinstance(fixtures, list):
+        raise ValueError("agent-use fixture manifest has no fixtures list")
+    fixture = next(
+        (
+            item
+            for item in fixtures
+            if isinstance(item, dict) and item.get("id") == task_id
+        ),
+        None,
+    )
+    if fixture is None:
+        return None
+
+    expected_paths = fixture.get("oracle_existing_paths")
+    if not isinstance(expected_paths, list) or not all(
+        isinstance(path, str) for path in expected_paths
+    ):
+        raise ValueError(f"agent-use fixture {task_id} has no valid path oracle")
+    candidate_paths = [
+        candidate["path"]
+        for candidate in candidates
+        if isinstance(candidate, dict) and isinstance(candidate.get("path"), str)
+    ] if isinstance(candidates, list) else []
+    expected_set = set(expected_paths)
+    candidate_set = set(candidate_paths)
+    matched_paths = [path for path in expected_paths if path in candidate_set]
+    return {
+        "id": task_id,
+        "task_class": fixture.get("task_class"),
+        "rg_equivalent_single_query": fixture.get("rg_equivalent_single_query"),
+        "path_oracle": {
+            "expected_paths": expected_paths,
+            "candidate_paths": candidate_paths,
+            "matched_paths": matched_paths,
+            "missing_paths": [path for path in expected_paths if path not in candidate_set],
+            "unexpected_paths": [path for path in candidate_paths if path not in expected_set],
+            "path_recall": len(matched_paths) / len(expected_paths),
+            "exact_path_set": (
+                candidate_set == expected_set and len(candidate_paths) == len(candidate_set)
+            ),
+        },
+    }
+
+
 def build_packet(
     *,
     condition: str,
@@ -543,6 +594,9 @@ def run(args: argparse.Namespace) -> int:
         require_trust=args.require_trust,
         agent_execution_seconds=agent_execution_seconds,
     )
+    fixture_observation = score_agent_use_fixture(args.task_id, packet["candidates"])
+    if fixture_observation is not None:
+        packet["fixture_observation"] = fixture_observation
     _write_json(output_dir / "pre-state.json", before)
     _write_json(output_dir / "post-state.json", after)
     _write_json(output_dir / "final-result.json", summary["final_result"])
