@@ -126,6 +126,11 @@ telemetry from being misreported as the reasoning model. It also records
 `tool_call_count`, raw `agent_execution_seconds`, structural retrieval evidence,
 and any unexpected MCP tool. A raw duration is not an efficiency claim: compare
 only predeclared, valid, same-task pairs with separately declared cold setup.
+
+For a trust-required treatment, the adapter accepts resolution ratios only when
+they exactly match a successful native `loomgraph_graph` response retained in
+the stream. A well-formed but unmatched model-reported ratio is marked
+`unverified_treatment_trust_resolution`; it cannot become a valid trust result.
 A five-call budget overrun, unexpected MCP tool, or assisted treatment without
 evidence-bearing retrieval makes the packet invalid. A successful `find` needs
 a non-empty match set and a `graph` needs a resolved entity. These are

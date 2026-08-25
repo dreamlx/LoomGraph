@@ -211,6 +211,46 @@ def test_stream_summary_reads_structured_result_and_observed_mcp_calls() -> None
     ]
 
 
+def test_stream_summary_records_resolution_from_successful_graph_result() -> None:
+    resolution = {
+        "resolved_ratio": 0.2,
+        "internal_unresolved_ratio": 0.3,
+        "external_unresolved_ratio": 0.4,
+    }
+    summary = _MODULE.summarize_stream(
+        [
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [
+                        {
+                            "type": "tool_use",
+                            "id": "graph-1",
+                            "name": "mcp__loomgraph__loomgraph_graph",
+                        }
+                    ]
+                },
+            },
+            {
+                "type": "user",
+                "message": {
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "graph-1",
+                            "content": json.dumps(
+                                {"success": True, "data": {"source_id": "src/x.py:1", "resolution": resolution}}
+                            ),
+                        }
+                    ]
+                },
+            },
+        ]
+    )
+
+    assert summary["graph_resolutions"] == [resolution]
+
+
 def test_stream_summary_separates_assistant_models_from_session_and_usage_telemetry() -> None:
     summary = _MODULE.summarize_stream(
         [
@@ -313,12 +353,49 @@ def test_trust_required_packet_records_a_complete_trust_response() -> None:
                 "candidates": [{"path": "src/x.py", "evidence": "x"}],
                 "trust": trust,
             },
+            "graph_resolutions": [trust["resolution"]],
         },
         require_trust=True,
     )
 
     assert packet["status"] == "complete"
     assert packet["trust"] == trust
+    assert packet["trust_observation"]["treatment_resolution_matches_graph"] is True
+
+
+def test_trust_required_treatment_rejects_resolution_not_returned_by_graph() -> None:
+    packet = _MODULE.build_packet(
+        condition="treatment",
+        use_mode="voluntary",
+        source_clean=True,
+        return_code=0,
+        summary={
+            "final_result_seen": True,
+            "payload": {
+                "candidates": [{"path": "src/x.py", "evidence": "x"}],
+                "trust": {
+                    "availability": "available",
+                    "edge_trust": "graph evidence",
+                    "resolution": {
+                        "resolved_ratio": 0.2,
+                        "internal_unresolved_ratio": 0.3,
+                        "external_unresolved_ratio": 0.4,
+                    },
+                },
+            },
+            "graph_resolutions": [
+                {
+                    "resolved_ratio": 0.1,
+                    "internal_unresolved_ratio": 0.3,
+                    "external_unresolved_ratio": 0.4,
+                }
+            ],
+        },
+        require_trust=True,
+    )
+
+    assert packet["status"] == "unverified_treatment_trust_resolution"
+    assert packet["trust_observation"]["treatment_resolution_matches_graph"] is False
 
 
 def test_trust_required_packet_allows_an_explicit_unavailable_control() -> None:

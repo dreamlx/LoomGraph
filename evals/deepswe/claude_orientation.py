@@ -17,6 +17,11 @@ LOOMGRAPH_TOOLS = [
     "mcp__loomgraph__loomgraph_graph",
 ]
 LOOMGRAPH_SERVER_TOOLS = ["loomgraph_find", "loomgraph_graph"]
+RESOLUTION_KEYS = (
+    "resolved_ratio",
+    "internal_unresolved_ratio",
+    "external_unresolved_ratio",
+)
 ORIENTATION_SCHEMA: dict[str, Any] = {
     "type": "object",
     "additionalProperties": False,
@@ -151,6 +156,7 @@ def summarize_stream(events: list[dict[str, Any]]) -> dict[str, object]:
     """Extract the final schema payload and observed native LoomGraph calls."""
     tool_names: list[str] = []
     tool_call_names: dict[str, str] = {}
+    graph_resolutions: list[dict[str, float]] = []
     assistant_models: list[str] = []
     session_models: list[str] = []
     usage_models: list[str] = []
@@ -217,6 +223,15 @@ def summarize_stream(events: list[dict[str, Any]]) -> dict[str, object]:
                     structural_retrievals.append({"tool": tool_name, "evidence": "find_matches"})
                 elif tool_name.endswith("loomgraph_graph") and data.get("source_id"):
                     structural_retrievals.append({"tool": tool_name, "evidence": "resolved_graph"})
+                    resolution = data.get("resolution")
+                    if (
+                        isinstance(resolution, dict)
+                        and set(resolution) == set(RESOLUTION_KEYS)
+                        and all(isinstance(value, (int, float)) for value in resolution.values())
+                    ):
+                        graph_resolutions.append(
+                            {key: float(resolution[key]) for key in RESOLUTION_KEYS}
+                        )
                 break
 
     payload: dict[str, Any] | None = None
@@ -264,6 +279,7 @@ def summarize_stream(events: list[dict[str, Any]]) -> dict[str, object]:
             if name.startswith("mcp__loomgraph__") and name not in LOOMGRAPH_TOOLS
         ],
         "structural_retrievals": structural_retrievals,
+        "graph_resolutions": graph_resolutions,
         "observed_models": list(
             dict.fromkeys([*session_models, *assistant_models, *usage_models])
         ),
@@ -296,12 +312,7 @@ def _valid_payload(payload: object, *, require_trust: bool) -> bool:
         return False
     resolution = trust.get("resolution")
     availability = trust.get("availability")
-    expected_resolution = {
-        "resolved_ratio",
-        "internal_unresolved_ratio",
-        "external_unresolved_ratio",
-    }
-    valid_resolution = isinstance(resolution, dict) and set(resolution) == expected_resolution
+    valid_resolution = isinstance(resolution, dict) and set(resolution) == set(RESOLUTION_KEYS)
     return (
         availability in {"available", "unavailable"}
         and
@@ -427,6 +438,14 @@ def build_packet(
         isinstance(name, str) for name in unexpected_mcp_tools
     ):
         unexpected_mcp_tools = []
+    graph_resolutions = summary.get("graph_resolutions")
+    if not isinstance(graph_resolutions, list) or not all(
+        isinstance(resolution, dict)
+        and set(resolution) == set(RESOLUTION_KEYS)
+        and all(isinstance(value, (int, float)) for value in resolution.values())
+        for resolution in graph_resolutions
+    ):
+        graph_resolutions = []
     def model_list(name: str) -> list[str]:
         models = summary.get(name)
         return (
@@ -439,6 +458,13 @@ def build_packet(
     assistant_models = model_list("assistant_models")
     session_models = model_list("session_models")
     usage_models = model_list("usage_models")
+    trust = payload.get("trust") if isinstance(payload, dict) else None
+    trust_resolution = trust.get("resolution") if isinstance(trust, dict) else None
+    treatment_resolution_matches_graph = (
+        any(trust_resolution == resolution for resolution in graph_resolutions)
+        if require_trust and condition == "treatment"
+        else None
+    )
     tool_call_budget_overrun = len(tool_names) > TOOL_CALL_BUDGET
     if not source_clean:
         status = "invalid_source_mutation"
@@ -452,10 +478,12 @@ def build_packet(
         require_trust
         and condition == "treatment"
         and isinstance(payload, dict)
-        and isinstance(payload.get("trust"), dict)
-        and payload["trust"].get("availability") != "available"
+        and isinstance(trust, dict)
+        and trust.get("availability") != "available"
     ):
         status = "missing_treatment_trust_evidence"
+    elif require_trust and condition == "treatment" and not treatment_resolution_matches_graph:
+        status = "unverified_treatment_trust_resolution"
     elif tool_call_budget_overrun:
         status = "tool_call_budget_exceeded"
     elif unexpected_mcp_tools:
@@ -476,7 +504,11 @@ def build_packet(
         "response_format": "json_schema",
         "semantic_packet": status == "complete",
         "candidates": payload.get("candidates", []) if isinstance(payload, dict) else [],
-        "trust": payload.get("trust") if require_trust and isinstance(payload, dict) else None,
+        "trust": trust if require_trust else None,
+        "trust_observation": {
+            "graph_resolutions": graph_resolutions,
+            "treatment_resolution_matches_graph": treatment_resolution_matches_graph,
+        },
         "tool_call_count": len(tool_names),
         "tool_call_budget": TOOL_CALL_BUDGET,
         "tool_call_budget_overrun": tool_call_budget_overrun,
