@@ -566,7 +566,7 @@ def _comparison_from_raw(
         "head_provisioned": snapshots["head"]["provisioned"],
         "content_comparison": {
             "status": content["status"],
-            "reason": content["reason"],
+            "reason": content.get("reason"),
         },
     }
 
