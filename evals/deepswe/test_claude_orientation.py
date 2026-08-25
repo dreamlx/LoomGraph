@@ -73,6 +73,21 @@ def test_additive_treatment_keeps_text_navigation_and_mcp_allowlist() -> None:
     }
 
 
+def test_additive_treatment_storage_is_adapter_owned() -> None:
+    command = _MODULE.build_command(
+        condition="treatment",
+        instruction="orient",
+        model="sonnet",
+        budget_usd="0.50",
+        loomgraph_binary="/tmp/loomgraph",
+        treatment_surface="additive",
+        storage_root=Path("/tmp/run/loomgraph-storage"),
+    )
+
+    env = json.loads(_argument(command, "--mcp-config"))["mcpServers"]["loomgraph"]["env"]
+    assert env["LOOMGRAPH_STORAGE__DB_PATH"] == "/tmp/run/loomgraph-storage/{workspace}.db"
+
+
 def test_trust_required_command_exposes_the_trust_output_contract() -> None:
     command = _MODULE.build_command(
         condition="treatment",

@@ -80,6 +80,7 @@ def test_plan_pairs_matching_replicates_and_separates_surfaces(tmp_path: Path) -
         use_mode="voluntary",
         model="sonnet",
         max_budget_usd="0.50",
+        tool_call_budget=7,
         loomgraph_binary="loomgraph",
         orientation_runner=tmp_path / "claude_orientation.py",
     )
@@ -110,6 +111,16 @@ def test_docker_pull_command_is_explicit_for_auditable_source_preparation() -> N
         "pull",
         "example/image:1",
     ]
+
+
+def test_treatment_index_uses_adapter_owned_storage_without_host_oracles() -> None:
+    command = _MODULE.loomgraph_index_command("/tmp/loomgraph", Path("/tmp/source"))
+
+    assert command == ["/tmp/loomgraph", "index", "--clear", "/tmp/source"]
+    assert all("solution" not in part and "target-manifest" not in part for part in command)
+    assert _MODULE.loomgraph_storage_env(Path("/tmp/run/storage")) == {
+        "LOOMGRAPH_STORAGE__DB_PATH": "/tmp/run/storage/{workspace}.db"
+    }
 
 
 def test_docker_provenance_commands_are_metadata_only() -> None:
@@ -148,6 +159,7 @@ def test_orientation_command_calls_existing_runner_and_adds_only_additive_surfac
         use_mode="voluntary",
         model="sonnet",
         max_budget_usd="0.50",
+        tool_call_budget=7,
         loomgraph_binary="loomgraph",
         source_dir=tmp_path / "source",
         output_dir=tmp_path / "run",
@@ -175,11 +187,11 @@ def test_orientation_instruction_is_pre_edit_only_and_has_no_host_oracle_leakage
     )
     task.instruction_file.write_text("Implement a cache.\n")
 
-    instruction = _MODULE.orientation_instruction(task)
+    instruction = _MODULE.orientation_instruction(task, tool_call_budget=7)
 
     assert "Pre-edit navigation only" in instruction
     assert "do not solve this task" in instruction
-    assert "at most four navigation tool calls" in instruction
+    assert "at most 6 navigation tool calls" in instruction
     assert "at most five existing production-code paths" in instruction
     assert "target-manifest" not in instruction
     assert "solution" not in instruction

@@ -242,6 +242,13 @@ def build_command(
             )
             command.extend(["--", instruction])
             return command
+        mcp_env = {
+            "LOOMGRAPH_MCP_ALLOWED_TOOLS": ",".join(LOOMGRAPH_SERVER_TOOLS)
+        }
+        if storage_root is not None:
+            mcp_env["LOOMGRAPH_STORAGE__DB_PATH"] = str(
+                storage_root / "{workspace}.db"
+            )
         command.extend(
             [
                 "--tools",
@@ -253,11 +260,7 @@ def build_command(
                             "loomgraph": {
                                 "command": loomgraph_binary,
                                 "args": ["mcp", "serve"],
-                                "env": {
-                                    "LOOMGRAPH_MCP_ALLOWED_TOOLS": ",".join(
-                                        LOOMGRAPH_SERVER_TOOLS
-                                    )
-                                },
+                                "env": mcp_env,
                             }
                         }
                     }
@@ -832,6 +835,7 @@ def build_packet(
     navigation_surface: str = "mcp-only",
     require_trust: bool = False,
     agent_execution_seconds: float | None = None,
+    tool_call_budget: int = TOOL_CALL_BUDGET,
 ) -> dict[str, Any]:
     """Make source cleanliness dominate a syntactically valid agent response."""
     payload = summary.get("payload")
@@ -880,7 +884,9 @@ def build_packet(
         if require_trust and condition == "treatment"
         else None
     )
-    tool_call_budget_overrun = len(tool_names) > TOOL_CALL_BUDGET
+    if tool_call_budget < 1:
+        raise ValueError("tool_call_budget must be positive")
+    tool_call_budget_overrun = len(tool_names) > tool_call_budget
     if not source_clean:
         status = "invalid_source_mutation"
     elif return_code != 0:
@@ -925,7 +931,7 @@ def build_packet(
             "treatment_resolution_matches_graph": treatment_resolution_matches_graph,
         },
         "tool_call_count": len(tool_names),
-        "tool_call_budget": TOOL_CALL_BUDGET,
+        "tool_call_budget": tool_call_budget,
         "tool_call_budget_overrun": tool_call_budget_overrun,
         "agent_execution_seconds": agent_execution_seconds,
         "model": {
@@ -1043,9 +1049,7 @@ def run(args: argparse.Namespace) -> int:
         loomgraph_binary=args.loomgraph_binary,
         treatment_surface=args.treatment_surface,
         require_trust=args.require_trust,
-        storage_root=storage_root
-        if args.treatment_surface == TEMPORAL_ADDITIVE_SURFACE
-        else None,
+        storage_root=storage_root if args.condition == "treatment" else None,
     )
     _write_json(output_dir / "command.json", command)
 
@@ -1097,6 +1101,7 @@ def run(args: argparse.Namespace) -> int:
             navigation_surface=(args.treatment_surface if args.condition == "treatment" else "text-only"),
             require_trust=args.require_trust,
             agent_execution_seconds=agent_execution_seconds,
+            tool_call_budget=args.tool_call_budget,
         )
         fixture_observation = score_agent_use_fixture(args.task_id, packet["candidates"])
         if fixture_observation is not None:
@@ -1128,7 +1133,7 @@ def main() -> int:
     parser.add_argument(
         "--storage-root",
         type=Path,
-        help="Adapter-owned snapshot storage; reuse only for an explicit warm repeat.",
+        help="Adapter-owned LoomGraph storage; reuse only for an explicit warm repeat.",
     )
     parser.add_argument("--use-mode", choices=("voluntary", "assisted"), default="voluntary")
     parser.add_argument(
@@ -1139,6 +1144,7 @@ def main() -> int:
     )
     parser.add_argument("--model", default="sonnet")
     parser.add_argument("--max-budget-usd", default="0.50")
+    parser.add_argument("--tool-call-budget", type=int, default=TOOL_CALL_BUDGET)
     parser.add_argument(
         "--require-trust",
         action="store_true",

@@ -25,6 +25,7 @@ FROZEN_TASK_COUNT = 12
 TASKS_PER_STRATUM = 4
 DEFAULT_MODEL = "sonnet"
 DEFAULT_BUDGET_USD = "0.50"
+DEFAULT_TOOL_CALL_BUDGET = 7
 DEFAULT_USE_MODE = "voluntary"
 BASELINE_SURFACE = "text-only"
 TREATMENT_SURFACE = "additive"
@@ -199,6 +200,16 @@ def docker_pull_command(image: str) -> list[str]:
     return ["docker", "pull", image]
 
 
+def loomgraph_index_command(loomgraph_binary: str, source_dir: Path) -> list[str]:
+    """Prepare a treatment source for native MCP retrieval without agent input."""
+    return [loomgraph_binary, "index", "--clear", str(source_dir)]
+
+
+def loomgraph_storage_env(storage_root: Path) -> dict[str, str]:
+    """Keep the treatment index and its MCP server on the same external DB path."""
+    return {"LOOMGRAPH_STORAGE__DB_PATH": str(storage_root / "{workspace}.db")}
+
+
 def docker_copy_command(container_id: str, source_dir: Path) -> list[str]:
     """Copy only the task image's ``/app`` tree into the adapter source dir."""
     return ["docker", "cp", f"{container_id}:/app", str(source_dir)]
@@ -221,6 +232,7 @@ def orientation_command(
     use_mode: str,
     model: str,
     max_budget_usd: str,
+    tool_call_budget: int,
     loomgraph_binary: str,
     source_dir: Path,
     output_dir: Path,
@@ -230,6 +242,8 @@ def orientation_command(
     if condition not in CONDITIONS:
         raise ValueError(f"unknown condition: {condition}")
     validate_use_mode(use_mode)
+    if tool_call_budget < 2:
+        raise ValueError("tool_call_budget must reserve one structured-output call")
     command = [
         sys.executable,
         str(orientation_runner),
@@ -249,6 +263,8 @@ def orientation_command(
         model,
         "--max-budget-usd",
         max_budget_usd,
+        "--tool-call-budget",
+        str(tool_call_budget),
         "--loomgraph-binary",
         loomgraph_binary,
     ]
@@ -257,12 +273,15 @@ def orientation_command(
     return command
 
 
-def orientation_instruction(task: TaskSpec) -> str:
+def orientation_instruction(task: TaskSpec, *, tool_call_budget: int) -> str:
     """Render a read-only navigation prompt without exposing host-only targets."""
+    if tool_call_budget < 2:
+        raise ValueError("tool_call_budget must reserve one structured-output call")
     task_text = task.instruction_file.read_text(encoding="utf-8").strip()
+    navigation_limit = tool_call_budget - 1
     return (
         "Pre-edit navigation only: do not solve this task, edit source, propose a patch, "
-        "or run tests. Use at most four navigation tool calls and reserve one call for "
+        f"or run tests. Use at most {navigation_limit} navigation tool calls and reserve one call for "
         "structured output. Use the available navigation tools to identify at most five existing "
         "production-code paths that should be inspected before implementation. Explain each "
         "candidate briefly.\n\nTask context:\n"
@@ -286,6 +305,7 @@ def build_plan(
     use_mode: str = DEFAULT_USE_MODE,
     model: str = DEFAULT_MODEL,
     max_budget_usd: str = DEFAULT_BUDGET_USD,
+    tool_call_budget: int = DEFAULT_TOOL_CALL_BUDGET,
     loomgraph_binary: str = "loomgraph",
     orientation_runner: Path | None = None,
 ) -> dict[str, object]:
@@ -293,6 +313,8 @@ def build_plan(
     validate_use_mode(use_mode)
     if replicates < 1:
         raise ValueError("replicates must be positive")
+    if tool_call_budget < 2:
+        raise ValueError("tool_call_budget must reserve one structured-output call")
     runner = (orientation_runner or Path(__file__).with_name("claude_orientation.py")).resolve()
     root = output_root.resolve()
     task_plans: list[dict[str, object]] = []
@@ -313,6 +335,7 @@ def build_plan(
                         "condition": condition,
                         "use_mode": use_mode,
                         "tool_surface": surface,
+                        "tool_call_budget": tool_call_budget,
                         "task_id": task.task_id,
                         "stratum": task.stratum,
                         "replicate": replicate_label,
@@ -331,6 +354,7 @@ def build_plan(
                             use_mode=use_mode,
                             model=model,
                             max_budget_usd=max_budget_usd,
+                            tool_call_budget=tool_call_budget,
                             loomgraph_binary=loomgraph_binary,
                             source_dir=source_dir,
                             output_dir=output_dir,
@@ -361,6 +385,7 @@ def build_plan(
         "use_mode": use_mode,
         "model": model,
         "replicates": replicates,
+        "tool_call_budget": tool_call_budget,
         "conditions": list(CONDITIONS),
         "baseline_tool_surface": BASELINE_SURFACE,
         "treatment_tool_surface": TREATMENT_SURFACE,
@@ -456,6 +481,11 @@ def _run_one(run: dict[str, object]) -> dict[str, object]:
         "tool_surface": run.get("tool_surface"),
         "model": command_value(orientation_items, "--model") if orientation_items else None,
         "orientation_runner": orientation_items[1] if len(orientation_items) > 1 else None,
+        "tool_call_budget": (
+            command_value(orientation_items, "--tool-call-budget")
+            if orientation_items
+            else None
+        ),
         "instruction": None,
         "image": image,
         "source_dir": str(source_dir),
@@ -485,6 +515,7 @@ def _run_one(run: dict[str, object]) -> dict[str, object]:
         ):
             raise ValueError("invalid orientation command in run plan")
         instruction_path = run_dir / "orientation-instruction.md"
+        tool_call_budget = int(command_value(orientation, "--tool-call-budget"))
         instruction = orientation_instruction(
             TaskSpec(
                 task_id=_string_field(run.get("task_id"), "task_id"),
@@ -494,7 +525,8 @@ def _run_one(run: dict[str, object]) -> dict[str, object]:
                 image=image,
                 task_dir=Path(),
                 instruction_file=Path(command_value(orientation, "--instruction-file")),
-            )
+            ),
+            tool_call_budget=tool_call_budget,
         )
         instruction_path.write_text(instruction, encoding="utf-8")
         metadata["instruction"] = {
@@ -505,6 +537,25 @@ def _run_one(run: dict[str, object]) -> dict[str, object]:
         orientation = _replace_command_value(
             orientation, "--instruction-file", str(instruction_path)
         )
+        if run.get("condition") == "treatment":
+            storage_root = output_dir / "loomgraph-storage"
+            index_command = loomgraph_index_command(
+                command_value(orientation, "--loomgraph-binary"), source_dir
+            )
+            metadata["index_command"] = index_command
+            metadata["index_storage_env"] = loomgraph_storage_env(storage_root)
+            with (run_dir / "loomgraph-index.log").open("w") as index_log:
+                subprocess.run(
+                    index_command,
+                    cwd=source_dir,
+                    env={**os.environ, **loomgraph_storage_env(storage_root)},
+                    check=True,
+                    stdout=index_log,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                )
+            metadata["index_status"] = "complete"
+            orientation.extend(["--storage-root", str(storage_root)])
         stdout_path = run_dir / "runner.stdout.log"
         with stdout_path.open("w") as stdout:
             result = subprocess.run(
@@ -549,6 +600,7 @@ def run_cohort(
     use_mode: str = DEFAULT_USE_MODE,
     model: str = DEFAULT_MODEL,
     max_budget_usd: str = DEFAULT_BUDGET_USD,
+    tool_call_budget: int = DEFAULT_TOOL_CALL_BUDGET,
     loomgraph_binary: str = "loomgraph",
     orientation_runner: Path | None = None,
     dry_run: bool = False,
@@ -561,6 +613,7 @@ def run_cohort(
         use_mode=use_mode,
         model=model,
         max_budget_usd=max_budget_usd,
+        tool_call_budget=tool_call_budget,
         loomgraph_binary=loomgraph_binary,
         orientation_runner=orientation_runner,
     )
@@ -612,6 +665,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--use-mode", choices=USE_MODES, default=DEFAULT_USE_MODE)
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--max-budget-usd", default=DEFAULT_BUDGET_USD)
+    parser.add_argument("--tool-call-budget", type=int, default=DEFAULT_TOOL_CALL_BUDGET)
     parser.add_argument("--loomgraph-binary", default="loomgraph")
     parser.add_argument(
         "--orientation-runner",
@@ -630,6 +684,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         use_mode=args.use_mode,
         model=args.model,
         max_budget_usd=args.max_budget_usd,
+        tool_call_budget=args.tool_call_budget,
         loomgraph_binary=args.loomgraph_binary,
         orientation_runner=args.orientation_runner,
         dry_run=args.dry_run,
