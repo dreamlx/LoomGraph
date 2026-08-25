@@ -121,6 +121,9 @@ def test_treatment_index_uses_adapter_owned_storage_without_host_oracles() -> No
     assert _MODULE.loomgraph_storage_env(Path("/tmp/run/storage")) == {
         "LOOMGRAPH_STORAGE__DB_PATH": "/tmp/run/storage/{workspace}.db"
     }
+    assert _MODULE.adapter_storage_root(Path("/tmp/run")) == Path(
+        "/tmp/run/loomgraph-storage"
+    )
 
 
 def test_docker_provenance_commands_are_metadata_only() -> None:

@@ -210,6 +210,11 @@ def loomgraph_storage_env(storage_root: Path) -> dict[str, str]:
     return {"LOOMGRAPH_STORAGE__DB_PATH": str(storage_root / "{workspace}.db")}
 
 
+def adapter_storage_root(run_dir: Path) -> Path:
+    """Keep adapter state outside the orientation runner's output directory."""
+    return run_dir / "loomgraph-storage"
+
+
 def docker_copy_command(container_id: str, source_dir: Path) -> list[str]:
     """Copy only the task image's ``/app`` tree into the adapter source dir."""
     return ["docker", "cp", f"{container_id}:/app", str(source_dir)]
@@ -538,7 +543,7 @@ def _run_one(run: dict[str, object]) -> dict[str, object]:
             orientation, "--instruction-file", str(instruction_path)
         )
         if run.get("condition") == "treatment":
-            storage_root = output_dir / "loomgraph-storage"
+            storage_root = adapter_storage_root(run_dir)
             index_command = loomgraph_index_command(
                 command_value(orientation, "--loomgraph-binary"), source_dir
             )
