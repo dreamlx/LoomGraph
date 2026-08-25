@@ -113,10 +113,19 @@ def test_docker_pull_command_is_explicit_for_auditable_source_preparation() -> N
     ]
 
 
-def test_treatment_index_uses_adapter_owned_storage_without_host_oracles() -> None:
-    command = _MODULE.loomgraph_index_command("/tmp/loomgraph", Path("/tmp/source"))
+def test_treatment_index_uses_manifest_backend_and_adapter_owned_storage() -> None:
+    command = _MODULE.loomgraph_index_command(
+        "/tmp/loomgraph", Path("/tmp/source"), "codegraph"
+    )
 
-    assert command == ["/tmp/loomgraph", "index", "--clear", "/tmp/source"]
+    assert command == [
+        "/tmp/loomgraph",
+        "index",
+        "--clear",
+        "--backend",
+        "codegraph",
+        "/tmp/source",
+    ]
     assert all("solution" not in part and "target-manifest" not in part for part in command)
     assert _MODULE.loomgraph_storage_env(Path("/tmp/run/storage")) == {
         "LOOMGRAPH_STORAGE__DB_PATH": "/tmp/run/storage/{workspace}.db"
@@ -124,6 +133,27 @@ def test_treatment_index_uses_adapter_owned_storage_without_host_oracles() -> No
     assert _MODULE.adapter_storage_root(Path("/tmp/run")) == Path(
         "/tmp/run/loomgraph-storage"
     )
+
+
+def test_codegraph_setup_command_keeps_the_source_path_explicit() -> None:
+    assert _MODULE.codegraph_init_command(Path("/tmp/source")) == [
+        "codegraph",
+        "init",
+        "/tmp/source",
+    ]
+
+
+def test_codegraph_setup_artifact_is_excluded_from_model_phase_status(tmp_path: Path) -> None:
+    source_dir = tmp_path / "source"
+    exclude_path = source_dir / ".git" / "info" / "exclude"
+    exclude_path.parent.mkdir(parents=True)
+    exclude_path.write_text("# local setup\n")
+
+    result = _MODULE._exclude_setup_artifact(source_dir, ".codegraph/")
+    _MODULE._exclude_setup_artifact(source_dir, ".codegraph/")
+
+    assert result == exclude_path
+    assert exclude_path.read_text().splitlines().count(".codegraph/") == 1
 
 
 def test_docker_provenance_commands_are_metadata_only() -> None:

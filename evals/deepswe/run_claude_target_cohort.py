@@ -200,9 +200,30 @@ def docker_pull_command(image: str) -> list[str]:
     return ["docker", "pull", image]
 
 
-def loomgraph_index_command(loomgraph_binary: str, source_dir: Path) -> list[str]:
+def loomgraph_index_command(
+    loomgraph_binary: str, source_dir: Path, backend: str
+) -> list[str]:
     """Prepare a treatment source for native MCP retrieval without agent input."""
-    return [loomgraph_binary, "index", "--clear", str(source_dir)]
+    if backend not in {"codeindex", "codegraph"}:
+        raise ValueError(f"unsupported LoomGraph backend: {backend!r}")
+    return [loomgraph_binary, "index", "--clear", "--backend", backend, str(source_dir)]
+
+
+def codegraph_init_command(source_dir: Path) -> list[str]:
+    """Build the codegraph database before the adapter snapshots it."""
+    return ["codegraph", "init", str(source_dir)]
+
+
+def _exclude_setup_artifact(source_dir: Path, artifact: str) -> Path:
+    """Keep declared setup state out of the model-phase source-clean check."""
+    exclude_path = source_dir / ".git" / "info" / "exclude"
+    existing = exclude_path.read_text(encoding="utf-8") if exclude_path.exists() else ""
+    if artifact not in existing.splitlines():
+        with exclude_path.open("a", encoding="utf-8") as exclude_file:
+            if existing and not existing.endswith("\n"):
+                exclude_file.write("\n")
+            exclude_file.write(f"{artifact}\n")
+    return exclude_path
 
 
 def loomgraph_storage_env(storage_root: Path) -> dict[str, str]:
@@ -343,6 +364,7 @@ def build_plan(
                         "tool_call_budget": tool_call_budget,
                         "task_id": task.task_id,
                         "stratum": task.stratum,
+                        "backend": task.backend,
                         "replicate": replicate_label,
                         "pair_key": pair_key,
                         "image": task.image,
@@ -479,6 +501,7 @@ def _run_one(run: dict[str, object]) -> dict[str, object]:
         "schema_version": 1,
         "task_id": run.get("task_id"),
         "stratum": run.get("stratum"),
+        "backend": run.get("backend"),
         "replicate": run.get("replicate"),
         "pair_key": run.get("pair_key"),
         "condition": run.get("condition"),
@@ -544,8 +567,30 @@ def _run_one(run: dict[str, object]) -> dict[str, object]:
         )
         if run.get("condition") == "treatment":
             storage_root = adapter_storage_root(run_dir)
+            backend = _string_field(run.get("backend"), "backend")
+            if backend == "codegraph":
+                exclude_path = _exclude_setup_artifact(source_dir, ".codegraph/")
+                codegraph_command = codegraph_init_command(source_dir)
+                codegraph_setup: dict[str, object] = {
+                    "command": codegraph_command,
+                    "git_exclude_path": str(exclude_path),
+                    "ignored_artifact": ".codegraph/",
+                }
+                metadata["codegraph_setup"] = codegraph_setup
+                with (run_dir / "codegraph-init.log").open("w") as codegraph_log:
+                    subprocess.run(
+                        codegraph_command,
+                        cwd=source_dir,
+                        check=True,
+                        stdout=codegraph_log,
+                        stderr=subprocess.STDOUT,
+                        text=True,
+                    )
+                codegraph_setup["status"] = "complete"
             index_command = loomgraph_index_command(
-                command_value(orientation, "--loomgraph-binary"), source_dir
+                command_value(orientation, "--loomgraph-binary"),
+                source_dir,
+                backend,
             )
             metadata["index_command"] = index_command
             metadata["index_storage_env"] = loomgraph_storage_env(storage_root)
