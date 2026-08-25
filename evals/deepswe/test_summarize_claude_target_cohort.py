@@ -140,7 +140,8 @@ def test_invalid_rows_and_exclusion_reasons_are_retained(tmp_path: Path) -> None
     _write_run(
         cohort / "treatment-voluntary-1",
         condition="treatment",
-        packet=_packet(condition="treatment", structural=False),
+        mode="assisted",
+        packet=_packet(condition="treatment", mode="assisted", structural=False),
     )
     _write_run(
         cohort / "baseline-voluntary-2",
@@ -162,6 +163,23 @@ def test_invalid_rows_and_exclusion_reasons_are_retained(tmp_path: Path) -> None
     assert any("source_not_clean" in row["exclusion_reasons"] for row in rows)
     assert any("tool_call_budget_exceeded" in row["exclusion_reasons"] for row in rows)
     assert all(row["target_hit_at_5"] is None for row in rows)
+
+
+def test_voluntary_additive_nonuse_is_retained_as_valid_observed_nonuse(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "target-manifest.json"
+    manifest_path.write_text(json.dumps(_manifest()))
+    cohort = tmp_path / "cohort"
+    _write_run(
+        cohort / "treatment-voluntary-1",
+        condition="treatment",
+        packet=_packet(condition="treatment", structural=False),
+    )
+
+    targets, _ = _MODULE.load_target_manifest(manifest_path)
+    rows = _MODULE.summarize(cohort, targets)
+
+    assert rows[0]["valid"] is True
+    assert rows[0]["structural_retrieval_observed"] is False
 
 
 def test_driver_runner_failure_is_excluded_even_when_packet_looks_complete(tmp_path: Path) -> None:

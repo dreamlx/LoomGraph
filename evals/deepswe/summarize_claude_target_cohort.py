@@ -267,7 +267,7 @@ def _retrieval_observed(packet: dict[str, Any]) -> bool:
 
 
 def _packet_reasons(
-    packet: dict[str, Any], *, condition: str | None, navigation_surface: object
+    packet: dict[str, Any], *, condition: str | None, use_mode: str | None, navigation_surface: object
 ) -> list[str]:
     reasons: list[str] = []
     if packet.get("status") != "complete":
@@ -293,7 +293,12 @@ def _packet_reasons(
         reasons.append("baseline_surface_not_text_only")
     if condition == "treatment" and navigation_surface != "additive":
         reasons.append("treatment_surface_not_additive")
-    if condition == "treatment" and navigation_surface == "additive" and not _retrieval_observed(packet):
+    if (
+        condition == "treatment"
+        and use_mode == "assisted"
+        and navigation_surface == "additive"
+        and not _retrieval_observed(packet)
+    ):
         reasons.append("additive_treatment_retrieval_missing")
     _, candidate_reasons = _candidate_paths(packet)
     reasons.extend(candidate_reasons)
@@ -343,6 +348,7 @@ def _row(
             _packet_reasons(
                 packet,
                 condition=condition,
+                use_mode=use_mode,
                 navigation_surface=packet.get("navigation_surface"),
             )
         )
