@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Close the v1 structural capability benchmark protocol and define the separate
+  branch-diff agent-use entry boundary in ADR-016.
+
 ## [0.22.0] - 2026-08-23
 
 ### Added — resolved_ratio split into internal/external unresolved (#208)
