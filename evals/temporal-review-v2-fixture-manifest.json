@@ -1,0 +1,174 @@
+{
+  "schema_version": 2,
+  "manifest_id": "loomgraph-temporal-review-v2-reregistration",
+  "repository": "loomgraph",
+  "task_class": "temporal-review-v2",
+  "answer_schema": {
+    "top_level_fields": [
+      "decision",
+      "review_loci",
+      "trust"
+    ],
+    "decision_fields": [
+      "outcome",
+      "boundary",
+      "rationale"
+    ],
+    "decision_outcomes": [
+      "review_required",
+      "review_required_with_uncertainty"
+    ],
+    "decision_boundaries": [
+      "content_comparison_is_available",
+      "edge_delta_does_not_prove_behavior",
+      "content_comparison_is_unavailable"
+    ],
+    "review_locus_fields": [
+      "path",
+      "qualname",
+      "evidence_kind",
+      "rationale"
+    ],
+    "evidence_kinds": [
+      "source_text",
+      "content_delta",
+      "graph_delta",
+      "graph_boundary"
+    ],
+    "trust_fields": [
+      "availability",
+      "comparison"
+    ]
+  },
+  "fixture_exclusion_globs": [
+    "CHANGELOG.md",
+    "customers/CHANGELOG.md",
+    "docs/evals/**",
+    "tests/**",
+    "evals/**"
+  ],
+  "tasks": [
+    {
+      "id": "impact-low-resolution-review",
+      "task_class": "temporal-review-v2",
+      "instruction_file": "temporal-review-v2-instructions/impact-low-resolution-review.txt",
+      "refs": {
+        "base": {
+          "alias": "review-base",
+          "commit_sha": "a9443ea41b4eab21e21bd3bd499a0048a9d3d756"
+        },
+        "head": {
+          "alias": "review-head",
+          "commit_sha": "a961ab5449ba7f4d7fc7275737f091fe57ac21af"
+        }
+      },
+      "backend": "codeindex",
+      "expected_comparison": {
+        "status": "available",
+        "reason": null,
+        "base_backend": "codeindex",
+        "head_backend": "codeindex"
+      },
+      "oracle": {
+        "required_review_loci": [
+          {
+            "path": "src/loomgraph/core/impact/risk.py",
+            "qualname": "RiskAssessor.assess",
+            "evidence_kind": {
+              "baseline": "source_text",
+              "treatment": "content_delta"
+            }
+          },
+          {
+            "path": "src/loomgraph/cli/_analysis.py",
+            "qualname": "_async_impact",
+            "evidence_kind": {
+              "baseline": "source_text",
+              "treatment": "graph_delta"
+            }
+          }
+        ],
+        "decision": {
+          "outcome": "review_required",
+          "boundary": "content_comparison_is_available"
+        }
+      }
+    },
+    {
+      "id": "sparse-risk-review",
+      "task_class": "temporal-review-v2",
+      "instruction_file": "temporal-review-v2-instructions/sparse-risk-review.txt",
+      "refs": {
+        "base": {
+          "alias": "review-base",
+          "commit_sha": "091e10124e9f9b05d86c6ef4133a6c43424f9fc8"
+        },
+        "head": {
+          "alias": "review-head",
+          "commit_sha": "26cd69f78a6c21ef6d6da5b8bb2ab5cb402d1c3b"
+        }
+      },
+      "backend": "codeindex",
+      "expected_comparison": {
+        "status": "available",
+        "reason": null,
+        "base_backend": "codeindex",
+        "head_backend": "codeindex"
+      },
+      "oracle": {
+        "required_review_loci": [
+          {
+            "path": "src/loomgraph/core/impact/risk.py",
+            "qualname": "RiskAssessor.assess",
+            "evidence_kind": {
+              "baseline": "source_text",
+              "treatment": "content_delta"
+            }
+          }
+        ],
+        "decision": {
+          "outcome": "review_required_with_uncertainty",
+          "boundary": "edge_delta_does_not_prove_behavior"
+        }
+      }
+    },
+    {
+      "id": "sparse-risk-codegraph-uncertainty",
+      "task_class": "temporal-review-v2",
+      "instruction_file": "temporal-review-v2-instructions/sparse-risk-codegraph-uncertainty.txt",
+      "refs": {
+        "base": {
+          "alias": "review-base",
+          "commit_sha": "091e10124e9f9b05d86c6ef4133a6c43424f9fc8"
+        },
+        "head": {
+          "alias": "review-head",
+          "commit_sha": "26cd69f78a6c21ef6d6da5b8bb2ab5cb402d1c3b"
+        }
+      },
+      "backend": "codegraph",
+      "expected_comparison": {
+        "status": "unavailable",
+        "reason": "backend_has_no_per_entity_content_hash",
+        "base_backend": "codegraph",
+        "head_backend": "codegraph"
+      },
+      "oracle": {
+        "required_review_loci": [
+          {
+            "path": "src/loomgraph/core/impact/risk.py",
+            "qualname": "RiskAssessor.assess",
+            "evidence_kind": {
+              "baseline": "source_text",
+              "treatment": "graph_boundary"
+            }
+          }
+        ],
+        "decision": {
+          "outcome": "review_required_with_uncertainty",
+          "boundary": "content_comparison_is_unavailable"
+        }
+      }
+    }
+  ]
+}
