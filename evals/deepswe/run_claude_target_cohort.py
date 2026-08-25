@@ -200,6 +200,11 @@ def docker_pull_command(image: str) -> list[str]:
     return ["docker", "pull", image]
 
 
+def docker_image_presence_command(image: str) -> list[str]:
+    """Check whether an immutable image can be reused without network access."""
+    return ["docker", "image", "inspect", image]
+
+
 def loomgraph_index_command(
     loomgraph_binary: str, source_dir: Path, backend: str
 ) -> list[str]:
@@ -434,9 +439,15 @@ def _create_container(image: str) -> str:
     return container_id
 
 
-def _pull_image(image: str) -> None:
-    """Ensure the declared task image is present before reading only ``/app``."""
+def _pull_image(image: str) -> str:
+    """Ensure the declared task image is present, reusing an auditable local copy."""
+    local_image = subprocess.run(
+        docker_image_presence_command(image), check=False, capture_output=True, text=True
+    )
+    if local_image.returncode == 0:
+        return "reused_local"
     subprocess.run(docker_pull_command(image), check=True, capture_output=True, text=True)
+    return "pulled"
 
 
 def _image_provenance(container_id: str, image: str) -> dict[str, object]:
@@ -530,8 +541,8 @@ def _run_one(run: dict[str, object]) -> dict[str, object]:
     container_id = ""
     try:
         metadata["image_pull_command"] = docker_pull_command(image)
-        _pull_image(image)
-        metadata["image_pull_status"] = "complete"
+        metadata["image_presence_command"] = docker_image_presence_command(image)
+        metadata["image_pull_status"] = _pull_image(image)
         container_id = _create_container(image)
         metadata["container_id"] = container_id
         metadata.update(_image_provenance(container_id, image))
