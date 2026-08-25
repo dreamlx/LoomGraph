@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Close the v1 structural capability benchmark protocol and define the separate
   branch-diff agent-use entry boundary in ADR-016.
+- Add the proposed, independently scoped branch-diff agent-use v2 task design.
 
 ## [0.22.0] - 2026-08-23
 
