@@ -558,3 +558,379 @@ def test_packet_labels_additive_navigation_surface() -> None:
     )
 
     assert packet["navigation_surface"] == "additive"
+
+
+def _temporal_raw_response(
+    *,
+    success: bool = True,
+    base_ref: str = "base",
+    head_ref: str = "head",
+    base_backend: str = "codeindex",
+    head_backend: str = "codeindex",
+    base_provisioned: str = "created",
+    head_provisioned: str = "reused",
+    content_status: str = "available",
+) -> dict[str, object]:
+    return {
+        "success": success,
+        "data": {
+            "base": {
+                "ref": base_ref,
+                "sha": "base-sha",
+                "workspace": "fixture:base",
+                "provisioned": base_provisioned,
+            },
+            "head": {
+                "ref": head_ref,
+                "sha": "head-sha",
+                "workspace": "fixture:head",
+                "provisioned": head_provisioned,
+            },
+            "diff": {
+                "broken_chains": [
+                    {
+                        "src": "app.handlers.keep_legacy",
+                        "tgt": "app.auth.legacy_token",
+                        "keywords": "CALLS",
+                    }
+                ],
+                "content_comparison": {
+                    "status": content_status,
+                    "reason": None if content_status == "available" else "unavailable",
+                    "base_backend": base_backend,
+                    "head_backend": head_backend,
+                },
+            },
+            "duration_seconds": 0.42,
+        },
+    }
+
+
+def _temporal_payload(*, availability: str = "available") -> dict[str, object]:
+    comparison = (
+        {
+            "base_ref": "base",
+            "head_ref": "head",
+            "base_backend": "codeindex",
+            "head_backend": "codeindex",
+            "base_provisioned": "created",
+            "head_provisioned": "reused",
+            "content_comparison": {"status": "available", "reason": None},
+        }
+        if availability == "available"
+        else None
+    )
+    return {
+        "findings": [
+            {
+                "kind": "broken_chain",
+                "src": "app.handlers.keep_legacy",
+                "tgt": "app.auth.legacy_token",
+                "relation": "CALLS",
+                "evidence": "raw branch diff",
+            }
+        ],
+        "trust": {"availability": availability, "comparison": comparison},
+    }
+
+
+def test_temporal_additive_command_allows_only_branch_diff() -> None:
+    command = _MODULE.build_command(
+        condition="treatment",
+        instruction="compare base and head",
+        model="sonnet",
+        budget_usd="0.50",
+        loomgraph_binary="/tmp/loomgraph",
+        treatment_surface="temporal-additive",
+    )
+
+    assert _argument(command, "--tools") == "Read,Glob,Grep"
+    assert _argument(command, "--allowedTools") == (
+        "mcp__loomgraph__loomgraph_branch_diff"
+    )
+    config = json.loads(_argument(command, "--mcp-config"))
+    assert config["mcpServers"]["loomgraph"]["env"] == {
+        "LOOMGRAPH_MCP_ALLOWED_TOOLS": "loomgraph_branch_diff"
+    }
+    schema = json.loads(_argument(command, "--json-schema"))
+    assert schema["required"] == ["findings", "trust"]
+    assert "candidates" not in schema["properties"]
+
+
+def test_temporal_command_keeps_snapshot_storage_adapter_owned() -> None:
+    command = _MODULE.build_command(
+        condition="treatment",
+        instruction="compare base and head",
+        model="sonnet",
+        budget_usd="0.50",
+        loomgraph_binary="/tmp/loomgraph",
+        treatment_surface="temporal-additive",
+        storage_root=Path("/tmp/v2-run/loomgraph-storage"),
+    )
+
+    env = json.loads(_argument(command, "--mcp-config"))["mcpServers"]["loomgraph"]["env"]
+    assert env["LOOMGRAPH_STORAGE__DB_PATH"] == "/tmp/v2-run/loomgraph-storage/{workspace}.db"
+
+
+def test_temporal_instruction_requires_raw_field_fidelity_in_each_arm() -> None:
+    baseline = _MODULE._append_temporal_protocol_requirement("compare", "baseline")
+    treatment = _MODULE._append_temporal_protocol_requirement("compare", "treatment")
+
+    assert "availability to unavailable" in baseline
+    assert "comparison to null" in baseline
+    assert "copy the returned ref, backend, and provisioning fields exactly" in treatment
+    assert "raw comparison may omit reason" in treatment
+    assert "adapter-normalized absence as null" in treatment
+
+
+def test_temporal_raw_parser_accepts_successful_codeindex_comparison() -> None:
+    parsed = _MODULE.parse_temporal_branch_diff_response(_temporal_raw_response())
+
+    assert parsed["valid"] is True
+    assert parsed["reason"] is None
+    assert parsed["comparison"] == {
+        "base_ref": "base",
+        "head_ref": "head",
+        "base_sha": "base-sha",
+        "head_sha": "head-sha",
+        "base_workspace": "fixture:base",
+        "head_workspace": "fixture:head",
+        "base_backend": "codeindex",
+        "head_backend": "codeindex",
+        "base_provisioned": "created",
+        "head_provisioned": "reused",
+        "content_comparison": {"status": "available", "reason": None},
+    }
+
+
+def test_temporal_raw_parser_normalizes_an_omitted_available_reason() -> None:
+    raw = _temporal_raw_response()
+    del raw["data"]["diff"]["content_comparison"]["reason"]
+
+    parsed = _MODULE.parse_temporal_branch_diff_response(raw)
+
+    assert parsed["valid"] is True
+    assert parsed["comparison"]["content_comparison"] == {
+        "status": "available",
+        "reason": None,
+    }
+
+
+def test_temporal_raw_parser_rejects_failed_envelope_with_explicit_reason() -> None:
+    parsed = _MODULE.parse_temporal_branch_diff_response(
+        {"success": False, "error": {"code": "BRANCH_DIFF_FAILED"}}
+    )
+
+    assert parsed == {"valid": False, "reason": "raw_response_not_success"}
+
+
+def test_temporal_raw_parser_rejects_ref_backend_and_provisioning_mismatches() -> None:
+    assert _MODULE.parse_temporal_branch_diff_response(
+        _temporal_raw_response(base_ref="main")
+    )["reason"] == "base_ref_mismatch"
+    assert _MODULE.parse_temporal_branch_diff_response(
+        _temporal_raw_response(head_backend="codegraph")
+    )["reason"] == "head_backend_mismatch"
+    assert _MODULE.parse_temporal_branch_diff_response(
+        _temporal_raw_response(base_provisioned="invalid")
+    )["reason"] == "base_provisioning_invalid"
+
+
+def test_temporal_raw_parser_rejects_unavailable_content_comparison() -> None:
+    parsed = _MODULE.parse_temporal_branch_diff_response(
+        _temporal_raw_response(content_status="unavailable")
+    )
+
+    assert parsed["valid"] is False
+    assert parsed["reason"] == "content_comparison_not_available"
+
+
+def test_temporal_raw_parser_rejects_a_fabricated_available_reason() -> None:
+    raw = _temporal_raw_response()
+    raw["data"]["diff"]["content_comparison"]["reason"] = "model prose"
+
+    assert _MODULE.parse_temporal_branch_diff_response(raw)["reason"] == (
+        "content_comparison_reason_mismatch"
+    )
+
+
+def test_temporal_stream_summary_retains_raw_branch_diff_response() -> None:
+    raw = _temporal_raw_response()
+    summary = _MODULE.summarize_stream(
+        [
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [
+                        {
+                            "type": "tool_use",
+                            "id": "branch-1",
+                            "name": "mcp__loomgraph__loomgraph_branch_diff",
+                        }
+                    ]
+                },
+            },
+            {
+                "type": "user",
+                "message": {
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "branch-1",
+                            "content": [{"type": "text", "text": json.dumps(raw)}],
+                        }
+                    ]
+                },
+            },
+        ],
+        treatment_surface="temporal-additive",
+    )
+
+    assert summary["loomgraph_tools"] == [
+        "mcp__loomgraph__loomgraph_branch_diff"
+    ]
+    assert summary["unexpected_mcp_tools"] == []
+    assert summary["raw_branch_diff_responses"] == [raw]
+    assert summary["temporal_branch_diff_observations"][0]["valid"] is True
+
+
+def test_temporal_packet_accepts_raw_aligned_available_trust() -> None:
+    raw = _temporal_raw_response()
+    packet = _MODULE.build_temporal_packet(
+        condition="treatment",
+        use_mode="voluntary",
+        source_clean=True,
+        return_code=0,
+        summary={
+            "final_result_seen": True,
+            "payload": _temporal_payload(),
+            "tool_names": ["mcp__loomgraph__loomgraph_branch_diff"],
+            "loomgraph_tools": ["mcp__loomgraph__loomgraph_branch_diff"],
+            "raw_branch_diff_responses": [raw],
+            "temporal_branch_diff_observations": [
+                _MODULE.parse_temporal_branch_diff_response(raw)
+            ],
+        },
+    )
+
+    assert packet["status"] == "complete"
+    assert packet["schema_version"] == 2
+    assert packet["findings"] == _temporal_payload()["findings"]
+    assert packet["trust_observation"]["raw_comparison_aligned"] is True
+    assert "path_oracle" not in packet
+    assert "graph_resolutions" not in packet
+
+
+def test_temporal_packet_rejects_model_raw_comparison_mismatch() -> None:
+    payload = _temporal_payload()
+    payload["trust"]["comparison"]["head_ref"] = "other"
+    raw = _temporal_raw_response()
+    packet = _MODULE.build_temporal_packet(
+        condition="treatment",
+        use_mode="voluntary",
+        source_clean=True,
+        return_code=0,
+        summary={
+            "final_result_seen": True,
+            "payload": payload,
+            "tool_names": ["mcp__loomgraph__loomgraph_branch_diff"],
+            "loomgraph_tools": ["mcp__loomgraph__loomgraph_branch_diff"],
+            "raw_branch_diff_responses": [raw],
+            "temporal_branch_diff_observations": [
+                _MODULE.parse_temporal_branch_diff_response(raw)
+            ],
+        },
+    )
+
+    assert packet["status"] == "unverified_treatment_comparison_trust"
+    assert packet["invalid_reason"] == "model_raw_comparison_mismatch"
+
+
+def test_temporal_packet_rejects_a_finding_that_misses_the_independent_oracle() -> None:
+    payload = _temporal_payload()
+    payload["findings"][0]["src"] = "app.handlers.other"
+    raw = _temporal_raw_response()
+    packet = _MODULE.build_temporal_packet(
+        condition="treatment",
+        use_mode="voluntary",
+        source_clean=True,
+        return_code=0,
+        summary={
+            "final_result_seen": True,
+            "payload": payload,
+            "tool_names": ["mcp__loomgraph__loomgraph_branch_diff"],
+            "loomgraph_tools": ["mcp__loomgraph__loomgraph_branch_diff"],
+            "raw_branch_diff_responses": [raw],
+        },
+    )
+
+    assert packet["status"] == "task_finding_oracle_failed"
+    assert packet["task_finding_observation"]["passed"] is False
+
+
+def test_temporal_packet_loads_its_oracle_after_runner_changes_to_fixture_cwd(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    raw = _temporal_raw_response()
+    packet = _MODULE.build_temporal_packet(
+        condition="treatment",
+        use_mode="voluntary",
+        source_clean=True,
+        return_code=0,
+        summary={
+            "final_result_seen": True,
+            "payload": _temporal_payload(),
+            "tool_names": ["mcp__loomgraph__loomgraph_branch_diff"],
+            "loomgraph_tools": ["mcp__loomgraph__loomgraph_branch_diff"],
+            "raw_branch_diff_responses": [raw],
+        },
+    )
+
+    assert packet["status"] == "complete"
+
+
+def test_temporal_packet_rejects_treatment_without_successful_branch_diff() -> None:
+    packet = _MODULE.build_temporal_packet(
+        condition="treatment",
+        use_mode="voluntary",
+        source_clean=True,
+        return_code=0,
+        summary={"final_result_seen": True, "payload": _temporal_payload()},
+    )
+
+    assert packet["status"] == "missing_treatment_comparison_evidence"
+    assert packet["invalid_reason"] == "no_valid_branch_diff_response"
+
+
+def test_temporal_baseline_requires_explicit_unavailable_comparison() -> None:
+    packet = _MODULE.build_temporal_packet(
+        condition="baseline",
+        use_mode="voluntary",
+        source_clean=True,
+        return_code=0,
+        summary={
+            "final_result_seen": True,
+            "payload": _temporal_payload(availability="unavailable"),
+        },
+    )
+
+    assert packet["status"] == "complete"
+    assert packet["trust"] == {"availability": "unavailable", "comparison": None}
+
+
+def test_temporal_packet_rejects_non_branch_mcp_tool() -> None:
+    packet = _MODULE.build_temporal_packet(
+        condition="treatment",
+        use_mode="voluntary",
+        source_clean=True,
+        return_code=0,
+        summary={
+            "final_result_seen": True,
+            "payload": _temporal_payload(),
+            "tool_names": ["mcp__loomgraph__loomgraph_find"],
+            "unexpected_mcp_tools": ["mcp__loomgraph__loomgraph_find"],
+        },
+    )
+
+    assert packet["status"] == "unexpected_mcp_tool"

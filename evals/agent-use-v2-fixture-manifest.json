@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "fixture_id": "python-history",
+  "materializer": "evals.capability_fixtures.materialize_fixture",
+  "content_sha": "52a552f4426ed6773b3711f63a8024e382b11eb2b70ff8e15c585763d94e7667",
+  "refs": {
+    "base": {
+      "tag": "base",
+      "commit_sha": "11d6876d51425f64ac97ce2a52644c840b629917"
+    },
+    "head": {
+      "tag": "head",
+      "commit_sha": "a270de36ee2af15d13b37fc14395cfae0d3435aa"
+    }
+  },
+  "backend": "codeindex",
+  "task": {
+    "id": "python-history-branch-diff-contract",
+    "class": "temporal-structural-comparison",
+    "instruction_file": "agent-use-v2-python-history-instruction.txt",
+    "server_allowlist": ["loomgraph_branch_diff"],
+    "rg_single_query": false
+  },
+  "oracle": {
+    "finding": {
+      "kind": "broken_chain",
+      "src": "app.handlers.keep_legacy",
+      "tgt": "app.auth.legacy_token",
+      "relation": "CALLS"
+    },
+    "content_comparison": {
+      "status": "available",
+      "reason": null,
+      "base_backend": "codeindex",
+      "head_backend": "codeindex"
+    },
+    "unavailable_is_not_unchanged": true
+  },
+  "recording": {
+    "cold": ["base_provisioned", "head_provisioned", "raw_response"],
+    "warm": ["base_reused", "head_reused", "raw_response"]
+  }
+}
