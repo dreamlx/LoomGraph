@@ -14,6 +14,13 @@ def _contract(task_id: str) -> review.TemporalReviewContract:
 
 def _raw(task_id: str) -> dict[str, object]:
     contract = _contract(task_id)
+    content_comparison: dict[str, object] = {
+        "status": contract.comparison_status,
+        "base_backend": contract.backend,
+        "head_backend": contract.backend,
+    }
+    if contract.comparison_reason is not None:
+        content_comparison["reason"] = contract.comparison_reason
     return {
         "success": True,
         "data": {
@@ -31,12 +38,7 @@ def _raw(task_id: str) -> dict[str, object]:
             },
             "diff": {
                 "broken_chains": [],
-                "content_comparison": {
-                    "status": contract.comparison_status,
-                    "reason": contract.comparison_reason,
-                    "base_backend": contract.backend,
-                    "head_backend": contract.backend,
-                },
+                "content_comparison": content_comparison,
             },
         },
     }

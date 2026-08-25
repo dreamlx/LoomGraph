@@ -16,6 +16,24 @@ def test_condition_order_is_counterbalanced() -> None:
     assert pilot._condition_order(2) == ("treatment", "baseline")
 
 
+def test_orientation_status_records_validity_or_exclusion(tmp_path: Path) -> None:
+    (tmp_path / "orientation.json").write_text(
+        json.dumps(
+            {
+                "status": "unverified_treatment_comparison_trust",
+                "invalid_reason": "model_raw_comparison_mismatch",
+                "semantic_packet": False,
+            }
+        )
+    )
+
+    assert pilot._orientation_status(tmp_path) == {
+        "status": "unverified_treatment_comparison_trust",
+        "invalid_reason": "model_raw_comparison_mismatch",
+        "semantic_packet": False,
+    }
+
+
 def test_driver_writes_counterbalanced_auditable_records(tmp_path: Path, monkeypatch) -> None:
     task_id = "impact-low-resolution-review"
     contract = load_temporal_review_contract(task_id)
@@ -66,6 +84,7 @@ def test_driver_writes_counterbalanced_auditable_records(tmp_path: Path, monkeyp
         "baseline",
     ]
     assert all(record["source_clean"] is True for record in result["runs"])
+    assert all(record["orientation"] is None for record in result["runs"])
     assert all(record["environment_path"] == str(tmp_path / "output" / "environment.json") for record in result["runs"])
     assert sum("warm_repeat" in record for record in result["runs"]) == 2
     assert all(

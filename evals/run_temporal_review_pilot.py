@@ -93,6 +93,21 @@ def _runtime_environment(loomgraph_binary: str) -> dict[str, object]:
     }
 
 
+def _orientation_status(output_dir: Path) -> dict[str, object] | None:
+    path = output_dir / "orientation.json"
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(value, dict):
+        return None
+    return {
+        "status": value.get("status"),
+        "invalid_reason": value.get("invalid_reason"),
+        "semantic_packet": value.get("semantic_packet"),
+    }
+
+
 def run_pilot(
     *,
     source_repository: Path,
@@ -161,6 +176,7 @@ def run_pilot(
                 driver_seconds = time.monotonic() - started
                 (run_dir / "runner.stdout.txt").write_text(result.stdout, encoding="utf-8")
                 (run_dir / "runner.stderr.txt").write_text(result.stderr, encoding="utf-8")
+                orientation = _orientation_status(output_dir)
                 record: dict[str, object] = {
                     "task_id": task_id,
                     "replicate": replicate,
@@ -182,8 +198,12 @@ def run_pilot(
                     "runner_command": command,
                     "runner_return_code": result.returncode,
                     "driver_seconds": driver_seconds,
+                    "orientation": orientation,
                 }
-                if condition == "treatment" and result.returncode == 0:
+                if condition == "treatment" and (
+                    orientation is None and result.returncode == 0
+                    or orientation is not None and orientation["status"] == "complete"
+                ):
                     record["warm_repeat"] = _warm_record(
                         source_dir=source_dir,
                         run_dir=run_dir,
