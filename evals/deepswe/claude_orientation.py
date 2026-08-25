@@ -1050,6 +1050,17 @@ def _load_temporal_review_contract(task_id: str) -> object:
     return module.load_temporal_review_contract(task_id)
 
 
+def _temporal_review_trust_matches_raw(payload: object, observation: object) -> bool:
+    if not isinstance(payload, dict) or not isinstance(observation, dict):
+        return False
+    trust = payload.get("trust")
+    return (
+        isinstance(trust, dict)
+        and trust.get("availability") == "available"
+        and trust.get("comparison") == observation.get("comparison")
+    )
+
+
 def build_temporal_review_packet(
     *,
     condition: str,
@@ -1091,10 +1102,13 @@ def build_temporal_review_packet(
             module.evaluate_temporal_review_answer(payload, condition, task_id, raw)
             for raw in raw_responses
         ]
+        model_comparison_aligned = any(
+            _temporal_review_trust_matches_raw(payload, observation)
+            for observation in valid_observations
+        )
         successful = next((outcome for outcome in outcomes if outcome.passed), None)
         if successful is not None:
             answer_oracle = {"passed": True, "failures": []}
-            model_comparison_aligned = True
         elif outcomes:
             answer_oracle = {
                 "passed": False,
