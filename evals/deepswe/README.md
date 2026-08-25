@@ -131,8 +131,9 @@ For a trust-required treatment, the adapter accepts resolution ratios only when
 they exactly match a successful native `loomgraph_graph` response retained in
 the stream. A well-formed but unmatched model-reported ratio is marked
 `unverified_treatment_trust_resolution`; it cannot become a valid trust result.
-A five-call budget overrun, unexpected MCP tool, or assisted treatment without
-evidence-bearing retrieval makes the packet invalid. A successful `find` needs
+An overrun of the configured tool-call budget, unexpected MCP tool, or
+assisted treatment without evidence-bearing retrieval makes the packet invalid.
+A successful `find` needs
 a non-empty match set and a `graph` needs a resolved entity. These are
 operational measurements, not target-hit penalties.
 
@@ -150,7 +151,7 @@ tokens, cached input tokens, output tokens, model cost, agent navigation time,
 cold setup time, and total trial time. It emits raw rows, only explicit
 baseline/treatment replicate pairs, and per-task/stratum/mode delta summaries
 with the inclusive median and IQR. Quality-invalid rows, either side exceeding
-the five-call budget, and assisted treatment without evidence-bearing retrieval
+the configured tool-call budget, and assisted treatment without evidence-bearing retrieval
 do not receive an efficiency delta.
 
 Each output directory contains Pier's result plus:
