@@ -111,6 +111,12 @@ def test_docker_pull_command_is_explicit_for_auditable_source_preparation() -> N
         "pull",
         "example/image:1",
     ]
+    assert _MODULE.docker_image_presence_command("example/image:1") == [
+        "docker",
+        "image",
+        "inspect",
+        "example/image:1",
+    ]
 
 
 def test_treatment_index_uses_manifest_backend_and_adapter_owned_storage() -> None:
