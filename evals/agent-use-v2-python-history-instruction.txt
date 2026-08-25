@@ -1,0 +1,5 @@
+Compare this repository at the `base` and `head` refs with the `codeindex`
+backend. Identify the call relationship that exists at the base ref but is
+broken at the head ref, and state whether content comparison across the two
+snapshots is available. Give a concise answer with evidence from the
+comparison.
