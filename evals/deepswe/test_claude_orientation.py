@@ -861,6 +861,110 @@ def test_temporal_packet_rejects_model_raw_comparison_mismatch() -> None:
     assert packet["invalid_reason"] == "model_raw_comparison_mismatch"
 
 
+def _temporal_review_raw_response(
+    contract: object, *, content_status: str, content_reason: object
+) -> dict[str, object]:
+    refs = contract.refs
+    return {
+        "success": True,
+        "data": {
+            "base": {
+                "ref": contract.base_ref,
+                "sha": refs["base"]["commit_sha"],
+                "workspace": "review:base",
+                "provisioned": "created",
+            },
+            "head": {
+                "ref": contract.head_ref,
+                "sha": refs["head"]["commit_sha"],
+                "workspace": "review:head",
+                "provisioned": "reused",
+            },
+            "diff": {
+                "broken_chains": [],
+                "content_comparison": {
+                    "status": content_status,
+                    "reason": content_reason,
+                    "base_backend": contract.backend,
+                    "head_backend": contract.backend,
+                },
+            },
+        },
+    }
+
+
+def _temporal_review_payload(contract: object) -> dict[str, object]:
+    loci = [
+        {"symbol": locus["symbol"], "change": locus["change"], "evidence": "raw diff"}
+        for locus in contract.oracle["required_review_loci"]
+    ]
+    phrases = contract.oracle["required_decision_phrases"]
+    decision = "；".join(phrases) if phrases else "需要复核实现责任"
+    return {
+        "decision": decision,
+        "review_loci": loci,
+        "trust": {
+            "availability": "available",
+            "comparison": {
+                "base_ref": contract.base_ref,
+                "head_ref": contract.head_ref,
+                "base_backend": contract.backend,
+                "head_backend": contract.backend,
+                "base_provisioned": "created",
+                "head_provisioned": "reused",
+                "content_comparison": {
+                    "status": contract.comparison_status,
+                    "reason": contract.comparison_reason,
+                },
+            },
+        },
+    }
+
+
+def test_temporal_review_command_keeps_the_single_branch_diff_surface() -> None:
+    command = _MODULE.build_command(
+        condition="treatment",
+        instruction="review base and head",
+        model="sonnet",
+        budget_usd="0.50",
+        loomgraph_binary="/tmp/loomgraph",
+        treatment_surface="temporal-review-additive",
+        temporal_review=True,
+    )
+
+    assert _argument(command, "--tools") == "Read,Glob,Grep"
+    assert _argument(command, "--allowedTools") == "mcp__loomgraph__loomgraph_branch_diff"
+    schema = json.loads(_argument(command, "--json-schema"))
+    assert set(schema["properties"]) == {"decision", "review_loci", "trust"}
+
+
+def test_temporal_review_packet_accepts_codegraph_unavailable_as_uncertainty() -> None:
+    contract = _MODULE._load_temporal_review_contract("sparse-risk-codegraph-uncertainty")
+    raw = _temporal_review_raw_response(
+        contract,
+        content_status="unavailable",
+        content_reason="backend_has_no_per_entity_content_hash",
+    )
+    packet = _MODULE.build_temporal_review_packet(
+        condition="treatment",
+        use_mode="voluntary",
+        source_clean=True,
+        return_code=0,
+        summary={
+            "final_result_seen": True,
+            "payload": _temporal_review_payload(contract),
+            "tool_names": ["mcp__loomgraph__loomgraph_branch_diff"],
+            "unexpected_mcp_tools": [],
+            "raw_branch_diff_responses": [raw],
+        },
+        contract=contract,
+    )
+
+    assert packet["status"] == "complete"
+    assert packet["trust"]["comparison"]["content_comparison"]["status"] == "unavailable"
+    assert packet["trust_observation"]["raw_comparison_aligned"] is True
+
+
 def test_temporal_packet_rejects_a_finding_that_misses_the_independent_oracle() -> None:
     payload = _temporal_payload()
     payload["findings"][0]["src"] = "app.handlers.other"

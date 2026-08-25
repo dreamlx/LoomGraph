@@ -1,0 +1,26 @@
+请审查一个历史变更对实现责任的影响，并说明比较证据的边界。
+
+比较别名：review-base..review-head
+backend：codegraph
+
+决策问题：哪些实现责任需要在接受该变更前复核？对于当前比较证据不能建立的结论，请明确保留不确定性。
+
+只输出一个 JSON 对象，顶层字段只能是 decision、review_loci、trust：
+{
+  "decision": "...",
+  "review_loci": [
+    {"symbol": "...", "change": "...", "evidence": "..."}
+  ],
+  "trust": {
+    "availability": "...",
+    "comparison": {
+      "base_ref": "review-base",
+      "head_ref": "review-head",
+      "base_backend": "...",
+      "head_backend": "...",
+      "base_provisioned": "...",
+      "head_provisioned": "...",
+      "content_comparison": {"status": "...", "reason": "..."}
+    }
+  }
+}

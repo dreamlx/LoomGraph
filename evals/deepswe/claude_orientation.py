@@ -20,6 +20,7 @@ LOOMGRAPH_TOOLS = [
 ]
 LOOMGRAPH_SERVER_TOOLS = ["loomgraph_find", "loomgraph_graph"]
 TEMPORAL_ADDITIVE_SURFACE = "temporal-additive"
+TEMPORAL_REVIEW_ADDITIVE_SURFACE = "temporal-review-additive"
 TEMPORAL_MCP_TOOL = "mcp__loomgraph__loomgraph_branch_diff"
 TEMPORAL_SERVER_TOOL = "loomgraph_branch_diff"
 TEMPORAL_MCP_TOOLS = [TEMPORAL_MCP_TOOL]
@@ -161,10 +162,40 @@ TEMPORAL_ORIENTATION_SCHEMA: dict[str, Any] = {
         },
     },
 }
+TEMPORAL_REVIEW_ORIENTATION_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["decision", "review_loci", "trust"],
+    "properties": {
+        "decision": {"type": "string", "minLength": 1},
+        "review_loci": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["symbol", "change", "evidence"],
+                "properties": {
+                    "symbol": {"type": "string", "minLength": 1},
+                    "change": {"type": "string", "minLength": 1},
+                    "evidence": {"type": "string", "minLength": 1},
+                },
+            },
+        },
+        "trust": TEMPORAL_ORIENTATION_SCHEMA["properties"]["trust"],
+    },
+}
 
 
 def _compact_json(value: object) -> str:
     return json.dumps(value, separators=(",", ":"), sort_keys=True)
+
+
+def _is_temporal_surface(treatment_surface: str | None) -> bool:
+    return treatment_surface in {
+        TEMPORAL_ADDITIVE_SURFACE,
+        TEMPORAL_REVIEW_ADDITIVE_SURFACE,
+    }
 
 
 def build_command(
@@ -177,6 +208,7 @@ def build_command(
     treatment_surface: str = "mcp-only",
     require_trust: bool = False,
     storage_root: Path | None = None,
+    temporal_review: bool = False,
 ) -> list[str]:
     """Build an isolated Claude invocation for exactly one condition."""
     command = [
@@ -199,8 +231,10 @@ def build_command(
         budget_usd,
         "--json-schema",
         _compact_json(
-            TEMPORAL_ORIENTATION_SCHEMA
-            if treatment_surface == TEMPORAL_ADDITIVE_SURFACE
+            TEMPORAL_REVIEW_ORIENTATION_SCHEMA
+            if temporal_review
+            else TEMPORAL_ORIENTATION_SCHEMA
+            if _is_temporal_surface(treatment_surface)
             else TRUSTED_ORIENTATION_SCHEMA
             if require_trust
             else ORIENTATION_SCHEMA
@@ -212,9 +246,14 @@ def build_command(
             ["--tools", BASELINE_TOOLS, "--mcp-config", _compact_json({"mcpServers": {}})]
         )
     elif condition == "treatment":
-        if treatment_surface not in {"mcp-only", "additive", TEMPORAL_ADDITIVE_SURFACE}:
+        if treatment_surface not in {
+            "mcp-only",
+            "additive",
+            TEMPORAL_ADDITIVE_SURFACE,
+            TEMPORAL_REVIEW_ADDITIVE_SURFACE,
+        }:
             raise ValueError(f"unknown treatment surface: {treatment_surface}")
-        if treatment_surface == TEMPORAL_ADDITIVE_SURFACE:
+        if _is_temporal_surface(treatment_surface):
             temporal_env = {"LOOMGRAPH_MCP_ALLOWED_TOOLS": TEMPORAL_SERVER_TOOL}
             if storage_root is not None:
                 temporal_env["LOOMGRAPH_STORAGE__DB_PATH"] = str(
@@ -668,7 +707,7 @@ def summarize_stream(
 
     allowed_mcp_tools = (
         TEMPORAL_MCP_TOOLS
-        if treatment_surface == TEMPORAL_ADDITIVE_SURFACE
+        if _is_temporal_surface(treatment_surface)
         else LOOMGRAPH_TOOLS
     )
     return {
@@ -686,7 +725,7 @@ def summarize_stream(
             for name in tool_names
             if (
                 name.startswith("mcp__")
-                if treatment_surface == TEMPORAL_ADDITIVE_SURFACE
+                if _is_temporal_surface(treatment_surface)
                 else name.startswith("mcp__loomgraph__")
             )
             and name not in allowed_mcp_tools
@@ -991,6 +1030,151 @@ def _evaluate_temporal_task_answer(payload: object, condition: str) -> dict[str,
     return {"passed": bool(outcome.passed), "failures": list(outcome.failures)}
 
 
+def _load_temporal_review_module() -> Any:
+    """Load the adapter-owned product-pilot contract without exposing it to Claude."""
+    path = Path(__file__).resolve().parents[1] / "temporal_review_fixtures.py"
+    repo_root = str(path.parents[1])
+    if repo_root not in sys.path:
+        sys.path.insert(0, repo_root)
+    spec = importlib.util.spec_from_file_location("temporal_review_fixtures_runtime", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("cannot load temporal-review fixture contract")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _load_temporal_review_contract(task_id: str) -> object:
+    module = _load_temporal_review_module()
+    return module.load_temporal_review_contract(task_id)
+
+
+def build_temporal_review_packet(
+    *,
+    condition: str,
+    use_mode: str,
+    source_clean: bool,
+    return_code: int,
+    summary: dict[str, object],
+    contract: object,
+    requested_model: str = "",
+    agent_execution_seconds: float | None = None,
+) -> dict[str, Any]:
+    """Build one product-review packet using its adapter-owned contract."""
+    module = _load_temporal_review_module()
+    task_id = getattr(contract, "task_id", None)
+    if not isinstance(task_id, str):
+        raise ValueError("temporal-review contract must declare task_id")
+    payload = summary.get("payload")
+    raw_responses = summary.get("raw_branch_diff_responses")
+    if not isinstance(raw_responses, list):
+        raw_responses = []
+    observations = [module.parse_temporal_review_raw_response(task_id, raw) for raw in raw_responses]
+    valid_observations = [observation for observation in observations if observation["valid"]]
+    tool_names = summary.get("tool_names")
+    if not isinstance(tool_names, list) or not all(isinstance(name, str) for name in tool_names):
+        tool_names = []
+    branch_tools = [name for name in tool_names if name == TEMPORAL_MCP_TOOL]
+    unexpected = summary.get("unexpected_mcp_tools")
+    if not isinstance(unexpected, list) or not all(isinstance(name, str) for name in unexpected):
+        unexpected = []
+    budget_overrun = len(tool_names) > TOOL_CALL_BUDGET
+
+    answer_oracle: dict[str, object] | None = None
+    model_comparison_aligned = False
+    if condition == "baseline":
+        outcome = module.evaluate_temporal_review_answer(payload, condition, task_id)
+        answer_oracle = {"passed": bool(outcome.passed), "failures": list(outcome.failures)}
+    else:
+        outcomes = [
+            module.evaluate_temporal_review_answer(payload, condition, task_id, raw)
+            for raw in raw_responses
+        ]
+        successful = next((outcome for outcome in outcomes if outcome.passed), None)
+        if successful is not None:
+            answer_oracle = {"passed": True, "failures": []}
+            model_comparison_aligned = True
+        elif outcomes:
+            answer_oracle = {
+                "passed": False,
+                "failures": list(outcomes[0].failures),
+            }
+
+    invalid_reason: str | None = None
+    if not source_clean:
+        status, invalid_reason = "invalid_source_mutation", "source_mutation"
+    elif return_code != 0:
+        status, invalid_reason = "agent_error", "agent_return_code_nonzero"
+    elif summary.get("final_result_seen") is not True or not isinstance(payload, dict):
+        status, invalid_reason = "missing_or_invalid_agent_response", "temporal_schema_invalid"
+    elif budget_overrun:
+        status, invalid_reason = "tool_call_budget_exceeded", "tool_call_budget_exceeded"
+    elif unexpected:
+        status, invalid_reason = "unexpected_mcp_tool", "unexpected_mcp_tool"
+    elif condition == "baseline":
+        if answer_oracle is None or answer_oracle["passed"] is not True:
+            status, invalid_reason = "task_review_oracle_failed", "task_specific_oracle_mismatch"
+        else:
+            status = "complete"
+    elif not valid_observations:
+        status, invalid_reason = (
+            "missing_treatment_comparison_evidence",
+            "no_valid_branch_diff_response",
+        )
+    elif not model_comparison_aligned:
+        status, invalid_reason = (
+            "unverified_treatment_comparison_trust",
+            "model_raw_comparison_mismatch",
+        )
+    elif answer_oracle is None or answer_oracle["passed"] is not True:
+        status, invalid_reason = "task_review_oracle_failed", "task_specific_oracle_mismatch"
+    else:
+        status = "complete"
+    return {
+        "schema_version": 3,
+        "protocol": TEMPORAL_REVIEW_ADDITIVE_SURFACE,
+        "status": status,
+        "invalid_reason": invalid_reason,
+        "condition": condition,
+        "orientation_mode": use_mode,
+        "navigation_surface": TEMPORAL_REVIEW_ADDITIVE_SURFACE,
+        "pre_edit": source_clean,
+        "source_clean": source_clean,
+        "source_clean_scope": "model_phase",
+        "response_format": "json_schema",
+        "semantic_packet": status == "complete",
+        "decision": payload.get("decision") if isinstance(payload, dict) else None,
+        "review_loci": payload.get("review_loci", []) if isinstance(payload, dict) else [],
+        "trust": payload.get("trust") if isinstance(payload, dict) else None,
+        "trust_observation": {
+            "raw_branch_diff_responses": raw_responses,
+            "raw_branch_diff_observations": observations,
+            "raw_comparison_aligned": model_comparison_aligned,
+            "valid_raw_branch_diff_count": len(valid_observations),
+        },
+        "task_review_observation": answer_oracle,
+        "tool_call_count": len(tool_names),
+        "tool_call_budget": TOOL_CALL_BUDGET,
+        "tool_call_budget_overrun": budget_overrun,
+        "agent_execution_seconds": agent_execution_seconds,
+        "model": {
+            "requested": requested_model,
+            "observed": summary.get("observed_models", []),
+            "assistant_observed": summary.get("assistant_models", []),
+            "session_observed": summary.get("session_models", []),
+            "usage_observed": summary.get("usage_models", []),
+        },
+        "tooling": {
+            "loomgraph": {
+                "used": bool(branch_tools),
+                "tools": branch_tools,
+                "unexpected_tools": unexpected,
+            }
+        },
+    }
+
+
 def _append_mode_requirement(instruction: str, use_mode: str) -> str:
     if use_mode == "voluntary":
         return instruction
@@ -1038,8 +1222,14 @@ def run(args: argparse.Namespace) -> int:
     if before["porcelain"]:
         raise ValueError("source directory must be clean before the model phase")
 
+    temporal_review_contract: object | None = None
+    if args.temporal_review_contract:
+        if args.treatment_surface != TEMPORAL_REVIEW_ADDITIVE_SURFACE:
+            raise ValueError("temporal-review contract requires the temporal-review-additive surface")
+        temporal_review_contract = _load_temporal_review_contract(args.task_id)
+
     instruction = _append_mode_requirement(args.instruction_file.read_text(), args.use_mode)
-    if args.treatment_surface == TEMPORAL_ADDITIVE_SURFACE:
+    if _is_temporal_surface(args.treatment_surface):
         instruction = _append_temporal_protocol_requirement(instruction, args.condition)
     command = build_command(
         condition=args.condition,
@@ -1050,6 +1240,7 @@ def run(args: argparse.Namespace) -> int:
         treatment_surface=args.treatment_surface,
         require_trust=args.require_trust,
         storage_root=storage_root if args.condition == "treatment" else None,
+        temporal_review=temporal_review_contract is not None,
     )
     _write_json(output_dir / "command.json", command)
 
@@ -1078,7 +1269,21 @@ def run(args: argparse.Namespace) -> int:
     after = _repo_state(source_dir)
     source_clean = before == after and not after["porcelain"]
     summary = summarize_stream(events, args.treatment_surface)
-    if args.treatment_surface == TEMPORAL_ADDITIVE_SURFACE:
+    if args.treatment_surface == TEMPORAL_REVIEW_ADDITIVE_SURFACE:
+        if temporal_review_contract is None:
+            raise ValueError("temporal-review surface requires a temporal-review contract")
+        packet = build_temporal_review_packet(
+            condition=args.condition, use_mode=args.use_mode, source_clean=source_clean,
+            return_code=return_code, summary=summary,
+            contract=temporal_review_contract,
+            requested_model=args.model,
+            agent_execution_seconds=agent_execution_seconds,
+        )
+        packet["adapter_storage"] = {
+            "root": str(storage_root),
+            "db_path_pattern": str(storage_root / "{workspace}.db"),
+        }
+    elif args.treatment_surface == TEMPORAL_ADDITIVE_SURFACE:
         packet = build_temporal_packet(
             condition=args.condition, use_mode=args.use_mode, source_clean=source_clean,
             return_code=return_code, summary=summary,
@@ -1138,7 +1343,12 @@ def main() -> int:
     parser.add_argument("--use-mode", choices=("voluntary", "assisted"), default="voluntary")
     parser.add_argument(
         "--treatment-surface",
-        choices=("mcp-only", "additive", TEMPORAL_ADDITIVE_SURFACE),
+        choices=(
+            "mcp-only",
+            "additive",
+            TEMPORAL_ADDITIVE_SURFACE,
+            TEMPORAL_REVIEW_ADDITIVE_SURFACE,
+        ),
         default="mcp-only",
         help="Treatment navigation surface; baseline is always text-only.",
     )
@@ -1151,6 +1361,11 @@ def main() -> int:
         help="Require edge and resolution trust fields in the structured response.",
     )
     parser.add_argument("--loomgraph-binary", default="loomgraph")
+    parser.add_argument(
+        "--temporal-review-contract",
+        action="store_true",
+        help="Load the adapter-owned temporal-review task contract for --task-id.",
+    )
     return run(parser.parse_args())
 
 
