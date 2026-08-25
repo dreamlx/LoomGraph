@@ -965,6 +965,36 @@ def test_temporal_review_packet_accepts_codegraph_unavailable_as_uncertainty() -
     assert packet["trust_observation"]["raw_comparison_aligned"] is True
 
 
+def test_temporal_review_packet_keeps_raw_alignment_separate_from_task_oracle() -> None:
+    contract = _MODULE._load_temporal_review_contract("impact-low-resolution-review")
+    payload = _temporal_review_payload(contract)
+    payload["review_loci"][0]["change"] = "other"
+    raw = _temporal_review_raw_response(
+        contract,
+        content_status="available",
+        content_reason=None,
+    )
+
+    packet = _MODULE.build_temporal_review_packet(
+        condition="treatment",
+        use_mode="voluntary",
+        source_clean=True,
+        return_code=0,
+        summary={
+            "final_result_seen": True,
+            "payload": payload,
+            "tool_names": ["mcp__loomgraph__loomgraph_branch_diff"],
+            "unexpected_mcp_tools": [],
+            "raw_branch_diff_responses": [raw],
+        },
+        contract=contract,
+    )
+
+    assert packet["status"] == "task_review_oracle_failed"
+    assert packet["invalid_reason"] == "task_specific_oracle_mismatch"
+    assert packet["trust_observation"]["raw_comparison_aligned"] is True
+
+
 def test_temporal_packet_rejects_a_finding_that_misses_the_independent_oracle() -> None:
     payload = _temporal_payload()
     payload["findings"][0]["src"] = "app.handlers.other"
