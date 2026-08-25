@@ -119,6 +119,39 @@ def test_rejects_candidate_path_outside_the_source_root() -> None:
     assert _MODULE.normalize_candidate_paths(payload, Path("/tmp/source")) is None
 
 
+def test_scores_known_fixture_path_oracle_without_changing_packet_validity() -> None:
+    observation = _MODULE.score_agent_use_fixture(
+        "vulture-reachability-condition-impact",
+        [
+            {"path": "vulture/utils.py", "evidence": "utility"},
+            {"path": "vulture/core.py", "evidence": "handoff"},
+        ],
+    )
+
+    assert observation == {
+        "id": "vulture-reachability-condition-impact",
+        "task_class": "trust-adversary-dynamic-receiver",
+        "rg_equivalent_single_query": False,
+        "path_oracle": {
+            "expected_paths": [
+                "vulture/utils.py",
+                "vulture/reachability.py",
+                "vulture/core.py",
+            ],
+            "candidate_paths": ["vulture/utils.py", "vulture/core.py"],
+            "matched_paths": ["vulture/utils.py", "vulture/core.py"],
+            "missing_paths": ["vulture/reachability.py"],
+            "unexpected_paths": [],
+            "path_recall": 2 / 3,
+            "exact_path_set": False,
+        },
+    }
+
+
+def test_does_not_score_an_unknown_agent_use_task() -> None:
+    assert _MODULE.score_agent_use_fixture("unknown-task", []) is None
+
+
 def test_stream_summary_reads_structured_result_and_observed_mcp_calls() -> None:
     events = [
         {

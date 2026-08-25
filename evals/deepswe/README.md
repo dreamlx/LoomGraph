@@ -131,6 +131,11 @@ evidence-bearing retrieval makes the packet invalid. A successful `find` needs
 a non-empty match set and a `graph` needs a resolved entity. These are
 operational measurements, not target-hit penalties.
 
+For a `task-id` declared in `agent-use-fixtures.json`, the adapter also records
+the frozen path oracle, recall, missing/unexpected paths, and exact path-set
+match in `fixture_observation`. This is an observation only: it never changes
+the protocol-valid packet status or creates a performance claim.
+
 The runner loads Claude Code's `project,local` setting sources so a fixture's
 project `CLAUDE.md` is part of the evaluated integration. `--strict-mcp-config`
 still confines MCP availability to the adapter-owned configuration.
