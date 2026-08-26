@@ -1,0 +1,155 @@
+{
+  "success": true,
+  "data": {
+    "base": {
+      "ref": "v8-base",
+      "sha": "2f2079167bb71ff172bd914fb9f24c220b1a70be",
+      "workspace": "loomgraph:v8-base",
+      "provisioned": "created",
+      "duration_seconds": 0.9
+    },
+    "head": {
+      "ref": "v8-head",
+      "sha": "67507cfad4d2ef78662daf75eb7fba3a4a581775",
+      "workspace": "loomgraph:v8-head",
+      "provisioned": "created",
+      "duration_seconds": 0.78
+    },
+    "diff": {
+      "summary": {
+        "entities_added_total": 2,
+        "entities_removed_total": 0,
+        "entities_shared": 445,
+        "edges_added_total": 4,
+        "edges_removed_total": 1,
+        "broken_chains_total": 1,
+        "new_chains_total": 3,
+        "module_changed": 1,
+        "base_unresolved_edges": 2105,
+        "head_unresolved_edges": 2110
+      },
+      "graph_sizes": {
+        "base_entities": 445,
+        "base_relations": 2707,
+        "head_entities": 447,
+        "head_relations": 2715
+      },
+      "entities_added": [
+        {
+          "name": "src.loomgraph.cli._analysis._read_meta",
+          "type": "function",
+          "source_id": "src/loomgraph/cli/_analysis.py:129"
+        },
+        {
+          "name": "src.loomgraph.core.graph_export_ingest.compute_resolution_breakdown",
+          "type": "function",
+          "source_id": "src/loomgraph/core/graph_export_ingest.py:221"
+        }
+      ],
+      "entities_removed": [],
+      "edges_added": [
+        {
+          "src": "src.loomgraph.cli._analysis._async_impact",
+          "tgt": "src.loomgraph.cli._analysis._read_meta",
+          "keywords": "CALLS"
+        },
+        {
+          "src": "src.loomgraph.cli._analysis._impact_resolved_ratio",
+          "tgt": "src.loomgraph.cli._analysis._read_meta",
+          "keywords": "CALLS"
+        },
+        {
+          "src": "src.loomgraph.core.graph_export_ingest.compute_resolution_breakdown",
+          "tgt": "src.loomgraph.core.graph_export_ingest.compute_resolved_ratio",
+          "keywords": "CALLS"
+        },
+        {
+          "src": "src.loomgraph.core.graph_export_ingest.persist_resolved_ratio",
+          "tgt": "src.loomgraph.core.graph_export_ingest.compute_resolution_breakdown",
+          "keywords": "CALLS"
+        }
+      ],
+      "edges_removed": [
+        {
+          "src": "src.loomgraph.core.graph_export_ingest.persist_resolved_ratio",
+          "tgt": "src.loomgraph.core.graph_export_ingest.compute_resolved_ratio",
+          "keywords": "CALLS"
+        }
+      ],
+      "broken_chains": [
+        {
+          "src": "src.loomgraph.core.graph_export_ingest.persist_resolved_ratio",
+          "tgt": "src.loomgraph.core.graph_export_ingest.compute_resolved_ratio",
+          "keywords": "CALLS"
+        }
+      ],
+      "new_chains": [
+        {
+          "src": "src.loomgraph.cli._analysis._async_impact",
+          "tgt": "src.loomgraph.cli._analysis._read_meta",
+          "keywords": "CALLS"
+        },
+        {
+          "src": "src.loomgraph.cli._analysis._impact_resolved_ratio",
+          "tgt": "src.loomgraph.cli._analysis._read_meta",
+          "keywords": "CALLS"
+        },
+        {
+          "src": "src.loomgraph.core.graph_export_ingest.persist_resolved_ratio",
+          "tgt": "src.loomgraph.core.graph_export_ingest.compute_resolution_breakdown",
+          "keywords": "CALLS"
+        }
+      ],
+      "content_comparison": {
+        "version": 1,
+        "status": "available",
+        "scope": "same_backend_only",
+        "base_backend": "codeindex",
+        "head_backend": "codeindex",
+        "comparable_shared": 445,
+        "uncomparable_shared": 0,
+        "changes_total": 6,
+        "changed": [
+          {
+            "name": "src.loomgraph.cli._analysis._async_impact",
+            "type": "function",
+            "source_id": "src/loomgraph/cli/_analysis.py:65"
+          },
+          {
+            "name": "src.loomgraph.cli._analysis._impact_resolved_ratio",
+            "type": "function",
+            "source_id": "src/loomgraph/cli/_analysis.py:124"
+          },
+          {
+            "name": "src.loomgraph.core.graph_export_ingest.ingest_incremental",
+            "type": "function",
+            "source_id": "src/loomgraph/core/graph_export_ingest.py:291"
+          },
+          {
+            "name": "src.loomgraph.core.graph_export_ingest.persist_resolved_ratio",
+            "type": "function",
+            "source_id": "src/loomgraph/core/graph_export_ingest.py:266"
+          },
+          {
+            "name": "src.loomgraph.core.topology.TopologyAnalyzer",
+            "type": "class",
+            "source_id": "src/loomgraph/core/topology.py:338"
+          },
+          {
+            "name": "src.loomgraph.core.topology.TopologyAnalyzer._analyze_server_side",
+            "type": "method",
+            "source_id": "src/loomgraph/core/topology.py:371"
+          }
+        ]
+      },
+      "module_delta": [
+        {
+          "module": "src/loomgraph",
+          "edges_added": 4,
+          "edges_removed": 1
+        }
+      ]
+    },
+    "duration_seconds": 1.85
+  }
+}
