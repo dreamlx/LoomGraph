@@ -1,0 +1,19 @@
+请审查一个历史代码变更对实现责任的影响。
+
+比较别名：review-base..review-head
+backend：codeindex
+
+请列出需要复核的实现位置，并说明你能从可用证据得出的边界。位置必须使用仓库相对 path 与文件内 qualname；不要把模块全限定名当作唯一身份。
+
+decision.outcome 只能是 review_required 或 review_required_with_uncertainty；decision.boundary 只能是 comparison_not_observed、content_comparison_available 或 content_comparison_unavailable。
+review_loci 的每项必须包含 path、qualname、rationale。
+
+不要逐值转录工具返回的比较对象、ref、backend、provisioning、status、reason、availability 或证据类别；只用闭合的 decision.boundary 表示你的审查边界。
+
+只输出一个 JSON 对象，顶层字段只能是 decision、review_loci：
+{
+  "decision": {"outcome": "...", "boundary": "...", "rationale": "..."},
+  "review_loci": [
+    {"path": "...", "qualname": "...", "rationale": "..."}
+  ]
+}
