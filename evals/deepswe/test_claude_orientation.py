@@ -32,6 +32,31 @@ def test_baseline_command_exposes_only_text_navigation_tools() -> None:
     assert "--allowedTools" not in command
 
 
+def test_temporal_review_v2_command_exposes_the_preregistered_closed_enums() -> None:
+    command = _MODULE.build_command(
+        condition="baseline",
+        instruction="orient",
+        model="sonnet",
+        budget_usd="0.50",
+        loomgraph_binary="loomgraph",
+        treatment_surface="temporal-review-v2-additive",
+        temporal_review_v2=True,
+    )
+
+    schema = json.loads(_argument(command, "--json-schema"))
+    decision = schema["properties"]["decision"]["properties"]
+    locus = schema["properties"]["review_loci"]["items"]["properties"]
+    assert decision["outcome"]["enum"] == ["review_required", "review_required_with_uncertainty"]
+    assert decision["boundary"]["enum"] == [
+        "content_comparison_is_available",
+        "edge_delta_does_not_prove_behavior",
+        "content_comparison_is_unavailable",
+    ]
+    assert locus["evidence_kind"]["enum"] == [
+        "source_text", "content_delta", "graph_delta", "graph_boundary"
+    ]
+
+
 def test_treatment_command_exposes_only_native_loomgraph_tools() -> None:
     command = _MODULE.build_command(
         condition="treatment",
@@ -992,6 +1017,59 @@ def test_temporal_review_packet_keeps_raw_alignment_separate_from_task_oracle() 
 
     assert packet["status"] == "task_review_oracle_failed"
     assert packet["invalid_reason"] == "task_specific_oracle_mismatch"
+    assert packet["trust_observation"]["raw_comparison_aligned"] is True
+
+
+def test_temporal_review_v2_packet_uses_ast_identity_and_raw_trust(tmp_path: Path) -> None:
+    contract = _MODULE._load_temporal_review_v2_contract("sparse-risk-codegraph-uncertainty")
+    raw = {
+        "success": True,
+        "data": {
+            "base": {"ref": contract.base_ref, "sha": contract.refs["base"]["commit_sha"], "workspace": "base", "provisioned": "created"},
+            "head": {"ref": contract.head_ref, "sha": contract.refs["head"]["commit_sha"], "workspace": "head", "provisioned": "reused"},
+            "diff": {
+                "content_comparison": {
+                    "status": "unavailable",
+                    "reason": "backend_has_no_per_entity_content_hash",
+                    "base_backend": "codegraph",
+                    "head_backend": "codegraph",
+                },
+                "edges_added": [{"src": "RiskAssessor::assess", "tgt": "threshold"}],
+                "new_chains": [{"src": "RiskAssessor::assess", "tgt": "threshold"}],
+                "broken_chains": [],
+            },
+        },
+    }
+    adapter = _MODULE._load_temporal_review_v2_module()
+    comparison = adapter.parse_raw_response(contract.task_id, raw)["comparison"]
+    source = tmp_path / "src/loomgraph/core/impact/risk.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("class RiskAssessor:\n    def assess(self):\n        return None\n")
+    payload = {
+        "decision": {**contract.oracle["decision"], "rationale": "registered"},
+        "review_loci": [
+            {
+                "path": "src/loomgraph/core/impact/risk.py",
+                "qualname": "RiskAssessor.assess",
+                "evidence_kind": "graph_boundary",
+                "rationale": "raw edge",
+            }
+        ],
+        "trust": {"availability": "available", "comparison": comparison},
+    }
+
+    packet = _MODULE.build_temporal_review_v2_packet(
+        condition="treatment", use_mode="voluntary", source_clean=True, source_dir=tmp_path,
+        return_code=0,
+        summary={
+            "final_result_seen": True, "payload": payload,
+            "tool_names": ["mcp__loomgraph__loomgraph_branch_diff"],
+            "unexpected_mcp_tools": [], "raw_branch_diff_responses": [raw],
+        },
+        contract=contract,
+    )
+
+    assert packet["status"] == "complete"
     assert packet["trust_observation"]["raw_comparison_aligned"] is True
 
 

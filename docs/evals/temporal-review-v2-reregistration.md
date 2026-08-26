@@ -98,3 +98,25 @@ pilot requires a fresh user confirmation after the v2 manifest, instructions,
 oracle tests, runner/audit support, and CI have been inspected. If the pilot
 has no valid semantic pair, it is a no-go for further expansion; no metric or
 oracle may be changed after observing it.
+
+## Frozen execution surface
+
+The dormant runner is
+[`evals/deepswe/claude_orientation.py`](../../evals/deepswe/claude_orientation.py)
+with `--treatment-surface temporal-review-v2-additive` and
+`--temporal-review-v2-contract`. It records the original JSONL trace, command,
+pre/post source state, exact raw branch-diff responses, model/tool surface,
+and the independently rebuilt packet. The baseline remains text-only.
+
+[`evals/run_temporal_review_v2_pilot.py`](../../evals/run_temporal_review_v2_pilot.py)
+is the counterbalanced, voluntary-only driver. It materializes every run from
+[`evals/temporal_review_v2_materialize.py`](../../evals/temporal_review_v2_materialize.py)
+into a new source-only root. A treatment warm repeat uses the same
+adapter-owned storage and occurs whenever a valid raw comparison was retained,
+even when the semantic answer is excluded. It does not invoke v1/r2 paths.
+
+[`evals/audit_temporal_review_v2_pilot.py`](../../evals/audit_temporal_review_v2_pilot.py)
+rebuilds validity from saved v2 artifacts only and refuses a non-v2 protocol.
+Neither the driver nor audit command authorizes a model invocation: the user
+must explicitly approve a fresh output root and the 12 new runs after this
+surface is merged and CI is green.
