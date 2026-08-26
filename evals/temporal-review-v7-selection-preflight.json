@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "protocol": "temporal-review-v7-selection-preflight",
+  "model_execution": false,
+  "selection_method": "fresh_independent_source_review_plus_raw_branch_diff",
+  "captured_at_utc": "2026-08-26T05:15:55Z",
+  "toolchain": {
+    "loomgraph_version": "0.22.0",
+    "claude_code_version": "2.1.246"
+  },
+  "command_template": [
+    "loomgraph",
+    "branch-diff",
+    "<base>..<head>",
+    "--backend",
+    "codeindex"
+  ],
+  "artifacts": [
+    {
+      "task_id": "v7-impact-caller-qualification-primary-navigation",
+      "raw_response_path": "temporal-review-v7-selection-preflight/v7-impact-caller-qualification-primary-navigation.json",
+      "raw_sha256": "fcaebbdb9711874a6b6b04ffaba54cde2503a2b8345440158f6b94b947cee73a"
+    },
+    {
+      "task_id": "v7-working-tree-diff-default-primary-navigation",
+      "raw_response_path": "temporal-review-v7-selection-preflight/v7-working-tree-diff-default-primary-navigation.json",
+      "raw_sha256": "dc939da309913c066df7cc4c0891a8218e4b82addf70ed4480febe29c74d8d02"
+    }
+  ]
+}

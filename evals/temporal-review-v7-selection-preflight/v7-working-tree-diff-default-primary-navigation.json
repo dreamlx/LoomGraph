@@ -1,0 +1,62 @@
+{
+  "success": true,
+  "data": {
+    "base": {
+      "ref": "a2f7c100f99486848b6db17f3b12e1db0356d4d0",
+      "sha": "a2f7c100f99486848b6db17f3b12e1db0356d4d0",
+      "workspace": "loomgraph:a2f7c100f99486848b6db17f3b12e1db0356d4d0",
+      "provisioned": "reused"
+    },
+    "head": {
+      "ref": "e87b1eb11f8f272d52b306c3931a00b6138d00f8",
+      "sha": "e87b1eb11f8f272d52b306c3931a00b6138d00f8",
+      "workspace": "loomgraph:e87b1eb11f8f272d52b306c3931a00b6138d00f8",
+      "provisioned": "reused"
+    },
+    "diff": {
+      "summary": {
+        "entities_added_total": 0,
+        "entities_removed_total": 0,
+        "entities_shared": 411,
+        "edges_added_total": 0,
+        "edges_removed_total": 0,
+        "broken_chains_total": 0,
+        "new_chains_total": 0,
+        "module_changed": 0,
+        "base_unresolved_edges": 1901,
+        "head_unresolved_edges": 1902
+      },
+      "graph_sizes": {
+        "base_entities": 411,
+        "base_relations": 2442,
+        "head_entities": 411,
+        "head_relations": 2443
+      },
+      "entities_added": [],
+      "entities_removed": [],
+      "edges_added": [],
+      "edges_removed": [],
+      "broken_chains": [],
+      "new_chains": [],
+      "content_comparison": {
+        "version": 1,
+        "status": "available",
+        "scope": "same_backend_only",
+        "base_backend": "codeindex",
+        "head_backend": "codeindex",
+        "comparable_shared": 411,
+        "uncomparable_shared": 0,
+        "changes_total": 1,
+        "changed": [
+          {
+            "name": "src.loomgraph.core.git.get_changed_files",
+            "type": "function",
+            "source_id": "src/loomgraph/core/git.py:44"
+          }
+        ]
+      },
+      "module_delta": []
+    },
+    "duration_seconds": 0.19
+  }
+}
