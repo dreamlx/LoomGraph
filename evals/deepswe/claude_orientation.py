@@ -27,6 +27,7 @@ TEMPORAL_REVIEW_V3_ADDITIVE_SURFACE = "temporal-review-v3-adapter-trust"
 TEMPORAL_REVIEW_V4_ADDITIVE_SURFACE = "temporal-review-v4-navigation-evidence"
 TEMPORAL_REVIEW_V5_ADDITIVE_SURFACE = "temporal-review-v5-navigation-evidence"
 TEMPORAL_REVIEW_V6_ADDITIVE_SURFACE = "temporal-review-v6-navigation-evidence"
+TEMPORAL_REVIEW_V7_ADDITIVE_SURFACE = "temporal-review-v7-primary-navigation-evidence"
 TEMPORAL_MCP_TOOL = "mcp__loomgraph__loomgraph_branch_diff"
 TEMPORAL_SERVER_TOOL = "loomgraph_branch_diff"
 TEMPORAL_MCP_TOOLS = [TEMPORAL_MCP_TOOL]
@@ -400,6 +401,13 @@ TEMPORAL_REVIEW_V6_ORIENTATION_SCHEMA: dict[str, Any] = {
     },
 }
 
+# V7 preserves the one-locus answer contract.  Its only protocol change is
+# runtime model-identity comparison, which is recorded separately from this
+# model-visible schema.
+TEMPORAL_REVIEW_V7_ORIENTATION_SCHEMA: dict[str, Any] = {
+    **TEMPORAL_REVIEW_V6_ORIENTATION_SCHEMA,
+}
+
 
 def _compact_json(value: object) -> str:
     return json.dumps(value, separators=(",", ":"), sort_keys=True)
@@ -414,6 +422,7 @@ def _is_temporal_surface(treatment_surface: str | None) -> bool:
         TEMPORAL_REVIEW_V4_ADDITIVE_SURFACE,
         TEMPORAL_REVIEW_V5_ADDITIVE_SURFACE,
         TEMPORAL_REVIEW_V6_ADDITIVE_SURFACE,
+        TEMPORAL_REVIEW_V7_ADDITIVE_SURFACE,
     }
 
 
@@ -433,6 +442,7 @@ def build_command(
     temporal_review_v4: bool = False,
     temporal_review_v5: bool = False,
     temporal_review_v6: bool = False,
+    temporal_review_v7: bool = False,
 ) -> list[str]:
     """Build an isolated Claude invocation for exactly one condition."""
     command = [
@@ -455,7 +465,9 @@ def build_command(
         budget_usd,
         "--json-schema",
         _compact_json(
-            TEMPORAL_REVIEW_V6_ORIENTATION_SCHEMA
+            TEMPORAL_REVIEW_V7_ORIENTATION_SCHEMA
+            if temporal_review_v7
+            else TEMPORAL_REVIEW_V6_ORIENTATION_SCHEMA
             if temporal_review_v6
             else TEMPORAL_REVIEW_V5_ORIENTATION_SCHEMA
             if temporal_review_v5
@@ -490,6 +502,7 @@ def build_command(
             TEMPORAL_REVIEW_V4_ADDITIVE_SURFACE,
             TEMPORAL_REVIEW_V5_ADDITIVE_SURFACE,
             TEMPORAL_REVIEW_V6_ADDITIVE_SURFACE,
+            TEMPORAL_REVIEW_V7_ADDITIVE_SURFACE,
         }:
             raise ValueError(f"unknown treatment surface: {treatment_surface}")
         if _is_temporal_surface(treatment_surface):
@@ -1001,6 +1014,47 @@ def summarize_stream(
     }
 
 
+def _v7_model_categories(events: list[dict[str, Any]]) -> dict[str, object]:
+    """Preserve native model-label encounter order for the V7 identity contract."""
+    raw: dict[str, list[str]] = {"assistant": [], "session": [], "usage": []}
+    malformed = False
+    for event in events:
+        target = "assistant" if event.get("type") == "assistant" else "session"
+        for value in (event.get("model"), event.get("message", {}).get("model") if isinstance(event.get("message"), dict) else None):
+            if value is None:
+                continue
+            if not isinstance(value, str) or not value:
+                malformed = True
+            else:
+                raw[target].append(value)
+        usage = event.get("modelUsage")
+        if usage is None:
+            continue
+        if not isinstance(usage, dict):
+            malformed = True
+            continue
+        for value in usage:
+            if not isinstance(value, str) or not value:
+                malformed = True
+            else:
+                raw["usage"].append(value)
+    result: dict[str, object] = {"model_categories_valid": not malformed}
+    for name, labels in raw.items():
+        result[f"{name}_models_raw"] = labels
+        result[f"{name}_models_canonical"] = sorted(set(labels))
+    if not raw["assistant"]:
+        result["model_categories_valid"] = False
+    return result
+
+
+def summarize_temporal_review_v7_stream(events: list[dict[str, Any]]) -> dict[str, object]:
+    """Keep V7 raw identity evidence without changing historical summarization."""
+    return {
+        **summarize_stream(events, TEMPORAL_REVIEW_V7_ADDITIVE_SURFACE),
+        **_v7_model_categories(events),
+    }
+
+
 def _valid_payload(payload: object, *, require_trust: bool) -> bool:
     expected_fields = {"candidates", "trust"} if require_trust else {"candidates"}
     if not isinstance(payload, dict) or set(payload) != expected_fields:
@@ -1400,6 +1454,23 @@ def _load_temporal_review_v6_module() -> Any:
 def _load_temporal_review_v6_contract(task_id: str) -> object:
     return _load_temporal_review_v6_module().contract(task_id)
 
+
+def _load_temporal_review_v7_module() -> Any:
+    """Load the independent v7 one-locus navigation contract."""
+    path = Path(__file__).resolve().parents[1] / "temporal_review_v7_fixtures.py"
+    repo_root = str(path.parents[1])
+    if repo_root not in sys.path:
+        sys.path.insert(0, repo_root)
+    spec = importlib.util.spec_from_file_location("temporal_review_v7_fixtures_runtime", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("cannot load temporal-review v7 fixture contract")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+def _load_temporal_review_v7_contract(task_id: str) -> object:
+    return _load_temporal_review_v7_module().contract(task_id)
 
 def _temporal_review_trust_matches_raw(payload: object, observation: object) -> bool:
     if not isinstance(payload, dict) or not isinstance(observation, dict):
@@ -1983,6 +2054,154 @@ def build_temporal_review_v6_packet(
     }
 
 
+def build_temporal_review_v7_packet(
+    *,
+    condition: str,
+    use_mode: str,
+    source_clean: bool,
+    source_dir: Path,
+    return_code: int,
+    summary: dict[str, object],
+    contract: object,
+    requested_model: str = "",
+    agent_execution_seconds: float | None = None,
+) -> dict[str, Any]:
+    """Build independent one-locus v7 evidence from the retained raw stream."""
+    module = _load_temporal_review_v7_module()
+    task_id = getattr(contract, "task_id", None)
+    if not isinstance(task_id, str):
+        raise ValueError("temporal-review v7 contract must declare task_id")
+    payload = summary.get("payload")
+    tool_names = summary.get("tool_names")
+    if not isinstance(tool_names, list) or not all(isinstance(name, str) for name in tool_names):
+        tool_names = []
+    unexpected = summary.get("unexpected_mcp_tools")
+    if not isinstance(unexpected, list) or not all(isinstance(name, str) for name in unexpected):
+        unexpected = []
+    raw_events = summary.get("raw_branch_diff_events")
+    if not isinstance(raw_events, list):
+        raw_events = []
+    parsed_events = [
+        {**event, "observation": module.parse_raw_response(task_id, event.get("raw_response"))}
+        for event in raw_events
+        if isinstance(event, dict)
+    ]
+    final_result_event_index = summary.get("final_result_event_index")
+    eligible_events = [
+        event for event in parsed_events
+        if isinstance(final_result_event_index, int)
+        and isinstance(event.get("stream_event_index"), int)
+        and event["stream_event_index"] < final_result_event_index
+    ]
+    valid_events = [
+        event for event in eligible_events
+        if isinstance(event.get("observation"), dict) and event["observation"].get("valid") is True
+    ]
+    selected = valid_events[-1] if condition == "treatment" and valid_events else None
+    if condition == "baseline":
+        outcome = module.evaluate_answer(task_id, payload, condition=condition, source_root=source_dir)
+    elif selected is not None:
+        outcome = module.evaluate_answer(
+            task_id,
+            payload,
+            condition=condition,
+            source_root=source_dir,
+            raw_response=selected.get("raw_response"),
+        )
+    else:
+        outcome = None
+    answer_oracle = {"passed": bool(outcome.passed), "failures": list(outcome.failures)} if outcome else None
+    selected_observation = selected.get("observation") if isinstance(selected, dict) else None
+    certificate = (
+        {
+            "selected_raw_event_index": selected.get("stream_event_index"),
+            "tool_use_id": selected.get("tool_use_id"),
+            "raw_sha256": selected.get("raw_sha256"),
+            "comparison": selected_observation.get("comparison"),
+            "raw_valid": True,
+            "source": "adapter_raw_branch_diff",
+        }
+        if isinstance(selected, dict) and isinstance(selected_observation, dict)
+        else None
+    )
+    invalid_reason: str | None = None
+    hard_protocol_stop = False
+    model_categories_valid = summary.get("model_categories_valid") is True
+    if not source_clean:
+        status, invalid_reason, hard_protocol_stop = "invalid_source_mutation", "source_mutation", True
+    elif return_code != 0:
+        status, invalid_reason, hard_protocol_stop = "agent_error", "agent_return_code_nonzero", True
+    elif summary.get("final_result_seen") is not True or not isinstance(payload, dict):
+        status, invalid_reason = "missing_or_invalid_agent_response", "temporal_schema_invalid"
+    elif not model_categories_valid:
+        status, invalid_reason, hard_protocol_stop = (
+            "invalid_model_identity_evidence", "model_identity_raw_labels_invalid", True
+        )
+    elif unexpected:
+        status, invalid_reason, hard_protocol_stop = "unexpected_mcp_tool", "unexpected_mcp_tool", True
+    elif condition == "treatment" and not raw_events:
+        status, invalid_reason, hard_protocol_stop = "missing_treatment_comparison_evidence", "no_branch_diff_response", True
+    elif condition == "treatment" and len(eligible_events) != len(parsed_events):
+        status, invalid_reason, hard_protocol_stop = (
+            "invalid_treatment_comparison_certificate", "branch_diff_response_after_final_result", True
+        )
+    elif condition == "treatment" and len(valid_events) != len(eligible_events):
+        status, invalid_reason, hard_protocol_stop = (
+            "invalid_treatment_comparison_certificate", "raw_ref_backend_or_l2_mismatch", True
+        )
+    elif condition == "treatment" and selected is None:
+        status, invalid_reason, hard_protocol_stop = (
+            "missing_treatment_comparison_evidence", "no_valid_branch_diff_response", True
+        )
+    elif answer_oracle is None or answer_oracle["passed"] is not True:
+        status, invalid_reason = "task_review_oracle_failed", "task_specific_oracle_mismatch"
+    else:
+        status = "complete"
+    return {
+        "schema_version": 1,
+        "protocol": TEMPORAL_REVIEW_V7_ADDITIVE_SURFACE,
+        "status": status,
+        "invalid_reason": invalid_reason,
+        "hard_protocol_stop": hard_protocol_stop,
+        "condition": condition,
+        "orientation_mode": use_mode,
+        "navigation_surface": TEMPORAL_REVIEW_V7_ADDITIVE_SURFACE,
+        "source_clean": source_clean,
+        "source_clean_scope": "model_phase",
+        "response_format": "json_schema",
+        "semantic_packet": status == "complete",
+        "decision": payload.get("decision") if isinstance(payload, dict) else None,
+        "review_locus": payload.get("review_locus") if isinstance(payload, dict) else None,
+        "trust_observation": {
+            "raw_branch_diff_events": parsed_events,
+            "valid_raw_branch_diff_count": len(valid_events),
+            "selected_certificate": certificate,
+        },
+        "task_review_observation": answer_oracle,
+        "tool_call_count": len(tool_names),
+        "tool_call_names": tool_names,
+        "agent_execution_seconds": agent_execution_seconds,
+        "model": {
+            "requested": requested_model,
+            "observed": summary.get("observed_models", []),
+            "assistant_models_raw": summary.get("assistant_models_raw", []),
+            "session_models_raw": summary.get("session_models_raw", []),
+            "usage_models_raw": summary.get("usage_models_raw", []),
+            "assistant_models_canonical": summary.get("assistant_models_canonical", []),
+            "session_models_canonical": summary.get("session_models_canonical", []),
+            "usage_models_canonical": summary.get("usage_models_canonical", []),
+            "raw_categories_valid": model_categories_valid,
+        },
+        "tooling": {
+            "loomgraph": {
+                "used": TEMPORAL_MCP_TOOL in tool_names,
+                "tools": [name for name in tool_names if name == TEMPORAL_MCP_TOOL],
+                "unexpected_tools": unexpected,
+            }
+        },
+    }
+
+
 def build_temporal_review_v2_packet(
     *,
     condition: str,
@@ -2332,6 +2551,7 @@ def run(args: argparse.Namespace) -> int:
     temporal_review_v4_contract: object | None = None
     temporal_review_v5_contract: object | None = None
     temporal_review_v6_contract: object | None = None
+    temporal_review_v7_contract: object | None = None
     if args.temporal_review_contract:
         if args.treatment_surface != TEMPORAL_REVIEW_ADDITIVE_SURFACE:
             raise ValueError("temporal-review contract requires the temporal-review-additive surface")
@@ -2372,9 +2592,22 @@ def run(args: argparse.Namespace) -> int:
         if args.treatment_surface != TEMPORAL_REVIEW_V6_ADDITIVE_SURFACE:
             raise ValueError("temporal-review v6 contract requires the v6 navigation-evidence surface")
         temporal_review_v6_contract = _load_temporal_review_v6_contract(args.task_id)
+    if args.temporal_review_v7_contract:
+        if any((
+            args.temporal_review_contract,
+            args.temporal_review_v2_contract,
+            args.temporal_review_v3_contract,
+            args.temporal_review_v4_contract,
+            args.temporal_review_v5_contract,
+            args.temporal_review_v6_contract,
+        )):
+            raise ValueError("temporal-review contracts are mutually exclusive")
+        if args.treatment_surface != TEMPORAL_REVIEW_V7_ADDITIVE_SURFACE:
+            raise ValueError("temporal-review v7 contract requires the v7 primary-navigation surface")
+        temporal_review_v7_contract = _load_temporal_review_v7_contract(args.task_id)
 
     instruction = _append_mode_requirement(args.instruction_file.read_text(), args.use_mode)
-    if temporal_review_v6_contract is not None:
+    if temporal_review_v7_contract is not None or temporal_review_v6_contract is not None:
         instruction = _append_temporal_review_v6_requirement(instruction, args.condition)
     elif temporal_review_v5_contract is not None:
         instruction = _append_temporal_review_v5_requirement(instruction, args.condition)
@@ -2399,6 +2632,7 @@ def run(args: argparse.Namespace) -> int:
         temporal_review_v4=temporal_review_v4_contract is not None,
         temporal_review_v5=temporal_review_v5_contract is not None,
         temporal_review_v6=temporal_review_v6_contract is not None,
+        temporal_review_v7=temporal_review_v7_contract is not None,
     )
     _write_json(output_dir / "command.json", command)
 
@@ -2426,8 +2660,30 @@ def run(args: argparse.Namespace) -> int:
 
     after = _repo_state(source_dir)
     source_clean = before == after and not after["porcelain"]
-    summary = summarize_stream(events, args.treatment_surface)
-    if args.treatment_surface == TEMPORAL_REVIEW_V6_ADDITIVE_SURFACE:
+    summary = (
+        summarize_temporal_review_v7_stream(events)
+        if args.treatment_surface == TEMPORAL_REVIEW_V7_ADDITIVE_SURFACE
+        else summarize_stream(events, args.treatment_surface)
+    )
+    if args.treatment_surface == TEMPORAL_REVIEW_V7_ADDITIVE_SURFACE:
+        if temporal_review_v7_contract is None:
+            raise ValueError("temporal-review v7 surface requires a temporal-review v7 contract")
+        packet = build_temporal_review_v7_packet(
+            condition=args.condition,
+            use_mode=args.use_mode,
+            source_clean=source_clean,
+            source_dir=source_dir,
+            return_code=return_code,
+            summary=summary,
+            contract=temporal_review_v7_contract,
+            requested_model=args.model,
+            agent_execution_seconds=agent_execution_seconds,
+        )
+        packet["adapter_storage"] = {
+            "root": str(storage_root),
+            "db_path_pattern": str(storage_root / "{workspace}.db"),
+        }
+    elif args.treatment_surface == TEMPORAL_REVIEW_V6_ADDITIVE_SURFACE:
         if temporal_review_v6_contract is None:
             raise ValueError("temporal-review v6 surface requires a temporal-review v6 contract")
         packet = build_temporal_review_v6_packet(
@@ -2601,6 +2857,7 @@ def main() -> int:
             TEMPORAL_REVIEW_V4_ADDITIVE_SURFACE,
             TEMPORAL_REVIEW_V5_ADDITIVE_SURFACE,
             TEMPORAL_REVIEW_V6_ADDITIVE_SURFACE,
+            TEMPORAL_REVIEW_V7_ADDITIVE_SURFACE,
         ),
         default="mcp-only",
         help="Treatment navigation surface; baseline is always text-only.",
@@ -2643,6 +2900,11 @@ def main() -> int:
         "--temporal-review-v6-contract",
         action="store_true",
         help="Load the independent v6 one-locus navigation-evidence contract.",
+    )
+    parser.add_argument(
+        "--temporal-review-v7-contract",
+        action="store_true",
+        help="Load the independent v7 one-locus primary-navigation contract.",
     )
     return run(parser.parse_args())
 

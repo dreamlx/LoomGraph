@@ -1,0 +1,16 @@
+请审查一个历史代码变更，并只选择当前源码中一个最主要、需要复核的实现位置。
+
+比较别名：v7-base..v7-head
+backend：codeindex
+
+只选择一个主要位置；不要列替代项、调用方、相邻实现或第二个位置。提交前确认 path 与 qualname 能在当前源码解析。path 必须是仓库相对路径；qualname 只可由函数、异步函数和类名以 `.` 连接；不要使用 `::`、模块全限定名、变量名或解释性短语。
+
+decision.boundary 只能是 comparison_not_observed、content_comparison_available 或 content_comparison_unavailable。
+
+不要逐值转录工具返回的比较对象、ref、backend、provisioning、status、reason、availability 或证据类别；只用闭合的 decision.boundary 表示比较边界。
+
+只输出一个 JSON 对象，顶层字段只能是 decision、review_locus：
+{
+  "decision": {"boundary": "...", "rationale": "..."},
+  "review_locus": {"path": "...", "qualname": "...", "rationale": "..."}
+}

@@ -1,0 +1,89 @@
+{
+  "schema_version": 7,
+  "manifest_id": "loomgraph-temporal-review-v7-primary-navigation-evidence",
+  "repository": "loomgraph",
+  "task_class": "temporal-review-v7",
+  "selection_preflight_sha256": "a0fd6d6030f556cea344cc07f6f102ef01cc6d5dd7cda34f223bb22fbfdbbc75",
+  "cohort_lineage": {
+    "cohort_id": "temporal-review-v7",
+    "independent_from": "loomgraph-temporal-review-v6-primary-navigation-evidence",
+    "source_comparisons": "same_frozen_history_independent_same-source-contrast",
+    "predecessor_evidence": "archive_only_not_rerun_rescored_or_pooled"
+  },
+  "answer_schema": {
+    "top_level_fields": ["decision", "review_locus"],
+    "decision_fields": ["boundary", "rationale"],
+    "decision_boundaries": [
+      "comparison_not_observed",
+      "content_comparison_available",
+      "content_comparison_unavailable"
+    ],
+    "review_locus_fields": ["path", "qualname", "rationale"],
+    "scored_model_fields": [
+      "decision.boundary",
+      "review_locus.path",
+      "review_locus.qualname"
+    ]
+  },
+  "fixture_exclusion_globs": [
+    "CHANGELOG.md",
+    "customers/CHANGELOG.md",
+    "docs/evals/**",
+    "tests/**",
+    "evals/**"
+  ],
+  "tasks": [
+    {
+      "id": "v7-impact-caller-qualification-primary-navigation",
+      "task_class": "temporal-review-v7",
+      "instruction_file": "temporal-review-v7-instructions/v7-impact-caller-qualification-primary-navigation.txt",
+      "refs": {
+        "base": {"alias": "v7-base", "commit_sha": "8e49e067671445c0d6aecb82b3d61c51f78b6069"},
+        "head": {"alias": "v7-head", "commit_sha": "d6ae4e3bb97efa7c3d8024d2899d24e75308212b"}
+      },
+      "backend": "codeindex",
+      "expected_comparison": {
+        "status": "available",
+        "reason": null,
+        "version": 1,
+        "scope": "same_backend_only",
+        "base_backend": "codeindex",
+        "head_backend": "codeindex"
+      },
+      "oracle": {
+        "required_review_locus": {
+          "path": "src/loomgraph/core/impact/analyzer.py",
+          "qualname": "ImpactAnalyzer._find_callers",
+          "evidence_kind": {"baseline": "source_text", "treatment": "content_delta"}
+        },
+        "boundary": {"baseline": "comparison_not_observed", "treatment": "content_comparison_available"}
+      }
+    },
+    {
+      "id": "v7-working-tree-diff-default-primary-navigation",
+      "task_class": "temporal-review-v7",
+      "instruction_file": "temporal-review-v7-instructions/v7-working-tree-diff-default-primary-navigation.txt",
+      "refs": {
+        "base": {"alias": "v7-base", "commit_sha": "a2f7c100f99486848b6db17f3b12e1db0356d4d0"},
+        "head": {"alias": "v7-head", "commit_sha": "e87b1eb11f8f272d52b306c3931a00b6138d00f8"}
+      },
+      "backend": "codeindex",
+      "expected_comparison": {
+        "status": "available",
+        "reason": null,
+        "version": 1,
+        "scope": "same_backend_only",
+        "base_backend": "codeindex",
+        "head_backend": "codeindex"
+      },
+      "oracle": {
+        "required_review_locus": {
+          "path": "src/loomgraph/core/git.py",
+          "qualname": "get_changed_files",
+          "evidence_kind": {"baseline": "source_text", "treatment": "content_delta"}
+        },
+        "boundary": {"baseline": "comparison_not_observed", "treatment": "content_comparison_available"}
+      }
+    }
+  ]
+}
