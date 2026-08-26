@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib.util
 import json
 import subprocess
@@ -22,6 +23,7 @@ LOOMGRAPH_SERVER_TOOLS = ["loomgraph_find", "loomgraph_graph"]
 TEMPORAL_ADDITIVE_SURFACE = "temporal-additive"
 TEMPORAL_REVIEW_ADDITIVE_SURFACE = "temporal-review-additive"
 TEMPORAL_REVIEW_V2_ADDITIVE_SURFACE = "temporal-review-v2-additive"
+TEMPORAL_REVIEW_V3_ADDITIVE_SURFACE = "temporal-review-v3-adapter-trust"
 TEMPORAL_MCP_TOOL = "mcp__loomgraph__loomgraph_branch_diff"
 TEMPORAL_SERVER_TOOL = "loomgraph_branch_diff"
 TEMPORAL_MCP_TOOLS = [TEMPORAL_MCP_TOOL]
@@ -237,6 +239,47 @@ TEMPORAL_REVIEW_V2_ORIENTATION_SCHEMA: dict[str, Any] = {
         "trust": TEMPORAL_ORIENTATION_SCHEMA["properties"]["trust"],
     },
 }
+TEMPORAL_REVIEW_V3_ORIENTATION_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["decision", "review_loci"],
+    "properties": {
+        "decision": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["outcome", "boundary", "rationale"],
+            "properties": {
+                "outcome": {
+                    "type": "string",
+                    "enum": ["review_required", "review_required_with_uncertainty"],
+                },
+                "boundary": {
+                    "type": "string",
+                    "enum": [
+                        "comparison_not_observed",
+                        "content_comparison_available",
+                        "content_comparison_unavailable",
+                    ],
+                },
+                "rationale": {"type": "string", "minLength": 1},
+            },
+        },
+        "review_loci": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["path", "qualname", "rationale"],
+                "properties": {
+                    "path": {"type": "string", "minLength": 1},
+                    "qualname": {"type": "string", "minLength": 1},
+                    "rationale": {"type": "string", "minLength": 1},
+                },
+            },
+        },
+    },
+}
 
 
 def _compact_json(value: object) -> str:
@@ -248,6 +291,7 @@ def _is_temporal_surface(treatment_surface: str | None) -> bool:
         TEMPORAL_ADDITIVE_SURFACE,
         TEMPORAL_REVIEW_ADDITIVE_SURFACE,
         TEMPORAL_REVIEW_V2_ADDITIVE_SURFACE,
+        TEMPORAL_REVIEW_V3_ADDITIVE_SURFACE,
     }
 
 
@@ -263,6 +307,7 @@ def build_command(
     storage_root: Path | None = None,
     temporal_review: bool = False,
     temporal_review_v2: bool = False,
+    temporal_review_v3: bool = False,
 ) -> list[str]:
     """Build an isolated Claude invocation for exactly one condition."""
     command = [
@@ -285,7 +330,9 @@ def build_command(
         budget_usd,
         "--json-schema",
         _compact_json(
-            TEMPORAL_REVIEW_V2_ORIENTATION_SCHEMA
+            TEMPORAL_REVIEW_V3_ORIENTATION_SCHEMA
+            if temporal_review_v3
+            else TEMPORAL_REVIEW_V2_ORIENTATION_SCHEMA
             if temporal_review_v2
             else TEMPORAL_REVIEW_ORIENTATION_SCHEMA
             if temporal_review
@@ -308,6 +355,7 @@ def build_command(
             TEMPORAL_ADDITIVE_SURFACE,
             TEMPORAL_REVIEW_ADDITIVE_SURFACE,
             TEMPORAL_REVIEW_V2_ADDITIVE_SURFACE,
+            TEMPORAL_REVIEW_V3_ADDITIVE_SURFACE,
         }:
             raise ValueError(f"unknown treatment surface: {treatment_surface}")
         if _is_temporal_surface(treatment_surface):
@@ -674,7 +722,8 @@ def summarize_stream(
 
     structural_retrievals: list[dict[str, str]] = []
     raw_branch_diff_responses: list[dict[str, Any]] = []
-    for event in events:
+    raw_branch_diff_events: list[dict[str, Any]] = []
+    for event_index, event in enumerate(events):
         message = event.get("message")
         if not isinstance(message, dict):
             continue
@@ -696,6 +745,16 @@ def summarize_stream(
                 for result_item in result_items:
                     text = result_item.get("text") if isinstance(result_item, dict) else result_item
                     result = _decode_json_object(text)
+                    raw_text = text if isinstance(text, str) else _compact_json({"content": text})
+                    raw_branch_diff_events.append(
+                        {
+                            "stream_event_index": event_index,
+                            "tool_use_id": tool_id,
+                            "raw_json_text": raw_text,
+                            "raw_response": result,
+                            "raw_sha256": hashlib.sha256(raw_text.encode("utf-8")).hexdigest(),
+                        }
+                    )
                     if result is not None:
                         raw_branch_diff_responses.append(result)
                 continue
@@ -732,7 +791,9 @@ def summarize_stream(
     payload: dict[str, Any] | None = None
     final_result: dict[str, Any] | None = None
     final_result_seen = False
-    for event in reversed(events):
+    final_result_event_index: int | None = None
+    for event_index in range(len(events) - 1, -1, -1):
+        event = events[event_index]
         if event.get("type") != "result":
             continue
         final_result_seen = True
@@ -741,6 +802,7 @@ def summarize_stream(
         structured = event.get("structured_output")
         if isinstance(structured, dict):
             payload = structured
+            final_result_event_index = event_index
             break
         result = event.get("result")
         if not isinstance(result, str):
@@ -751,6 +813,7 @@ def summarize_stream(
             continue
         if isinstance(decoded, dict):
             payload = decoded
+            final_result_event_index = event_index
             break
 
     for event in events:
@@ -769,6 +832,7 @@ def summarize_stream(
     )
     return {
         "final_result_seen": final_result_seen,
+        "final_result_event_index": final_result_event_index,
         "final_result": final_result,
         "payload": payload,
         "tool_names": tool_names,
@@ -796,6 +860,7 @@ def summarize_stream(
         "session_models": session_models,
         "usage_models": usage_models,
         "raw_branch_diff_responses": raw_branch_diff_responses,
+        "raw_branch_diff_events": raw_branch_diff_events,
         "temporal_branch_diff_observations": [
             parse_temporal_branch_diff_response(response) for response in raw_branch_diff_responses
         ],
@@ -1126,6 +1191,25 @@ def _load_temporal_review_v2_contract(task_id: str) -> object:
     return _load_temporal_review_v2_module().contract(task_id)
 
 
+def _load_temporal_review_v3_module() -> Any:
+    """Load the independent v3 adapter-observed review contract."""
+    path = Path(__file__).resolve().parents[1] / "temporal_review_v3_fixtures.py"
+    repo_root = str(path.parents[1])
+    if repo_root not in sys.path:
+        sys.path.insert(0, repo_root)
+    spec = importlib.util.spec_from_file_location("temporal_review_v3_fixtures_runtime", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("cannot load temporal-review v3 fixture contract")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _load_temporal_review_v3_contract(task_id: str) -> object:
+    return _load_temporal_review_v3_module().contract(task_id)
+
+
 def _temporal_review_trust_matches_raw(payload: object, observation: object) -> bool:
     if not isinstance(payload, dict) or not isinstance(observation, dict):
         return False
@@ -1135,6 +1219,177 @@ def _temporal_review_trust_matches_raw(payload: object, observation: object) -> 
         and trust.get("availability") == "available"
         and trust.get("comparison") == observation.get("comparison")
     )
+
+
+def build_temporal_review_v3_packet(
+    *,
+    condition: str,
+    use_mode: str,
+    source_clean: bool,
+    source_dir: Path,
+    return_code: int,
+    summary: dict[str, object],
+    contract: object,
+    requested_model: str = "",
+    agent_execution_seconds: float | None = None,
+) -> dict[str, Any]:
+    """Build v3 evidence without asking the model to transcribe raw trust.
+
+    The selected event is the last fully validated branch-diff response.  Its
+    identity, raw bytes hash, comparison and semantic replay form one adapter
+    certificate; evidence from different calls is never combined.
+    """
+    module = _load_temporal_review_v3_module()
+    task_id = getattr(contract, "task_id", None)
+    if not isinstance(task_id, str):
+        raise ValueError("temporal-review v3 contract must declare task_id")
+    payload = summary.get("payload")
+    tool_names = summary.get("tool_names")
+    if not isinstance(tool_names, list) or not all(isinstance(name, str) for name in tool_names):
+        tool_names = []
+    unexpected = summary.get("unexpected_mcp_tools")
+    if not isinstance(unexpected, list) or not all(isinstance(name, str) for name in unexpected):
+        unexpected = []
+    raw_events = summary.get("raw_branch_diff_events")
+    if not isinstance(raw_events, list):
+        raw_events = []
+    parsed_events: list[dict[str, Any]] = []
+    for event in raw_events:
+        if not isinstance(event, dict):
+            continue
+        raw = event.get("raw_response")
+        observation = module.parse_raw_response(task_id, raw)
+        parsed_events.append({**event, "observation": observation})
+    final_result_event_index = summary.get("final_result_event_index")
+    if not isinstance(final_result_event_index, int):
+        final_result_event_index = None
+    eligible_events = [
+        event
+        for event in parsed_events
+        if final_result_event_index is not None
+        and isinstance(event.get("stream_event_index"), int)
+        and event["stream_event_index"] < final_result_event_index
+    ]
+    valid_events = [
+        event
+        for event in eligible_events
+        if isinstance(event.get("observation"), dict)
+        and event["observation"].get("valid") is True
+    ]
+    selected = valid_events[-1] if condition == "treatment" and valid_events else None
+    selected_raw = selected.get("raw_response") if isinstance(selected, dict) else None
+    selected_observation = selected.get("observation") if isinstance(selected, dict) else None
+    if condition == "baseline":
+        outcome = module.evaluate_answer(
+            task_id, payload, condition=condition, source_root=source_dir
+        )
+    elif selected is not None:
+        outcome = module.evaluate_answer(
+            task_id,
+            payload,
+            condition=condition,
+            source_root=source_dir,
+            raw_response=selected_raw,
+        )
+    else:
+        outcome = None
+    answer_oracle = (
+        {"passed": bool(outcome.passed), "failures": list(outcome.failures)}
+        if outcome is not None
+        else None
+    )
+    certificate = None
+    if isinstance(selected, dict) and isinstance(selected_observation, dict):
+        certificate = {
+            "selected_raw_event_index": selected.get("stream_event_index"),
+            "tool_use_id": selected.get("tool_use_id"),
+            "raw_sha256": selected.get("raw_sha256"),
+            "comparison": selected_observation.get("comparison"),
+            "raw_valid": True,
+            "source": "adapter_raw_branch_diff",
+        }
+    invalid_reason: str | None = None
+    hard_protocol_stop = False
+    if not source_clean:
+        status, invalid_reason, hard_protocol_stop = (
+            "invalid_source_mutation",
+            "source_mutation",
+            True,
+        )
+    elif return_code != 0:
+        status, invalid_reason, hard_protocol_stop = "agent_error", "agent_return_code_nonzero", True
+    elif summary.get("final_result_seen") is not True or not isinstance(payload, dict):
+        status, invalid_reason = "missing_or_invalid_agent_response", "temporal_schema_invalid"
+    elif len(tool_names) > TOOL_CALL_BUDGET:
+        status, invalid_reason, hard_protocol_stop = (
+            "tool_call_budget_exceeded",
+            "tool_call_budget_exceeded",
+            True,
+        )
+    elif unexpected:
+        status, invalid_reason, hard_protocol_stop = "unexpected_mcp_tool", "unexpected_mcp_tool", True
+    elif condition == "treatment" and not raw_events:
+        status, invalid_reason, hard_protocol_stop = (
+            "missing_treatment_comparison_evidence",
+            "no_branch_diff_response",
+            True,
+        )
+    elif condition == "treatment" and len(eligible_events) != len(parsed_events):
+        status, invalid_reason, hard_protocol_stop = (
+            "invalid_treatment_comparison_certificate",
+            "branch_diff_response_after_final_result",
+            True,
+        )
+    elif condition == "treatment" and len(valid_events) != len(eligible_events):
+        status, invalid_reason, hard_protocol_stop = (
+            "invalid_treatment_comparison_certificate",
+            "raw_ref_backend_or_l2_mismatch",
+            True,
+        )
+    elif condition == "treatment" and selected is None:
+        status, invalid_reason, hard_protocol_stop = (
+            "missing_treatment_comparison_evidence",
+            "no_valid_branch_diff_response",
+            True,
+        )
+    elif answer_oracle is None or answer_oracle["passed"] is not True:
+        status, invalid_reason = "task_review_oracle_failed", "task_specific_oracle_mismatch"
+    else:
+        status = "complete"
+    return {
+        "schema_version": 1,
+        "protocol": TEMPORAL_REVIEW_V3_ADDITIVE_SURFACE,
+        "status": status,
+        "invalid_reason": invalid_reason,
+        "hard_protocol_stop": hard_protocol_stop,
+        "condition": condition,
+        "orientation_mode": use_mode,
+        "navigation_surface": TEMPORAL_REVIEW_V3_ADDITIVE_SURFACE,
+        "source_clean": source_clean,
+        "source_clean_scope": "model_phase",
+        "response_format": "json_schema",
+        "semantic_packet": status == "complete",
+        "decision": payload.get("decision") if isinstance(payload, dict) else None,
+        "review_loci": payload.get("review_loci", []) if isinstance(payload, dict) else [],
+        "trust_observation": {
+            "raw_branch_diff_events": parsed_events,
+            "valid_raw_branch_diff_count": len(valid_events),
+            "selected_certificate": certificate,
+        },
+        "task_review_observation": answer_oracle,
+        "tool_call_count": len(tool_names),
+        "tool_call_budget": TOOL_CALL_BUDGET,
+        "tool_call_budget_overrun": len(tool_names) > TOOL_CALL_BUDGET,
+        "agent_execution_seconds": agent_execution_seconds,
+        "model": {"requested": requested_model, "observed": summary.get("observed_models", [])},
+        "tooling": {
+            "loomgraph": {
+                "used": TEMPORAL_MCP_TOOL in tool_names,
+                "tools": [name for name in tool_names if name == TEMPORAL_MCP_TOOL],
+                "unexpected_tools": unexpected,
+            }
+        },
+    }
 
 
 def build_temporal_review_v2_packet(
@@ -1400,6 +1655,22 @@ def _append_temporal_protocol_requirement(instruction: str, condition: str) -> s
     raise ValueError(f"unknown condition: {condition}")
 
 
+def _append_temporal_review_v3_requirement(instruction: str, condition: str) -> str:
+    """Append only the v3 observable-tool rule, never raw trust fields."""
+    if condition == "baseline":
+        return (
+            f"{instruction}\n\nNo comparison tool is available in this condition. "
+            "Use at most four navigation calls; reserve one call for structured output."
+        )
+    if condition == "treatment":
+        return (
+            f"{instruction}\n\nUse the branch-diff tool before responding. Do not copy its "
+            "raw response, identifiers, backend details, provisioning, status, or reason into the "
+            "structured response. Use at most four navigation calls; reserve one call for structured output."
+        )
+    raise ValueError(f"unknown condition: {condition}")
+
+
 def _write_json(path: Path, value: object) -> None:
     path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
 
@@ -1417,6 +1688,7 @@ def run(args: argparse.Namespace) -> int:
 
     temporal_review_contract: object | None = None
     temporal_review_v2_contract: object | None = None
+    temporal_review_v3_contract: object | None = None
     if args.temporal_review_contract:
         if args.treatment_surface != TEMPORAL_REVIEW_ADDITIVE_SURFACE:
             raise ValueError("temporal-review contract requires the temporal-review-additive surface")
@@ -1427,9 +1699,17 @@ def run(args: argparse.Namespace) -> int:
         if args.treatment_surface != TEMPORAL_REVIEW_V2_ADDITIVE_SURFACE:
             raise ValueError("temporal-review v2 contract requires the temporal-review-v2-additive surface")
         temporal_review_v2_contract = _load_temporal_review_v2_contract(args.task_id)
+    if args.temporal_review_v3_contract:
+        if args.temporal_review_contract or args.temporal_review_v2_contract:
+            raise ValueError("temporal-review contracts are mutually exclusive")
+        if args.treatment_surface != TEMPORAL_REVIEW_V3_ADDITIVE_SURFACE:
+            raise ValueError("temporal-review v3 contract requires the v3 adapter-trust surface")
+        temporal_review_v3_contract = _load_temporal_review_v3_contract(args.task_id)
 
     instruction = _append_mode_requirement(args.instruction_file.read_text(), args.use_mode)
-    if _is_temporal_surface(args.treatment_surface):
+    if temporal_review_v3_contract is not None:
+        instruction = _append_temporal_review_v3_requirement(instruction, args.condition)
+    elif _is_temporal_surface(args.treatment_surface):
         instruction = _append_temporal_protocol_requirement(instruction, args.condition)
     command = build_command(
         condition=args.condition,
@@ -1442,6 +1722,7 @@ def run(args: argparse.Namespace) -> int:
         storage_root=storage_root if args.condition == "treatment" else None,
         temporal_review=temporal_review_contract is not None,
         temporal_review_v2=temporal_review_v2_contract is not None,
+        temporal_review_v3=temporal_review_v3_contract is not None,
     )
     _write_json(output_dir / "command.json", command)
 
@@ -1470,7 +1751,25 @@ def run(args: argparse.Namespace) -> int:
     after = _repo_state(source_dir)
     source_clean = before == after and not after["porcelain"]
     summary = summarize_stream(events, args.treatment_surface)
-    if args.treatment_surface == TEMPORAL_REVIEW_V2_ADDITIVE_SURFACE:
+    if args.treatment_surface == TEMPORAL_REVIEW_V3_ADDITIVE_SURFACE:
+        if temporal_review_v3_contract is None:
+            raise ValueError("temporal-review v3 surface requires a temporal-review v3 contract")
+        packet = build_temporal_review_v3_packet(
+            condition=args.condition,
+            use_mode=args.use_mode,
+            source_clean=source_clean,
+            source_dir=source_dir,
+            return_code=return_code,
+            summary=summary,
+            contract=temporal_review_v3_contract,
+            requested_model=args.model,
+            agent_execution_seconds=agent_execution_seconds,
+        )
+        packet["adapter_storage"] = {
+            "root": str(storage_root),
+            "db_path_pattern": str(storage_root / "{workspace}.db"),
+        }
+    elif args.treatment_surface == TEMPORAL_REVIEW_V2_ADDITIVE_SURFACE:
         if temporal_review_v2_contract is None:
             raise ValueError("temporal-review v2 surface requires a temporal-review v2 contract")
         packet = build_temporal_review_v2_packet(
@@ -1568,6 +1867,7 @@ def main() -> int:
             TEMPORAL_ADDITIVE_SURFACE,
             TEMPORAL_REVIEW_ADDITIVE_SURFACE,
             TEMPORAL_REVIEW_V2_ADDITIVE_SURFACE,
+            TEMPORAL_REVIEW_V3_ADDITIVE_SURFACE,
         ),
         default="mcp-only",
         help="Treatment navigation surface; baseline is always text-only.",
@@ -1590,6 +1890,11 @@ def main() -> int:
         "--temporal-review-v2-contract",
         action="store_true",
         help="Load the separately preregistered temporal-review v2 task contract.",
+    )
+    parser.add_argument(
+        "--temporal-review-v3-contract",
+        action="store_true",
+        help="Load the independent v3 adapter-observed temporal-review contract.",
     )
     return run(parser.parse_args())
 
