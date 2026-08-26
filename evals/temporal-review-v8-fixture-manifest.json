@@ -1,0 +1,103 @@
+{
+  "schema_version": 8,
+  "manifest_id": "loomgraph-temporal-review-v8-primary-navigation-evidence",
+  "repository": "loomgraph",
+  "task_class": "temporal-review-v8",
+  "selection_preflight_sha256": "729313c429f89d568d745a451782c36a699f5c4b063402842b72394aa97ba2e2",
+  "cohort_lineage": {
+    "cohort_id": "temporal-review-v8",
+    "independent_from": "loomgraph-temporal-review-v7-primary-navigation-evidence",
+    "source_comparisons": "same_frozen_history_independent_same-source-contrast",
+    "predecessor_evidence": "archive_only_not_rerun_rescored_or_pooled"
+  },
+  "runtime_identity": {
+    "required_persisted_fields": [
+      "assistant_models_raw",
+      "session_models_raw",
+      "usage_models_raw",
+      "assistant_models_canonical",
+      "session_models_canonical",
+      "usage_models_canonical",
+      "model_categories_valid"
+    ],
+    "model_categories_valid": true,
+    "comparison": "exact_per_category_canonical_lists",
+    "label_normalization": "forbidden"
+  },
+  "answer_schema": {
+    "top_level_fields": ["decision", "review_locus"],
+    "decision_fields": ["boundary", "rationale"],
+    "decision_boundaries": [
+      "comparison_not_observed",
+      "content_comparison_available",
+      "content_comparison_unavailable"
+    ],
+    "review_locus_fields": ["path", "qualname", "rationale"],
+    "scored_model_fields": [
+      "decision.boundary",
+      "review_locus.path",
+      "review_locus.qualname"
+    ]
+  },
+  "fixture_exclusion_globs": [
+    "CHANGELOG.md",
+    "customers/CHANGELOG.md",
+    "docs/evals/**",
+    "tests/**",
+    "evals/**"
+  ],
+  "tasks": [
+    {
+      "id": "v8-resolution-breakdown-persistence-primary-navigation",
+      "task_class": "temporal-review-v8",
+      "instruction_file": "temporal-review-v8-instructions/v8-resolution-breakdown-persistence-primary-navigation.txt",
+      "refs": {
+        "base": {"alias": "v8-base", "commit_sha": "2f2079167bb71ff172bd914fb9f24c220b1a70be"},
+        "head": {"alias": "v8-head", "commit_sha": "67507cfad4d2ef78662daf75eb7fba3a4a581775"}
+      },
+      "backend": "codeindex",
+      "expected_comparison": {
+        "status": "available",
+        "reason": null,
+        "version": 1,
+        "scope": "same_backend_only",
+        "base_backend": "codeindex",
+        "head_backend": "codeindex"
+      },
+      "oracle": {
+        "required_review_locus": {
+          "path": "src/loomgraph/core/graph_export_ingest.py",
+          "qualname": "persist_resolved_ratio",
+          "evidence_kind": {"baseline": "source_text", "treatment": "content_delta"}
+        },
+        "boundary": {"baseline": "comparison_not_observed", "treatment": "content_comparison_available"}
+      }
+    },
+    {
+      "id": "v8-sparse-resolution-risk-primary-navigation",
+      "task_class": "temporal-review-v8",
+      "instruction_file": "temporal-review-v8-instructions/v8-sparse-resolution-risk-primary-navigation.txt",
+      "refs": {
+        "base": {"alias": "v8-base", "commit_sha": "091e10124e9f9b05d86c6ef4133a6c43424f9fc8"},
+        "head": {"alias": "v8-head", "commit_sha": "26cd69f78a6c21ef6d6da5b8bb2ab5cb402d1c3b"}
+      },
+      "backend": "codeindex",
+      "expected_comparison": {
+        "status": "available",
+        "reason": null,
+        "version": 1,
+        "scope": "same_backend_only",
+        "base_backend": "codeindex",
+        "head_backend": "codeindex"
+      },
+      "oracle": {
+        "required_review_locus": {
+          "path": "src/loomgraph/core/impact/risk.py",
+          "qualname": "RiskAssessor.assess",
+          "evidence_kind": {"baseline": "source_text", "treatment": "content_delta"}
+        },
+        "boundary": {"baseline": "comparison_not_observed", "treatment": "content_comparison_available"}
+      }
+    }
+  ]
+}
