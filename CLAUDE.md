@@ -256,6 +256,7 @@ llm:
 | `loomgraph overview` | 项目模块概览（可 `--no-summary` 跳过 LLM） |
 | `loomgraph check` | 索引新鲜度检查（source_id vs 磁盘文件） |
 | `loomgraph impact [TARGET]` | 分析代码变更影响 |
+| `loomgraph orient --task-kind <kind> [--policy <policy>]` | Claude Code 的只读首步导航建议（不创建索引或快照） |
 | `loomgraph git-metrics` | Git 热点 / 总线因子 / 缺陷率 |
 | `loomgraph trends --entity X` | 代码复杂度趋势 |
 | `loomgraph embed-backfill` | 为无向量 workspace 补向量 |
