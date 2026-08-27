@@ -237,6 +237,7 @@ summary mode) calls the LLM; `--no-summary` skips it entirely.
 | `loomgraph debt --with-git` | Multi-dimensional debt scoring | none (reads `git log`) |
 | `loomgraph deps` | Module dependency graph | none |
 | `loomgraph impact <ref>` | Deterministic change-impact | none |
+| `loomgraph orient --task-kind <kind> [--policy <policy>]` | Read-only first-step navigation plan for Claude Code; returns native, conditional light, or temporal-review guidance without creating an index | none (reads codeindex availability and, for temporal review, git refs) |
 | `loomgraph git-metrics` | Hotspots / bus-factor / churn | none (reads `git log`) |
 | `loomgraph trends --entity X` | Code-rot trend prediction | none |
 | `loomgraph overview` | Module summaries | LLM (or `--no-summary`) |

@@ -33,6 +33,7 @@ loomgraph
 ├── deps            # 模块依赖分析
 ├── debt            # 多维度技术债务评分 (--with-git)
 ├── impact          # 变更影响分析 (git diff → affected callers)
+├── orient          # Claude Code 首步导航建议（只读，不创建索引或快照）
 ├── overview        # 项目模块概览 (--no-summary 跳过 LLM)
 ├── check           # 索引新鲜度检查 (source_id vs 磁盘文件)
 ├── git-metrics     # Git 热点 / 总线因子 / 缺陷率
@@ -131,6 +132,24 @@ codegraph 是显式的成本选择：默认最多处理 10,000 个 git tracked �
 worktree provision 最长 30 分钟；可用 `LOOMGRAPH_CODEGRAPH_MAX_FILES` 调高或
 调低文件数上限。缺少 npm CLI、超过上限或 provision 失败会返回结构化
 `CODEGRAPH_FAILED` 错误。
+
+---
+
+### `orient` — Claude Code 的只读首步导航
+
+```bash
+loomgraph orient --task-kind local|cross-file|temporal-review \
+  [--policy economy|balanced|deep] [--base-ref REF --head-ref REF]
+```
+
+`orient` 只根据显式任务类型、codeindex 可执行性和（temporal-review 时）Git ref
+生成 JSON 计划；它不调用 MCP、不创建索引、快照 workspace 或数据库，也不调用 LLM。
+`cross-file` 与 `temporal-review` 的 `availability: "conditional"` 表示本地可执行文件
+存在，但 Claude MCP surface、既有 workspace index 或后续 snapshot provisioning 尚未验证。
+
+temporal-review 必须提供可解析的 `--base-ref` 与 `--head-ref`。输出同时保留输入 ref 和
+当时解析的 SHA；后续 `branch-diff` 必须使用这些 SHA，或验证其返回的 SHA 完全一致。
+该后续调用可能创建本地 snapshot cache，和 `orient` 的只读边界不同。
 
 ---
 
