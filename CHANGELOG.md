@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add `loomgraph orient`, a read-only Claude Code first-step navigation plan
+  that reports native, conditional light, or temporal-review guidance without
+  creating an index or snapshot (#284).
+
 ### Changed
 
 - Close the v1 structural capability benchmark protocol and define the separate

@@ -65,6 +65,7 @@ from loomgraph.cli import (  # noqa: E402, F401
     _import_export,
     _indexing,
     _mcp,
+    _orientation,
     _search,
     _setup,
     _workspace,
