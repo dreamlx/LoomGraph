@@ -128,30 +128,57 @@ async def prepare_workspace_store(
 ) -> tuple[str, Any]:
     """Create GraphStore + resolve workspace with fallback.
 
-    Backend-agnostic counterpart to `prepare_workspace_client`. The store
-    is built per `settings.storage.backend`, then workspace is resolved
-    via fallback (re-creating the store if the workspace changed so the
-    underlying connection is bound to the right workspace).
+    Backend-agnostic counterpart to `prepare_workspace_client`. Candidate
+    workspaces are checked on disk before opening a store; the first existing
+    workspace with entities wins, including the main/develop/master fallback.
 
     Returns:
         (resolved_workspace, GraphStore)
     """
-    from loomgraph.storage.factory import create_graph_store
+    from loomgraph.storage.factory import create_graph_store, workspace_exists
 
     ws = get_auto_workspace(workspace)
     if ws is None:
         ws = ""
-    store = await create_graph_store(workspace=ws)
 
-    resolved = await resolve_workspace_with_fallback(ws, store, allow_fallback=True)
-    if resolved != ws:
-        # Re-create store bound to the fallback workspace
-        close = getattr(store, "close", None)
-        if close is not None:
-            await close()
-        store = await create_graph_store(workspace=resolved)
+    candidates = [ws]
+    if ":" in ws:
+        project = ws.split(":")[0]
+        candidates.extend(
+            f"{project}:{branch}"
+            for branch in ("main", "develop", "master")
+            if f"{project}:{branch}" != ws
+        )
 
-    return resolved, store
+    for candidate in candidates:
+        # A query must establish that a workspace exists before creating or
+        # opening a store: SQLite connect + schema initialization creates a
+        # file for a missing workspace (#235).
+        if not workspace_exists(candidate):
+            continue
+
+        store = await create_graph_store(workspace=candidate)
+        try:
+            resolved = await resolve_workspace_with_fallback(
+                candidate, store, allow_fallback=False
+            )
+        except click.ClickException:
+            close = getattr(store, "close", None)
+            if close is not None:
+                await close()
+            continue
+
+        if resolved != ws:
+            click.echo(
+                f"ℹ️  Workspace '{ws}' not found, using '{resolved}'",
+                err=True,
+            )
+        return resolved, store
+
+    raise click.ClickException(
+        "No workspace found for project. "
+        "Index the codebase first: loomgraph index ."
+    )
 
 
 async def read_resolution_metadata(store: Any) -> dict[str, float] | None:
