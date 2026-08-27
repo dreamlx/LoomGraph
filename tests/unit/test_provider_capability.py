@@ -118,6 +118,50 @@ def test_temporal_comparison_requires_pinned_snapshot_identity() -> None:
         load_manifest_data(manifest)
 
 
+def test_temporal_comparison_rejects_non_hex_snapshot_sha() -> None:
+    manifest = _manifest()
+    manifest["capabilities"].append(
+        {
+            "provider_id": "cbm",
+            "provider_version": "1.0.0",
+            "operation": "temporal_comparison",
+            "availability": "available",
+            "reason": None,
+            "evidence_kind": "temporal_comparison",
+            "snapshot_scope": "pinned_comparison",
+            "snapshot_identity": {
+                "base_ref": "main",
+                "base_sha": "x" * 40,
+                "head_ref": "feature",
+                "head_sha": "y" * 40,
+            },
+            "index_owner": "provider",
+            "data_scope": "local",
+            "write_authority": "none",
+        }
+    )
+
+    with pytest.raises(ProviderCapabilityContractError, match="hexadecimal Git SHAs"):
+        load_manifest_data(manifest)
+
+
+def test_available_capability_requires_a_known_version_and_local_data_scope() -> None:
+    manifest = _manifest()
+    capability = manifest["capabilities"][1]
+    capability["availability"] = "available"
+    capability["reason"] = None
+    capability["provider_version"] = " UNKNOWN "
+    capability["data_scope"] = "local"
+
+    with pytest.raises(ProviderCapabilityContractError, match="known provider version"):
+        load_manifest_data(manifest)
+
+    capability["provider_version"] = "1.0.0"
+    capability["data_scope"] = "unknown"
+    with pytest.raises(ProviderCapabilityContractError, match="local data scope"):
+        load_manifest_data(manifest)
+
+
 def test_operation_cannot_upgrade_structural_candidate_to_live_semantic() -> None:
     manifest = _manifest()
     invalid = copy.deepcopy(manifest)

@@ -73,7 +73,7 @@ def _mapping(value: object, field: str) -> dict[str, object]:
 
 
 def _string(value: object, field: str) -> str:
-    if not isinstance(value, str) or not value:
+    if not isinstance(value, str) or not value.strip():
         raise ProviderCapabilityContractError(f"{field} must be a non-empty string")
     return value
 
@@ -91,8 +91,12 @@ def _snapshot_identity(value: object) -> SnapshotIdentity:
     if set(raw) != required:
         raise ProviderCapabilityContractError("pinned snapshot identity must contain base/head refs and SHAs")
     identity = {key: _string(raw[key], f"snapshot_identity.{key}") for key in required}
-    if any(len(identity[key]) != 40 for key in ("base_sha", "head_sha")):
-        raise ProviderCapabilityContractError("pinned snapshot identity must use full Git SHAs")
+    if any(
+        len(identity[key]) != 40
+        or any(character not in "0123456789abcdefABCDEF" for character in identity[key])
+        for key in ("base_sha", "head_sha")
+    ):
+        raise ProviderCapabilityContractError("pinned snapshot identity must use full hexadecimal Git SHAs")
     return cast(SnapshotIdentity, identity)
 
 
@@ -121,6 +125,7 @@ def _parse_capability(raw: object) -> ProviderCapability:
     if evidence_kind != _OPERATION_EVIDENCE[operation]:
         raise ProviderCapabilityContractError("operation cannot claim a stronger evidence kind")
 
+    provider_version = _string(value["provider_version"], "provider_version")
     availability = cast(
         Availability, _literal(value["availability"], _AVAILABILITY, "availability")
     )
@@ -131,6 +136,8 @@ def _parse_capability(raw: object) -> ProviderCapability:
         reason: str | None = None
     else:
         reason = _string(raw_reason, "reason")
+
+    data_scope = cast(DataScope, _literal(value["data_scope"], _DATA_SCOPES, "data_scope"))
 
     snapshot_scope = cast(
         SnapshotScope, _literal(value["snapshot_scope"], _SNAPSHOT_SCOPES, "snapshot_scope")
@@ -145,6 +152,11 @@ def _parse_capability(raw: object) -> ProviderCapability:
             raise ProviderCapabilityContractError("only temporal comparison may declare a pinned snapshot")
         parsed_identity = None
 
+    if availability == "available" and provider_version.strip().casefold() == "unknown":
+        raise ProviderCapabilityContractError("available capability requires a known provider version")
+    if availability == "available" and data_scope != "local":
+        raise ProviderCapabilityContractError("available capability requires local data scope")
+
     write_authority = cast(
         WriteAuthority,
         _literal(value["write_authority"], _WRITE_AUTHORITIES, "write_authority"),
@@ -156,7 +168,7 @@ def _parse_capability(raw: object) -> ProviderCapability:
 
     return {
         "provider_id": _string(value["provider_id"], "provider_id"),
-        "provider_version": _string(value["provider_version"], "provider_version"),
+        "provider_version": provider_version,
         "operation": operation,
         "availability": availability,
         "reason": reason,
@@ -166,7 +178,7 @@ def _parse_capability(raw: object) -> ProviderCapability:
         "index_owner": cast(
             IndexOwner, _literal(value["index_owner"], _INDEX_OWNERS, "index_owner")
         ),
-        "data_scope": cast(DataScope, _literal(value["data_scope"], _DATA_SCOPES, "data_scope")),
+        "data_scope": data_scope,
         "write_authority": write_authority,
     }
 

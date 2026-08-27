@@ -10,12 +10,12 @@ consumer may promote one into another.
 
 | Field | Meaning |
 | --- | --- |
-| `provider_id` / `provider_version` | Declared provider identity, never inferred from a model or host name. |
+| `provider_id` / `provider_version` | Declared provider identity, never inferred from a model or host name; an `available` record requires a known version. |
 | `operation` | `structural_navigation`, `live_semantic`, `live_edit`, or `temporal_comparison`. |
 | `availability` / `reason` | `available`, `conditional`, or `unavailable`, with a reason whenever it is not available. |
-| `snapshot_scope` / `snapshot_identity` | A temporal comparison alone may use `pinned_comparison`, and must carry both refs and full resolved SHAs. |
+| `snapshot_scope` / `snapshot_identity` | A temporal comparison alone may use `pinned_comparison`, and must carry both refs and full resolved hexadecimal Git SHAs. |
 | `index_owner` | `loomgraph`, `provider`, or `none`; a provider-owned index must not be rebuilt automatically. |
-| `data_scope` | `local` or `unknown`; `unknown` cannot be silently treated as local. |
+| `data_scope` | `local` or `unknown`; `unknown` cannot be silently treated as local, and cannot be declared `available`. |
 | `write_authority` | Only `live_edit` may require `user_authorization`; it is never auto-selected. |
 
 The checked-in example fixture is
