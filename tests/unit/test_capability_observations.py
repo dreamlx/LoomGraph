@@ -212,6 +212,17 @@ def test_runner_requires_the_fixed_multihop_impact_chain(tmp_path) -> None:
 
 def test_deps_oracle_rejects_modules_without_fixed_typed_dependency() -> None:
     assert not _deps_oracle({"modules": ["src/cli", "src/core"], "dependencies": []})
+    assert not _deps_oracle(
+        {
+            "dependencies": [
+                {
+                    "from": "src/cli",
+                    "to": "src/core",
+                    "types": {"CALLS": 1},
+                }
+            ]
+        }
+    )
 
 
 def test_runner_requires_the_fixed_cross_module_call_dependency(tmp_path) -> None:
@@ -220,7 +231,12 @@ def test_runner_requires_the_fixed_cross_module_call_dependency(tmp_path) -> Non
     for record in records:
         data = json.loads(record["operation"]["raw_stdout"])["data"]
         assert data["dependencies"] == [
-            {"from": "src/cli", "to": "src/core", "count": 1, "types": {"CALLS": 1}}
+            {
+                "from": "src/cli",
+                "to": "src/core",
+                "count": 2,
+                "types": {"CALLS": 1, "IMPORTS": 1},
+            }
         ]
         assert record["oracle"]["passed"] is True
 

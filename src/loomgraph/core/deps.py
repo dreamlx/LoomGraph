@@ -86,7 +86,7 @@ class DepsAnalyzer:
         """Run dependency analysis.
 
         Algorithm:
-            1. Fetch all entities, build name→module mapping
+            1. Fetch all entities, build entity and module-endpoint mappings
             2. Fetch all relations, map src/tgt to modules
             3. Skip same-module relations and unmapped entities
             4. Aggregate by (src_module, tgt_module)
@@ -113,10 +113,9 @@ class DepsAnalyzer:
                         max_depth = dir_count
 
         modules_set: set[str] = set()
-        entity_module: dict[str, str] = {}
         edge_agg: dict[tuple[str, str], dict[str, Any]] = {}
         for d in range(self.depth, max_depth + 1):
-            modules_set, entity_module, edge_agg = self._analyze_at_depth(
+            modules_set, _, edge_agg = self._analyze_at_depth(
                 entities, relations, d
             )
             # Stop as soon as more than one real module (excluding the root "."
@@ -162,6 +161,7 @@ class DepsAnalyzer:
         # Build entity_name → module mapping
         # Handle both injection format (entity_name) and API response format (entity_id/id)
         entity_module: dict[str, str] = {}
+        module_endpoint: dict[str, set[str]] = defaultdict(set)
         modules_set: set[str] = set()
 
         for entity in entities:
@@ -175,6 +175,9 @@ class DepsAnalyzer:
                 continue
             module = extract_module(source_id, depth)
             entity_module[name] = module
+            endpoint, separator, _ = name.rpartition(".")
+            if separator:
+                module_endpoint[endpoint].add(module)
             modules_set.add(module)
 
         # Aggregate cross-module relations
@@ -191,6 +194,23 @@ class DepsAnalyzer:
 
             src_module = entity_module.get(src_name)
             tgt_module = entity_module.get(tgt_name)
+
+            # codeindex represents a module-level IMPORTS edge with module ids
+            # (for example ``src.cli.handler → src.core.service``), not symbol
+            # entity ids. Accept only resolved endpoints that have exactly one
+            # source-bearing module mapping.
+            # This deliberately leaves external, unresolved and ambiguous
+            # imports outside the dependency aggregate.
+            if (
+                rel_type == "IMPORTS"
+                and relation.get("resolution_qualifier") == "resolved"
+            ):
+                source_modules = module_endpoint.get(src_name, set())
+                target_modules = module_endpoint.get(tgt_name, set())
+                if src_module is None and len(source_modules) == 1:
+                    src_module = next(iter(source_modules))
+                if tgt_module is None and len(target_modules) == 1:
+                    tgt_module = next(iter(target_modules))
 
             # Skip if either entity is unmapped (external/no source_id)
             if src_module is None or tgt_module is None:

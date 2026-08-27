@@ -20,6 +20,8 @@ import pytest
 from click.testing import CliRunner
 
 from loomgraph.cli.main import main
+from loomgraph.core.deps import DepsAnalyzer
+from loomgraph.core.graph_export_ingest import ingest, run_graph_export
 from loomgraph.storage.sqlite_store import SqliteGraphStore
 
 pytestmark = pytest.mark.integration
@@ -54,6 +56,24 @@ def _seed_collision_repo(root: Path) -> None:
         + "def handle():\n"
         + "    '''other module's handle.'''\n"
         + calls
+    )
+
+
+def _seed_resolved_module_import_repo(root: Path) -> None:
+    """A real exporter fixture for #239's module-level import boundary."""
+    (root / ".codeindex.yaml").write_text("languages:\n  - python\n")
+    (root / "src" / "core").mkdir(parents=True)
+    (root / "src" / "cli").mkdir(parents=True)
+    (root / "src" / "core" / "service.py").write_text(
+        "def authenticate() -> bool:\n"
+        "    return True\n"
+    )
+    (root / "src" / "cli" / "handler.py").write_text(
+        "from src.core.service import authenticate\n"
+        "from third_party import helper\n"
+        "from src.no_source import nothing\n\n"
+        "def run() -> bool:\n"
+        "    return authenticate()\n"
     )
 
 
@@ -107,3 +127,45 @@ def test_index_then_no_phantom_handle(tmp_path: Path, monkeypatch) -> None:
         f"topology.handle callees must be its 3 local helpers, not a phantom "
         f"merged out-degree; got {topo_callees}"
     )
+
+
+def test_resolved_internal_module_import_aggregates_without_unresolved_guesses(
+    tmp_path: Path,
+) -> None:
+    """#239: real export → ingest → deps keeps only the proven module import."""
+    if importlib.util.find_spec("codeindex") is None:
+        pytest.skip("codeindex not importable in venv — e2e needs the real parser")
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _seed_resolved_module_import_repo(repo)
+    entities, relations, _, _ = run_graph_export(repo)
+
+    import_edges = [relation for relation in relations if relation.edge_data["keywords"] == "IMPORTS"]
+    assert {
+        (relation.tgt_id, relation.edge_data["resolution_qualifier"])
+        for relation in import_edges
+    } == {
+        ("src.core.service", "resolved"),
+        ("third_party", "unresolved"),
+        ("src.no_source", "unresolved"),
+    }
+
+    async def _analyze() -> dict[str, object]:
+        store = SqliteGraphStore(db_path=str(tmp_path / "deps.db"))
+        await store.initialize()
+        try:
+            await ingest(entities, relations, store, clear=True)
+            return (await DepsAnalyzer(store, depth=2, auto_depth=False).analyze()).to_dict()
+        finally:
+            await store.close()
+
+    result = asyncio.run(_analyze())
+    assert result["dependencies"] == [
+        {
+            "from": "src/cli",
+            "to": "src/core",
+            "count": 2,
+            "types": {"CALLS": 1, "IMPORTS": 1},
+        }
+    ]

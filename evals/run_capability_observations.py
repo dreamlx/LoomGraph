@@ -104,6 +104,7 @@ def _deps_oracle(data: dict[str, Any]) -> bool:
         and dependency.get("to") == "src/core"
         and isinstance(dependency.get("types"), dict)
         and dependency["types"].get("CALLS", 0) >= 1
+        and dependency["types"].get("IMPORTS", 0) >= 1
         for dependency in dependencies
         if isinstance(dependency, dict)
     )
