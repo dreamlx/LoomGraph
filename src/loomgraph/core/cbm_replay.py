@@ -78,7 +78,7 @@ def _native_fallback(reason: str) -> dict[str, object]:
     }
 
 
-def _parse_replay(raw: object) -> tuple[ProviderCapability, dict[str, str]]:
+def _parse_replay(raw: object) -> tuple[ProviderCapability, dict[str, str], str]:
     replay = _mapping(raw, "replay_schema_unknown", "replay")
     required = {"schema_version", "stratum", "provider", "source", "response_sha256", "response"}
     if set(replay) == required - {"provider"}:
@@ -98,7 +98,7 @@ def _parse_replay(raw: object) -> tuple[ProviderCapability, dict[str, str]]:
     source = _mapping(replay["source"], "source_snapshot_missing", "source")
     if set(source) != {"fixture", "input_sha256", "data_scope", "snapshot_scope"}:
         raise CBMReplayError("source_snapshot_missing", "source fields do not identify a fixture snapshot")
-    _string(source["fixture"], "source_snapshot_missing", "source.fixture")
+    fixture = _string(source["fixture"], "source_snapshot_missing", "source.fixture")
     input_sha256 = _sha256(source["input_sha256"], "source_snapshot_missing", "source.input_sha256")
     if source["data_scope"] != "local" or source["snapshot_scope"] != "provider_index":
         raise CBMReplayError("source_snapshot_missing", "source scope is not a local provider index")
@@ -154,13 +154,47 @@ def _parse_replay(raw: object) -> tuple[ProviderCapability, dict[str, str]]:
             "write_authority": "none",
         },
     )
-    return capability, {"input_sha256": input_sha256, "response_sha256": response_sha256}
+    return capability, {"input_sha256": input_sha256, "response_sha256": response_sha256}, fixture
 
 
-def replay_cbm_capability(raw: object) -> dict[str, object]:
-    """Replay one reviewed CBM response, failing closed on every mismatch."""
+def _verify_source_fixture(replay_path: Path, fixture: str, expected_sha256: str) -> None:
+    """Bind a source declaration to bytes within the saved replay artifact directory."""
+    replay_root = replay_path.resolve().parent
+    fixture_path = Path(fixture)
+    if fixture_path.is_absolute():
+        raise CBMReplayError("source_fixture_outside_replay", "source.fixture must be relative")
+
+    resolved_fixture = (replay_root / fixture_path).resolve()
     try:
-        capability, hashes = _parse_replay(raw)
+        resolved_fixture.relative_to(replay_root)
+    except ValueError:
+        raise CBMReplayError(
+            "source_fixture_outside_replay", "source.fixture must remain within the replay directory"
+        ) from None
+
+    try:
+        source_sha256 = hashlib.sha256(resolved_fixture.read_bytes()).hexdigest()
+    except OSError:
+        raise CBMReplayError("source_fixture_missing", "source.fixture cannot be read") from None
+    if source_sha256 != expected_sha256:
+        raise CBMReplayError("source_hash_mismatch", "source bytes do not match input_sha256")
+
+
+def replay_cbm_capability(
+    raw: object, *, replay_path: Path | None = None
+) -> dict[str, object]:
+    """Replay one reviewed CBM response, failing closed on every mismatch.
+
+    A provider result needs a replay artifact path so the declared source fixture can be
+    verified against its SHA-256. Raw in-memory replay records are never provider-available.
+    """
+    try:
+        capability, hashes, fixture = _parse_replay(raw)
+        if replay_path is None:
+            raise CBMReplayError(
+                "source_fixture_unverified", "replay artifact path is required to verify source bytes"
+            )
+        _verify_source_fixture(replay_path, fixture, hashes["input_sha256"])
     except CBMReplayError as error:
         return _native_fallback(error.reason)
 
@@ -185,4 +219,4 @@ def load_cbm_replay(path: Path) -> dict[str, object]:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return _native_fallback("replay_unreadable")
-    return replay_cbm_capability(raw)
+    return replay_cbm_capability(raw, replay_path=path)

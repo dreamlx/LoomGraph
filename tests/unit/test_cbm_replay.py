@@ -26,6 +26,36 @@ def _rehash_response(replay: dict[str, object]) -> None:
     ).hexdigest()
 
 
+def _write_replay_with_source(
+    tmp_path: Path,
+    *,
+    fixture: str = "source.py",
+    source_bytes: bytes | None = None,
+) -> Path:
+    source_bytes = SOURCE_PATH.read_bytes() if source_bytes is None else source_bytes
+    source_path = tmp_path / fixture
+    source_path.parent.mkdir(parents=True, exist_ok=True)
+    source_path.write_bytes(source_bytes)
+
+    replay = _replay()
+    source = replay["source"]
+    assert isinstance(source, dict)
+    source["fixture"] = fixture
+    source["input_sha256"] = hashlib.sha256(source_bytes).hexdigest()
+    replay_path = tmp_path / "replay.json"
+    replay_path.write_text(json.dumps(replay), encoding="utf-8")
+    return replay_path
+
+
+def _assert_native_unavailable(plan: dict[str, object], reason: str) -> None:
+    assert plan["availability"] == "unavailable"
+    assert plan["recommended_path"] == "native"
+    assert plan["replay"] == {"mode": "offline", "execution": "provider_not_invoked"}
+    fallback = plan["fallback"]
+    assert isinstance(fallback, dict)
+    assert fallback["reason"] == reason
+
+
 def test_verified_synthetic_replay_declares_only_cbm_structural_candidates() -> None:
     plan = load_cbm_replay(FIXTURE_PATH)
 
@@ -65,6 +95,42 @@ def test_replay_never_calls_cbm_or_opens_a_database(monkeypatch) -> None:
     monkeypatch.setattr(sqlite3, "connect", forbidden)
 
     assert load_cbm_replay(FIXTURE_PATH)["availability"] == "available"
+
+
+def test_replay_requires_an_artifact_path_to_verify_source_bytes() -> None:
+    _assert_native_unavailable(replay_cbm_capability(_replay()), "source_fixture_unverified")
+
+
+def test_source_fixture_missing_or_outside_replay_fails_closed(tmp_path: Path) -> None:
+    replay_path = _write_replay_with_source(tmp_path)
+    replay = json.loads(replay_path.read_text(encoding="utf-8"))
+    source = replay["source"]
+    assert isinstance(source, dict)
+    source["fixture"] = "missing.py"
+    replay_path.write_text(json.dumps(replay), encoding="utf-8")
+    _assert_native_unavailable(load_cbm_replay(replay_path), "source_fixture_missing")
+
+    replay_path = _write_replay_with_source(tmp_path)
+    replay = json.loads(replay_path.read_text(encoding="utf-8"))
+    source = replay["source"]
+    assert isinstance(source, dict)
+    source["fixture"] = "../outside.py"
+    replay_path.write_text(json.dumps(replay), encoding="utf-8")
+    _assert_native_unavailable(load_cbm_replay(replay_path), "source_fixture_outside_replay")
+
+
+def test_changed_source_or_declared_hash_mismatch_fails_closed(tmp_path: Path) -> None:
+    replay_path = _write_replay_with_source(tmp_path)
+    (tmp_path / "source.py").write_text("replacement\n", encoding="utf-8")
+    _assert_native_unavailable(load_cbm_replay(replay_path), "source_hash_mismatch")
+
+    replay_path = _write_replay_with_source(tmp_path)
+    replay = json.loads(replay_path.read_text(encoding="utf-8"))
+    source = replay["source"]
+    assert isinstance(source, dict)
+    source["input_sha256"] = "0" * 64
+    replay_path.write_text(json.dumps(replay), encoding="utf-8")
+    _assert_native_unavailable(load_cbm_replay(replay_path), "source_hash_mismatch")
 
 
 def test_missing_provider_version_timeout_empty_or_unknown_capability_fail_closed() -> None:
