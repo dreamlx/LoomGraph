@@ -101,6 +101,17 @@ def test_replay_requires_an_artifact_path_to_verify_source_bytes() -> None:
     _assert_native_unavailable(replay_cbm_capability(_replay()), "source_fixture_unverified")
 
 
+def test_unresolvable_replay_artifact_fails_closed(monkeypatch) -> None:
+    def unresolvable(*args: object, **kwargs: object) -> Path:
+        raise RuntimeError("symlink loop")
+
+    monkeypatch.setattr(Path, "resolve", unresolvable)
+
+    _assert_native_unavailable(
+        replay_cbm_capability(_replay(), replay_path=FIXTURE_PATH), "replay_unreadable"
+    )
+
+
 def test_source_fixture_missing_or_outside_replay_fails_closed(tmp_path: Path) -> None:
     replay_path = _write_replay_with_source(tmp_path)
     replay = json.loads(replay_path.read_text(encoding="utf-8"))

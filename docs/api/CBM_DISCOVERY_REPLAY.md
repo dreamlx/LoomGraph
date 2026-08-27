@@ -15,7 +15,8 @@ and compares the fixture's actual bytes to that SHA-256 before a provider can
 be available. `replay_cbm_capability()` without an artifact path is always
 native unavailable because it cannot establish that binding. Neither function
 executes CBM, creates an index, opens LoomGraph storage, or modifies the
-replay/source files.
+replay/source files. An unreadable replay artifact also falls back to native
+unavailable rather than bypassing source verification.
 
 On a valid replay, the envelope records:
 
@@ -28,5 +29,5 @@ On a valid replay, the envelope records:
 The adapter returns a native `unavailable` fallback for an absent provider,
 version mismatch, timeout, empty or unknown capability, missing source
 fingerprint, missing/unreadable or escaped source fixture, source-hash mismatch,
-unknown schema, or replay-hash drift. It never changes an invalid result into a
-semantic or temporal assertion.
+unreadable replay artifact, unknown schema, or replay-hash drift. It never
+changes an invalid result into a semantic or temporal assertion.

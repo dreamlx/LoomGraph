@@ -159,7 +159,10 @@ def _parse_replay(raw: object) -> tuple[ProviderCapability, dict[str, str], str]
 
 def _verify_source_fixture(replay_path: Path, fixture: str, expected_sha256: str) -> None:
     """Bind a source declaration to bytes within the saved replay artifact directory."""
-    replay_root = replay_path.resolve().parent
+    try:
+        replay_root = replay_path.resolve().parent
+    except (OSError, RuntimeError, ValueError):
+        raise CBMReplayError("replay_unreadable", "replay artifact path cannot be resolved") from None
     try:
         fixture_path = Path(fixture)
         if fixture_path.is_absolute():
