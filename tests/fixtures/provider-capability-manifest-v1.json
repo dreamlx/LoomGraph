@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "capabilities": [
+    {
+      "provider_id": "codeindex",
+      "provider_version": "builtin",
+      "operation": "structural_navigation",
+      "availability": "conditional",
+      "reason": "requires_existing_workspace_index",
+      "evidence_kind": "structural_candidate",
+      "snapshot_scope": "workspace",
+      "snapshot_identity": null,
+      "index_owner": "loomgraph",
+      "data_scope": "local",
+      "write_authority": "none"
+    },
+    {
+      "provider_id": "cbm",
+      "provider_version": "unknown",
+      "operation": "structural_navigation",
+      "availability": "conditional",
+      "reason": "provider_not_discovered",
+      "evidence_kind": "structural_candidate",
+      "snapshot_scope": "provider_index",
+      "snapshot_identity": null,
+      "index_owner": "provider",
+      "data_scope": "unknown",
+      "write_authority": "none"
+    },
+    {
+      "provider_id": "serena",
+      "provider_version": "unknown",
+      "operation": "live_semantic",
+      "availability": "conditional",
+      "reason": "provider_not_discovered",
+      "evidence_kind": "live_semantic",
+      "snapshot_scope": "working_tree",
+      "snapshot_identity": null,
+      "index_owner": "provider",
+      "data_scope": "unknown",
+      "write_authority": "none"
+    },
+    {
+      "provider_id": "serena",
+      "provider_version": "unknown",
+      "operation": "live_edit",
+      "availability": "conditional",
+      "reason": "provider_not_discovered",
+      "evidence_kind": "live_semantic",
+      "snapshot_scope": "working_tree",
+      "snapshot_identity": null,
+      "index_owner": "provider",
+      "data_scope": "unknown",
+      "write_authority": "user_authorization"
+    }
+  ]
+}

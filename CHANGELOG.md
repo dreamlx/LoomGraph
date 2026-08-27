@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `loomgraph orient`, a read-only Claude Code first-step navigation plan
   that reports native, conditional light, or temporal-review guidance without
   creating an index or snapshot (#284).
+- Add a versioned, read-only provider capability manifest contract that keeps
+  structural candidates, live semantic evidence, and temporal comparison
+  evidence distinct before any provider discovery or invocation (#287).
 
 ### Changed
 
