@@ -68,9 +68,9 @@ def test_read_only_commands_do_not_create_missing_workspace(
 
 
 async def test_auto_detected_missing_workspace_does_not_create_storage(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """A fresh Git branch follows the same no-create path as explicit ``-w``."""
+    """A fresh Git branch is explained without creating a workspace."""
     _configure_storage(tmp_path, monkeypatch)
     monkeypatch.setattr(
         "loomgraph.cli._common.get_auto_workspace",
@@ -82,8 +82,42 @@ async def test_auto_detected_missing_workspace_does_not_create_storage(
     with pytest.raises(click.ClickException, match="not found"):
         await _async_workspace_info(None, None)
 
+    assert "auto-detected as 'project:fresh-branch'" in capsys.readouterr().err
     assert list(tmp_path.glob("*.db")) == []
     assert await _workspace_names() == []
+
+
+async def test_explicit_missing_workspace_does_not_emit_auto_detection_hint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """``--workspace`` stays an explicit request, rather than an auto-detect hint."""
+    _configure_storage(tmp_path, monkeypatch)
+
+    with pytest.raises(click.ClickException, match="No workspace found"):
+        await prepare_workspace_store("project:missing")
+
+    assert capsys.readouterr().err == ""
+    assert list(tmp_path.glob("*.db")) == []
+
+
+@pytest.mark.parametrize("args", [["find", "needle"], ["workspace", "info"]])
+def test_auto_detected_missing_workspace_emits_stderr_hint(
+    args: list[str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The CLI preserves JSON stdout while explaining branch-derived misses."""
+    _configure_storage(tmp_path, monkeypatch)
+    for module in ("loomgraph.cli._common", "loomgraph.cli._workspace"):
+        monkeypatch.setattr(
+            f"{module}.get_auto_workspace",
+            lambda _workspace: "project:fresh-branch",
+        )
+
+    result = CliRunner().invoke(main, args)
+
+    assert result.exit_code == 1
+    assert json.loads(result.stdout)["success"] is False
+    assert "auto-detected as 'project:fresh-branch'" in result.stderr
+    assert list(tmp_path.glob("*.db")) == []
 
 
 async def test_existing_main_workspace_remains_a_read_only_fallback(
