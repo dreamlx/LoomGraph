@@ -1,0 +1,15 @@
+{
+  "success": true,
+  "data": {
+    "base": {"ref": "v9-base", "sha": "091e10124e9f9b05d86c6ef4133a6c43424f9fc8", "workspace": "loomgraph-v9-selection-b.0ge9en:v9-base", "provisioned": "created", "duration_seconds": 0.93},
+    "head": {"ref": "v9-head", "sha": "26cd69f78a6c21ef6d6da5b8bb2ab5cb402d1c3b", "workspace": "loomgraph-v9-selection-b.0ge9en:v9-head", "provisioned": "created", "duration_seconds": 0.86},
+    "diff": {
+      "summary": {"entities_added_total": 0, "entities_removed_total": 0, "entities_shared": 445, "edges_added_total": 0, "edges_removed_total": 0, "broken_chains_total": 0, "new_chains_total": 0, "module_changed": 0, "base_unresolved_edges": 2105, "head_unresolved_edges": 2105},
+      "graph_sizes": {"base_entities": 445, "base_relations": 2707, "head_entities": 445, "head_relations": 2707},
+      "entities_added": [], "entities_removed": [], "edges_added": [], "edges_removed": [], "broken_chains": [], "new_chains": [],
+      "content_comparison": {"version": 1, "status": "available", "scope": "same_backend_only", "base_backend": "codeindex", "head_backend": "codeindex", "comparable_shared": 445, "uncomparable_shared": 0, "changes_total": 2, "changed": [{"name": "src.loomgraph.core.impact.risk.RiskAssessor", "type": "class", "source_id": "src/loomgraph/core/impact/risk.py:45"}, {"name": "src.loomgraph.core.impact.risk.RiskAssessor.assess", "type": "method", "source_id": "src/loomgraph/core/impact/risk.py:56"}]},
+      "module_delta": []
+    },
+    "duration_seconds": 2.02
+  }
+}
