@@ -12,7 +12,7 @@ from click.testing import CliRunner
 from loomgraph.cli._common import prepare_workspace_store
 from loomgraph.cli._indexing import _async_index
 from loomgraph.cli._search import _async_find
-from loomgraph.cli._workspace import _async_workspace_list
+from loomgraph.cli._workspace import _async_workspace_info, _async_workspace_list
 from loomgraph.cli.main import main
 from loomgraph.core.config import reset_settings
 from loomgraph.storage.factory import create_graph_store
@@ -48,6 +48,7 @@ async def _workspace_names() -> list[str]:
         ["impact", "HEAD", "--workspace", "project:missing"],
         ["overview", "--no-summary", "--workspace", "project:missing"],
         ["check", "--workspace", "project:missing"],
+        ["workspace", "info", "--workspace", "project:missing"],
     ],
 )
 def test_read_only_commands_do_not_create_missing_workspace(
@@ -78,6 +79,8 @@ async def test_auto_detected_missing_workspace_does_not_create_storage(
 
     with pytest.raises(click.ClickException, match="No workspace found"):
         await prepare_workspace_store()
+    with pytest.raises(click.ClickException, match="not found"):
+        await _async_workspace_info(None, None)
 
     assert list(tmp_path.glob("*.db")) == []
     assert await _workspace_names() == []
@@ -101,6 +104,9 @@ async def test_existing_main_workspace_remains_a_read_only_fallback(
         assert direct_ws == "project:main"
     finally:
         await direct_store.close()
+
+    info = await _async_workspace_info("project:main", None)
+    assert info["entities"] == 1
 
     resolved, store = await prepare_workspace_store("project:feature")
     try:
