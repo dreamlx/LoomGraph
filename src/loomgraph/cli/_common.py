@@ -61,6 +61,22 @@ def get_auto_workspace(workspace: str | None) -> str | None:
     return ws_name
 
 
+def warn_auto_workspace_missing(
+    workspace: str | None, detected_workspace: str | None
+) -> None:
+    """Explain a missing auto-detected workspace without changing its selection."""
+    if workspace is not None or detected_workspace is None:
+        return
+
+    source = "current Git branch" if ":" in detected_workspace else "current directory"
+    click.echo(
+        f"ℹ️  Workspace auto-detected as '{detected_workspace}' ({source}) was not found. "
+        "If unexpected, switch branches or pin an indexed workspace with "
+        "--workspace <name>.",
+        err=True,
+    )
+
+
 async def resolve_workspace_with_fallback(
     workspace: str,
     store: Any,  # GraphStore
@@ -155,6 +171,8 @@ async def prepare_workspace_store(
         # opening a store: SQLite connect + schema initialization creates a
         # file for a missing workspace (#235).
         if not workspace_exists(candidate):
+            if candidate == ws:
+                warn_auto_workspace_missing(workspace, ws)
             continue
 
         store = await create_graph_store(workspace=candidate)

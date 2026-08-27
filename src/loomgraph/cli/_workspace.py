@@ -7,7 +7,13 @@ from typing import Any
 
 import click
 
-from loomgraph.cli._common import ErrorCode, get_auto_workspace, output_error, output_success
+from loomgraph.cli._common import (
+    ErrorCode,
+    get_auto_workspace,
+    output_error,
+    output_success,
+    warn_auto_workspace_missing,
+)
 from loomgraph.cli.main import main
 
 
@@ -68,6 +74,7 @@ async def _async_workspace_info(name: str | None, ws_option: str | None) -> dict
     # name argument takes priority, then -w option, then auto-detect
     ws_name = name or get_auto_workspace(ws_option)
     if ws_name is None or not workspace_exists(ws_name):
+        warn_auto_workspace_missing(ws_option if name is None else name, ws_name)
         raise click.ClickException(
             f"Workspace '{ws_name}' not found. "
             "Index the codebase first: loomgraph index ."
