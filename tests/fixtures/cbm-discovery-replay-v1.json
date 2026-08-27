@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "stratum": "claude-code-first/local-cbm-0.10.8/synthetic-fixture/read-only-structural-candidate/no-model",
+  "provider": {
+    "id": "cbm",
+    "version": "0.10.8"
+  },
+  "source": {
+    "fixture": "cbm-synthetic-source-v1.py",
+    "input_sha256": "24236fb4009f65c693919c1ce569d632aac8b415e039f3d55b14b619711f9b79",
+    "data_scope": "local",
+    "snapshot_scope": "provider_index"
+  },
+  "response_sha256": "f2a58f7f4c91396eac77425150eb7bd79a8ec6367fb60129d10325b5da57012f",
+  "response": {
+    "capabilities": [
+      "structural_navigation"
+    ],
+    "index_owner": "provider",
+    "provider_version": "0.10.8",
+    "snapshot_identity": null,
+    "snapshot_scope": "provider_index",
+    "status": "ready",
+    "write_authority": "none"
+  }
+}
