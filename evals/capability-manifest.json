@@ -49,10 +49,10 @@
       "id": "structural-typed-deps",
       "track": "B",
       "task_class": "typed cross-module dependency",
-      "question": "模块间有哪些解析出的跨模块 CALLS 依赖？",
+      "question": "模块间有哪些解析出的跨模块 CALLS/IMPORTS 依赖？",
       "rg_single_query": "unsupported",
-      "tests": ["tests/unit/test_deps.py::TestDepsAnalyzer::test_multiple_relation_types_aggregated", "tests/unit/test_capability_observations.py::test_runner_requires_the_fixed_cross_module_call_dependency"],
-      "oracle": {"from": "src/cli", "to": "src/core", "relation_types": ["CALLS"], "aggregation": "cross-module"},
+      "tests": ["tests/unit/test_deps.py::TestDepsAnalyzer::test_multiple_relation_types_aggregated", "tests/integration/test_graph_export_ingest_e2e.py::test_resolved_internal_module_import_aggregates_without_unresolved_guesses", "tests/unit/test_capability_observations.py::test_runner_requires_the_fixed_cross_module_call_dependency"],
+      "oracle": {"from": "src/cli", "to": "src/core", "relation_types": ["CALLS", "IMPORTS"], "aggregation": "cross-module"},
       "trust_fields": ["workspace", "backend", "relation_type", "resolution_qualifier", "partial", "unresolved_dependency_count"],
       "recording": {"cold": "required", "warm": "required"}
     },

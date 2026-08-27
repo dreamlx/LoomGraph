@@ -108,6 +108,41 @@ class TestDepsAnalyzer:
         assert "src/core" in result.modules
 
     @pytest.mark.asyncio
+    async def test_resolved_module_import_without_unique_source_mapping_is_skipped(
+        self, mock_client: AsyncMock
+    ) -> None:
+        """#239: module endpoints must map uniquely from source-bearing entities."""
+        mock_client.get_all_entities.return_value = [
+            {"entity_name": "src.cli.handler.run", "source_id": "src/cli/handler.py"},
+            {"entity_name": "src.core.service.authenticate", "source_id": "src/core/service.py"},
+            {"entity_name": "src.core.service.legacy", "source_id": "vendor/core/service.py"},
+        ]
+        mock_client.get_all_relations.return_value = [
+            {
+                "src_id": "src.cli.handler",
+                "tgt_id": "src.core.service",
+                "keywords": "IMPORTS",
+                "resolution_qualifier": "resolved",
+            },
+            {
+                "src_id": "src.cli.handler",
+                "tgt_id": "src.no_source",
+                "keywords": "IMPORTS",
+                "resolution_qualifier": "resolved",
+            },
+            {
+                "src_id": "src.cli.handler",
+                "tgt_id": "third_party",
+                "keywords": "IMPORTS",
+                "resolution_qualifier": "unresolved",
+            },
+        ]
+
+        result = await DepsAnalyzer(client=mock_client, depth=2).analyze()
+
+        assert result.dependencies == []
+
+    @pytest.mark.asyncio
     async def test_multiple_relation_types_aggregated(self, mock_client: AsyncMock) -> None:
         """Multiple relations between same modules should aggregate."""
         mock_client.get_all_entities.return_value = [
