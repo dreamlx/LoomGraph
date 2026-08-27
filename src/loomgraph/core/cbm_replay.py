@@ -160,11 +160,16 @@ def _parse_replay(raw: object) -> tuple[ProviderCapability, dict[str, str], str]
 def _verify_source_fixture(replay_path: Path, fixture: str, expected_sha256: str) -> None:
     """Bind a source declaration to bytes within the saved replay artifact directory."""
     replay_root = replay_path.resolve().parent
-    fixture_path = Path(fixture)
-    if fixture_path.is_absolute():
-        raise CBMReplayError("source_fixture_outside_replay", "source.fixture must be relative")
+    try:
+        fixture_path = Path(fixture)
+        if fixture_path.is_absolute():
+            raise CBMReplayError("source_fixture_outside_replay", "source.fixture must be relative")
 
-    resolved_fixture = (replay_root / fixture_path).resolve()
+        resolved_fixture = (replay_root / fixture_path).resolve()
+    except CBMReplayError:
+        raise
+    except (OSError, RuntimeError, ValueError):
+        raise CBMReplayError("source_fixture_unreadable", "source.fixture path cannot be resolved") from None
     try:
         resolved_fixture.relative_to(replay_root)
     except ValueError:
@@ -174,8 +179,10 @@ def _verify_source_fixture(replay_path: Path, fixture: str, expected_sha256: str
 
     try:
         source_sha256 = hashlib.sha256(resolved_fixture.read_bytes()).hexdigest()
-    except OSError:
+    except FileNotFoundError:
         raise CBMReplayError("source_fixture_missing", "source.fixture cannot be read") from None
+    except (OSError, RuntimeError, ValueError):
+        raise CBMReplayError("source_fixture_unreadable", "source.fixture cannot be read") from None
     if source_sha256 != expected_sha256:
         raise CBMReplayError("source_hash_mismatch", "source bytes do not match input_sha256")
 

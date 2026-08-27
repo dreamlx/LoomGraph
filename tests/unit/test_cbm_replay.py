@@ -119,6 +119,17 @@ def test_source_fixture_missing_or_outside_replay_fails_closed(tmp_path: Path) -
     _assert_native_unavailable(load_cbm_replay(replay_path), "source_fixture_outside_replay")
 
 
+def test_unreadable_source_fixture_fails_closed(tmp_path: Path) -> None:
+    replay_path = _write_replay_with_source(tmp_path)
+    replay = json.loads(replay_path.read_text(encoding="utf-8"))
+    source = replay["source"]
+    assert isinstance(source, dict)
+    source["fixture"] = "bad\x00path"
+    replay_path.write_text(json.dumps(replay), encoding="utf-8")
+
+    _assert_native_unavailable(load_cbm_replay(replay_path), "source_fixture_unreadable")
+
+
 def test_changed_source_or_declared_hash_mismatch_fails_closed(tmp_path: Path) -> None:
     replay_path = _write_replay_with_source(tmp_path)
     (tmp_path / "source.py").write_text("replacement\n", encoding="utf-8")
