@@ -29,6 +29,7 @@ TEMPORAL_REVIEW_V5_ADDITIVE_SURFACE = "temporal-review-v5-navigation-evidence"
 TEMPORAL_REVIEW_V6_ADDITIVE_SURFACE = "temporal-review-v6-navigation-evidence"
 TEMPORAL_REVIEW_V7_ADDITIVE_SURFACE = "temporal-review-v7-primary-navigation-evidence"
 TEMPORAL_REVIEW_V8_ADDITIVE_SURFACE = "temporal-review-v8-primary-navigation-evidence"
+TEMPORAL_REVIEW_V9_ADDITIVE_SURFACE = "temporal-review-v9-primary-navigation-evidence"
 TEMPORAL_MCP_TOOL = "mcp__loomgraph__loomgraph_branch_diff"
 TEMPORAL_SERVER_TOOL = "loomgraph_branch_diff"
 TEMPORAL_MCP_TOOLS = [TEMPORAL_MCP_TOOL]
@@ -415,6 +416,12 @@ TEMPORAL_REVIEW_V8_ORIENTATION_SCHEMA: dict[str, Any] = {
     **TEMPORAL_REVIEW_V6_ORIENTATION_SCHEMA,
 }
 
+# V9 keeps the same model-visible answer schema.  Its direct Flash literal and
+# evidence contract are enforced by the independently versioned runner.
+TEMPORAL_REVIEW_V9_ORIENTATION_SCHEMA: dict[str, Any] = {
+    **TEMPORAL_REVIEW_V6_ORIENTATION_SCHEMA,
+}
+
 
 def _compact_json(value: object) -> str:
     return json.dumps(value, separators=(",", ":"), sort_keys=True)
@@ -431,6 +438,7 @@ def _is_temporal_surface(treatment_surface: str | None) -> bool:
         TEMPORAL_REVIEW_V6_ADDITIVE_SURFACE,
         TEMPORAL_REVIEW_V7_ADDITIVE_SURFACE,
         TEMPORAL_REVIEW_V8_ADDITIVE_SURFACE,
+        TEMPORAL_REVIEW_V9_ADDITIVE_SURFACE,
     }
 
 
@@ -452,6 +460,7 @@ def build_command(
     temporal_review_v6: bool = False,
     temporal_review_v7: bool = False,
     temporal_review_v8: bool = False,
+    temporal_review_v9: bool = False,
 ) -> list[str]:
     """Build an isolated Claude invocation for exactly one condition."""
     command = [
@@ -474,7 +483,9 @@ def build_command(
         budget_usd,
         "--json-schema",
         _compact_json(
-            TEMPORAL_REVIEW_V8_ORIENTATION_SCHEMA
+            TEMPORAL_REVIEW_V9_ORIENTATION_SCHEMA
+            if temporal_review_v9
+            else TEMPORAL_REVIEW_V8_ORIENTATION_SCHEMA
             if temporal_review_v8
             else TEMPORAL_REVIEW_V7_ORIENTATION_SCHEMA
             if temporal_review_v7
@@ -515,6 +526,7 @@ def build_command(
             TEMPORAL_REVIEW_V6_ADDITIVE_SURFACE,
             TEMPORAL_REVIEW_V7_ADDITIVE_SURFACE,
             TEMPORAL_REVIEW_V8_ADDITIVE_SURFACE,
+            TEMPORAL_REVIEW_V9_ADDITIVE_SURFACE,
         }:
             raise ValueError(f"unknown treatment surface: {treatment_surface}")
         if _is_temporal_surface(treatment_surface):
@@ -1503,6 +1515,25 @@ def _load_temporal_review_v8_module() -> Any:
 def _load_temporal_review_v8_contract(task_id: str) -> object:
     return _load_temporal_review_v8_module().contract(task_id)
 
+
+def _load_temporal_review_v9_module() -> Any:
+    """Load the independent v9 direct-Flash navigation contract."""
+    path = Path(__file__).resolve().parents[1] / "temporal_review_v9_fixtures.py"
+    repo_root = str(path.parents[1])
+    if repo_root not in sys.path:
+        sys.path.insert(0, repo_root)
+    spec = importlib.util.spec_from_file_location("temporal_review_v9_fixtures_runtime", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("cannot load temporal-review v9 fixture contract")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _load_temporal_review_v9_contract(task_id: str) -> object:
+    return _load_temporal_review_v9_module().contract(task_id)
+
 def _temporal_review_trust_matches_raw(payload: object, observation: object) -> bool:
     if not isinstance(payload, dict) or not isinstance(observation, dict):
         return False
@@ -2275,6 +2306,85 @@ def build_temporal_review_v8_packet(
     return packet
 
 
+def summarize_temporal_review_v9_stream(events: list[dict[str, Any]]) -> dict[str, object]:
+    """Keep V9 raw identity evidence in the V9 surface namespace."""
+    return {
+        **summarize_stream(events, TEMPORAL_REVIEW_V9_ADDITIVE_SURFACE),
+        **_v7_model_categories(events),
+    }
+
+
+def build_temporal_review_v9_packet(
+    *,
+    condition: str,
+    use_mode: str,
+    source_clean: bool,
+    source_dir: Path,
+    return_code: int,
+    summary: dict[str, object],
+    contract: object,
+    requested_model: str = "",
+    agent_execution_seconds: float | None = None,
+) -> dict[str, Any]:
+    """Build V9 evidence with the independent direct-Flash fixture contract."""
+    packet = build_temporal_review_v7_packet(
+        condition=condition,
+        use_mode=use_mode,
+        source_clean=source_clean,
+        source_dir=source_dir,
+        return_code=return_code,
+        summary=summary,
+        contract=contract,
+        requested_model=requested_model,
+        agent_execution_seconds=agent_execution_seconds,
+        fixture_module=_load_temporal_review_v9_module(),
+        protocol=TEMPORAL_REVIEW_V9_ADDITIVE_SURFACE,
+    )
+    model_evidence = packet.get("model")
+    if isinstance(model_evidence, dict):
+        model_evidence["model_categories_valid"] = summary.get("model_categories_valid") is True
+    return packet
+
+
+def build_temporal_review_v9_calibration_packet(
+    *, source_clean: bool, return_code: int, summary: dict[str, object], requested_model: str
+) -> dict[str, Any]:
+    """Retain no-target V9 command-surface calibration evidence."""
+    categories_valid = summary.get("model_categories_valid") is True
+    complete = (
+        source_clean
+        and return_code == 0
+        and summary.get("final_result_seen") is True
+        and isinstance(summary.get("payload"), dict)
+        and categories_valid
+    )
+    return {
+        "schema_version": 1,
+        "protocol": TEMPORAL_REVIEW_V9_ADDITIVE_SURFACE,
+        "status": "complete" if complete else "failed",
+        "hard_protocol_stop": not complete,
+        "source_clean": source_clean,
+        "response_format": "json_schema",
+        "model": {
+            "requested": requested_model,
+            "model_categories_valid": categories_valid,
+            **{
+                field: summary.get(field)
+                for field in (
+                    "assistant_models_raw",
+                    "session_models_raw",
+                    "usage_models_raw",
+                    "assistant_models_canonical",
+                    "session_models_canonical",
+                    "usage_models_canonical",
+                )
+            },
+        },
+        "tool_call_count": summary.get("tool_call_count"),
+        "tool_call_names": summary.get("tool_names"),
+    }
+
+
 def build_temporal_review_v2_packet(
     *,
     condition: str,
@@ -2626,6 +2736,8 @@ def run(args: argparse.Namespace) -> int:
     temporal_review_v6_contract: object | None = None
     temporal_review_v7_contract: object | None = None
     temporal_review_v8_contract: object | None = None
+    temporal_review_v9_contract: object | None = None
+    temporal_review_v9_calibration = args.temporal_review_v9_calibration
     if args.temporal_review_contract:
         if args.treatment_surface != TEMPORAL_REVIEW_ADDITIVE_SURFACE:
             raise ValueError("temporal-review contract requires the temporal-review-additive surface")
@@ -2693,9 +2805,42 @@ def run(args: argparse.Namespace) -> int:
         if args.treatment_surface != TEMPORAL_REVIEW_V8_ADDITIVE_SURFACE:
             raise ValueError("temporal-review v8 contract requires the v8 primary-navigation surface")
         temporal_review_v8_contract = _load_temporal_review_v8_contract(args.task_id)
+    if args.temporal_review_v9_contract:
+        if any((
+            args.temporal_review_contract,
+            args.temporal_review_v2_contract,
+            args.temporal_review_v3_contract,
+            args.temporal_review_v4_contract,
+            args.temporal_review_v5_contract,
+            args.temporal_review_v6_contract,
+            args.temporal_review_v7_contract,
+            args.temporal_review_v8_contract,
+        )):
+            raise ValueError("temporal-review contracts are mutually exclusive")
+        if args.treatment_surface != TEMPORAL_REVIEW_V9_ADDITIVE_SURFACE:
+            raise ValueError("temporal-review v9 contract requires the v9 primary-navigation surface")
+        temporal_review_v9_contract = _load_temporal_review_v9_contract(args.task_id)
+    if temporal_review_v9_calibration and (any((
+        args.temporal_review_contract,
+        args.temporal_review_v2_contract,
+        args.temporal_review_v3_contract,
+        args.temporal_review_v4_contract,
+        args.temporal_review_v5_contract,
+        args.temporal_review_v6_contract,
+        args.temporal_review_v7_contract,
+        args.temporal_review_v8_contract,
+        args.temporal_review_v9_contract,
+    )) or args.treatment_surface != TEMPORAL_REVIEW_V9_ADDITIVE_SURFACE):
+        raise ValueError("v9 calibration requires only the v9 primary-navigation surface")
 
     instruction = _append_mode_requirement(args.instruction_file.read_text(), args.use_mode)
-    if temporal_review_v8_contract is not None or temporal_review_v7_contract is not None or temporal_review_v6_contract is not None:
+    if (
+        temporal_review_v9_contract is not None
+        or temporal_review_v9_calibration
+        or temporal_review_v8_contract is not None
+        or temporal_review_v7_contract is not None
+        or temporal_review_v6_contract is not None
+    ):
         instruction = _append_temporal_review_v6_requirement(instruction, args.condition)
     elif temporal_review_v5_contract is not None:
         instruction = _append_temporal_review_v5_requirement(instruction, args.condition)
@@ -2722,6 +2867,7 @@ def run(args: argparse.Namespace) -> int:
         temporal_review_v6=temporal_review_v6_contract is not None,
         temporal_review_v7=temporal_review_v7_contract is not None,
         temporal_review_v8=temporal_review_v8_contract is not None,
+        temporal_review_v9=temporal_review_v9_contract is not None or temporal_review_v9_calibration,
     )
     _write_json(output_dir / "command.json", command)
 
@@ -2750,13 +2896,40 @@ def run(args: argparse.Namespace) -> int:
     after = _repo_state(source_dir)
     source_clean = before == after and not after["porcelain"]
     summary = (
-        summarize_temporal_review_v8_stream(events)
+        summarize_temporal_review_v9_stream(events)
+        if args.treatment_surface == TEMPORAL_REVIEW_V9_ADDITIVE_SURFACE
+        else summarize_temporal_review_v8_stream(events)
         if args.treatment_surface == TEMPORAL_REVIEW_V8_ADDITIVE_SURFACE
         else summarize_temporal_review_v7_stream(events)
         if args.treatment_surface == TEMPORAL_REVIEW_V7_ADDITIVE_SURFACE
         else summarize_stream(events, args.treatment_surface)
     )
-    if args.treatment_surface == TEMPORAL_REVIEW_V8_ADDITIVE_SURFACE:
+    if temporal_review_v9_calibration:
+        packet = build_temporal_review_v9_calibration_packet(
+            source_clean=source_clean,
+            return_code=return_code,
+            summary=summary,
+            requested_model=args.model,
+        )
+    elif args.treatment_surface == TEMPORAL_REVIEW_V9_ADDITIVE_SURFACE:
+        if temporal_review_v9_contract is None:
+            raise ValueError("temporal-review v9 surface requires a temporal-review v9 contract")
+        packet = build_temporal_review_v9_packet(
+            condition=args.condition,
+            use_mode=args.use_mode,
+            source_clean=source_clean,
+            source_dir=source_dir,
+            return_code=return_code,
+            summary=summary,
+            contract=temporal_review_v9_contract,
+            requested_model=args.model,
+            agent_execution_seconds=agent_execution_seconds,
+        )
+        packet["adapter_storage"] = {
+            "root": str(storage_root),
+            "db_path_pattern": str(storage_root / "{workspace}.db"),
+        }
+    elif args.treatment_surface == TEMPORAL_REVIEW_V8_ADDITIVE_SURFACE:
         if temporal_review_v8_contract is None:
             raise ValueError("temporal-review v8 surface requires a temporal-review v8 contract")
         packet = build_temporal_review_v8_packet(
@@ -2968,6 +3141,7 @@ def main() -> int:
             TEMPORAL_REVIEW_V6_ADDITIVE_SURFACE,
             TEMPORAL_REVIEW_V7_ADDITIVE_SURFACE,
             TEMPORAL_REVIEW_V8_ADDITIVE_SURFACE,
+            TEMPORAL_REVIEW_V9_ADDITIVE_SURFACE,
         ),
         default="mcp-only",
         help="Treatment navigation surface; baseline is always text-only.",
@@ -3020,6 +3194,16 @@ def main() -> int:
         "--temporal-review-v8-contract",
         action="store_true",
         help="Load the independent v8 one-locus primary-navigation contract.",
+    )
+    parser.add_argument(
+        "--temporal-review-v9-contract",
+        action="store_true",
+        help="Load the independent v9 direct-Flash primary-navigation contract.",
+    )
+    parser.add_argument(
+        "--temporal-review-v9-calibration",
+        action="store_true",
+        help="Run a no-target V9 command-surface calibration; never load task fixtures.",
     )
     return run(parser.parse_args())
 

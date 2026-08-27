@@ -1,0 +1,100 @@
+{
+  "schema_version": 9,
+  "manifest_id": "loomgraph-temporal-review-v9-primary-navigation-evidence",
+  "repository": "loomgraph",
+  "task_class": "temporal-review-v9",
+  "selection_preflight_sha256": "08e85b57080e31c3013fc4e1131e531f1f33a974a531fc4035888e4c0c085546",
+  "cohort_lineage": {
+    "cohort_id": "temporal-review-v9",
+    "independent_from": "loomgraph-temporal-review-v8-primary-navigation-evidence",
+    "source_comparisons": "same_frozen_history_independent_same-source-contrast",
+    "predecessor_evidence": "archive_only_not_rerun_rescored_or_pooled"
+  },
+  "runtime_identity": {
+    "requested_model_literal": "glm-5.3-flash",
+    "identity_mode": "runtime-specific-only",
+    "assistant_attribution": "canonical_must_equal_requested_model_literal",
+    "raw_categories": "all_nonempty_exact_strings",
+    "required_persisted_fields": ["assistant_models_raw", "session_models_raw", "usage_models_raw", "assistant_models_canonical", "session_models_canonical", "usage_models_canonical", "model_categories_valid"],
+    "model_categories_valid": true,
+    "comparison": "exact_per_category_canonical_lists",
+    "label_normalization": "forbidden"
+  },
+  "calibration": {
+    "protocol": "temporal-review-v9-no-target-runtime-calibration",
+    "required_before_pilot": true,
+    "mode": "voluntary",
+    "scored": false,
+    "target_manifest_access": "forbidden",
+    "solution_or_gold_patch_access": "forbidden",
+    "prompt": "no_target_runtime_calibration_only",
+    "command_surface": "same_claude_orientation_command_as_pilot_except_no_target_prompt",
+    "tool_surface": {
+      "baseline": [],
+      "treatment": ["loomgraph_branch_diff"]
+    },
+    "fixed_max_budget_usd": "0.50",
+    "command_surface_fingerprint": {
+      "algorithm": "sha256_canonical_json",
+      "payload": "normalized_outer_and_inner_claude_commands",
+      "comparison": "exact_per_condition_across_calibration_replicates_and_pilot_cells",
+      "normalization": {
+        "outer_values": ["--source-dir", "--instruction-file", "--output-dir", "--task-id"],
+        "outer_markers": ["--temporal-review-v9-calibration", "--temporal-review-v9-contract"],
+        "inner_values": ["terminal_instruction"],
+        "mcp_storage_value": "LOOMGRAPH_STORAGE__DB_PATH"
+      }
+    },
+    "content_integrity": {
+      "source_path": "calibration-source/src/calibration.py",
+      "source_sha256": "4ecef8c92de9e16713cff66da3f5e80c72c05097978984520578084824779490",
+      "instruction_path": "calibration-instruction.md",
+      "instruction_sha256": "d3fdd39f6d6168253a56155fe22d92a234b084ff5d62f8b19e01ed547d712191",
+      "no_target_leakage_proof": "casefolded_source_and_instruction_forbidden_token_scan",
+      "forbidden_casefolded_terms": ["manifest", "oracle", "target", "solution", "gold", "v9-resolution", "v9-sparse"]
+    },
+    "treatment_environment": {
+      "allowed_keys": ["LOOMGRAPH_MCP_ALLOWED_TOOLS", "LOOMGRAPH_STORAGE__DB_PATH"],
+      "LOOMGRAPH_MCP_ALLOWED_TOOLS": "loomgraph_branch_diff",
+      "additional_keys": "forbidden"
+    },
+    "conditions": ["baseline", "treatment"],
+    "replicates": [1, 2],
+    "execution_order": [
+      {"replicate": 1, "condition": "baseline"},
+      {"replicate": 1, "condition": "treatment"},
+      {"replicate": 2, "condition": "treatment"},
+      {"replicate": 2, "condition": "baseline"}
+    ],
+    "identity_comparison": "all_three_category_canonical_sets_must_agree",
+    "raw_occurrences": "retain_and_rebuild_from_each_stream_not_cross_run_order_compared"
+  },
+  "answer_schema": {
+    "top_level_fields": ["decision", "review_locus"],
+    "decision_fields": ["boundary", "rationale"],
+    "decision_boundaries": ["comparison_not_observed", "content_comparison_available", "content_comparison_unavailable"],
+    "review_locus_fields": ["path", "qualname", "rationale"],
+    "scored_model_fields": ["decision.boundary", "review_locus.path", "review_locus.qualname"]
+  },
+  "fixture_exclusion_globs": ["CHANGELOG.md", "customers/CHANGELOG.md", "docs/evals/**", "tests/**", "evals/**"],
+  "tasks": [
+    {
+      "id": "v9-resolution-breakdown-persistence-primary-navigation",
+      "task_class": "temporal-review-v9",
+      "instruction_file": "temporal-review-v9-instructions/v9-resolution-breakdown-persistence-primary-navigation.txt",
+      "refs": {"base": {"alias": "v9-base", "commit_sha": "2f2079167bb71ff172bd914fb9f24c220b1a70be"}, "head": {"alias": "v9-head", "commit_sha": "67507cfad4d2ef78662daf75eb7fba3a4a581775"}},
+      "backend": "codeindex",
+      "expected_comparison": {"status": "available", "reason": null, "version": 1, "scope": "same_backend_only", "base_backend": "codeindex", "head_backend": "codeindex"},
+      "oracle": {"required_review_locus": {"path": "src/loomgraph/core/graph_export_ingest.py", "qualname": "persist_resolved_ratio", "evidence_kind": {"baseline": "source_text", "treatment": "content_delta"}}, "boundary": {"baseline": "comparison_not_observed", "treatment": "content_comparison_available"}}
+    },
+    {
+      "id": "v9-sparse-resolution-risk-primary-navigation",
+      "task_class": "temporal-review-v9",
+      "instruction_file": "temporal-review-v9-instructions/v9-sparse-resolution-risk-primary-navigation.txt",
+      "refs": {"base": {"alias": "v9-base", "commit_sha": "091e10124e9f9b05d86c6ef4133a6c43424f9fc8"}, "head": {"alias": "v9-head", "commit_sha": "26cd69f78a6c21ef6d6da5b8bb2ab5cb402d1c3b"}},
+      "backend": "codeindex",
+      "expected_comparison": {"status": "available", "reason": null, "version": 1, "scope": "same_backend_only", "base_backend": "codeindex", "head_backend": "codeindex"},
+      "oracle": {"required_review_locus": {"path": "src/loomgraph/core/impact/risk.py", "qualname": "RiskAssessor.assess", "evidence_kind": {"baseline": "source_text", "treatment": "content_delta"}}, "boundary": {"baseline": "comparison_not_observed", "treatment": "content_comparison_available"}}
+    }
+  ]
+}
