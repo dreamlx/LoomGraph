@@ -63,10 +63,15 @@ async def _async_workspace_info(name: str | None, ws_option: str | None) -> dict
     """Run async workspace info."""
     from collections import Counter
 
-    from loomgraph.storage.factory import create_graph_store
+    from loomgraph.storage.factory import create_graph_store, workspace_exists
 
     # name argument takes priority, then -w option, then auto-detect
     ws_name = name or get_auto_workspace(ws_option)
+    if ws_name is None or not workspace_exists(ws_name):
+        raise click.ClickException(
+            f"Workspace '{ws_name}' not found. "
+            "Index the codebase first: loomgraph index ."
+        )
     store = await create_graph_store(workspace=ws_name)
 
     entities = await store.get_all_entities()

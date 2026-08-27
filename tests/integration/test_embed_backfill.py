@@ -113,6 +113,9 @@ def test_import_then_backfill_then_search(
         "loomgraph.storage.factory.create_graph_store",
         _make_store,
     )
+    monkeypatch.setattr(
+        "loomgraph.storage.factory.workspace_exists", lambda _workspace: True
+    )
 
     # Enable embedding
     from loomgraph.core.config import get_settings
@@ -201,6 +204,9 @@ def test_backfill_idempotent_on_already_embedded(
     monkeypatch.setattr(
         "loomgraph.storage.factory.create_graph_store",
         _make_store,
+    )
+    monkeypatch.setattr(
+        "loomgraph.storage.factory.workspace_exists", lambda _workspace: True
     )
 
     # Pre-seed with entities AND vectors

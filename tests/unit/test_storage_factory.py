@@ -12,6 +12,7 @@ from loomgraph.storage.factory import (
     _resolve_db_path,
     create_graph_store,
     create_llm_client,
+    workspace_exists,
 )
 from loomgraph.storage.sqlite_store import SqliteGraphStore
 
@@ -74,6 +75,16 @@ class TestDBPathResolution:
 
 
 class TestGraphStoreFactory:
+    def test_workspace_exists_does_not_create_missing_database(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setenv(
+            "LOOMGRAPH_STORAGE__DB_PATH", str(tmp_path / "{workspace}.db")
+        )
+
+        assert workspace_exists("missing") is False
+        assert list(tmp_path.glob("*.db")) == []
+
     async def test_sqlite_backend_default(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:

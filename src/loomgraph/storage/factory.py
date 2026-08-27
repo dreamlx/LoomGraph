@@ -41,6 +41,14 @@ def _resolve_db_path(template: str, workspace: str | None) -> Path:
     return expanded
 
 
+def workspace_exists(workspace: str) -> bool:
+    """Return whether a workspace database already exists without opening it."""
+    if not workspace:
+        return False
+    settings = get_settings()
+    return _resolve_db_path(settings.storage.db_path, workspace).is_file()
+
+
 async def create_graph_store(workspace: str | None = None) -> GraphStore:
     """Instantiate the SQLite-backed GraphStore.
 
