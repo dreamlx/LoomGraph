@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-08-28
+
+### Added
+
+- `loomgraph init` now writes an orient-first project navigation policy: use
+  native tools for exact or small tasks, and run the read-only `loomgraph orient`
+  only for uncertain cross-file, impact, dependency, or temporal work (#298).
+
+### Fixed
+
+- `loomgraph mcp install-config` now emits scope-aware Claude Code activation
+  guidance, defaulting to the local scope and supporting explicit project or
+  user scope selection (#295).
+
 ## [0.23.0] - 2026-08-28
 
 ### Added
@@ -1838,7 +1852,8 @@ infrastructure was added.
 - System design document
 - Project roadmap, epics, and feature definitions
 
-[Unreleased]: https://github.com/dreamlx/LoomGraph/compare/v0.23.0...HEAD
+[Unreleased]: https://github.com/dreamlx/LoomGraph/compare/v0.24.0...HEAD
+[0.24.0]: https://github.com/dreamlx/LoomGraph/compare/v0.23.0...v0.24.0
 [0.23.0]: https://github.com/dreamlx/LoomGraph/compare/v0.22.0...v0.23.0
 [0.22.0]: https://github.com/dreamlx/LoomGraph/compare/v0.21.1...v0.22.0
 [0.21.1]: https://github.com/dreamlx/LoomGraph/compare/v0.21.0...v0.21.1
