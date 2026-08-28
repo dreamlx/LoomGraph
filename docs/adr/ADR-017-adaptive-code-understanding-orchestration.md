@@ -162,6 +162,9 @@ field validation 的首轮只评估开发前理解与定位：陌生模块 onboa
 plan 评价为主，并单独记录 source bytes、tool calls、模型 token/费用（仅在运行时
 可可靠取得时）与时间；这些诊断字段不得跨语言、仓库、host 或 model 合成单一胜率。
 
+公开协议、私有原始证据与人工脱敏发布的具体执行规则见
+[Private field-validation protocol](../evals/private-field-validation-protocol.md)。
+
 ADR-008 的 LightRAG 架构图与“LoomGraph 承接全部跨模块能力”的具体实现前提已被
 ADR-013 的本地 SQLite 架构取代；本 ADR 进一步将其能力边界更新为
 provider-agnostic 的策略与证据边界。

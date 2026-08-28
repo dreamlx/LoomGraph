@@ -330,6 +330,9 @@ gap in the README's earlier claims. See [CHANGELOG.md](CHANGELOG.md).
 For the separate agent-use evaluation boundary, see
 [docs/evals/evaluation-v1.md](docs/evals/evaluation-v1.md). It reports
 capability and evidence fields per task; it is not a pooled solve-rate claim.
+Real-project field validation follows the public
+[private field-validation protocol](docs/evals/private-field-validation-protocol.md):
+customer source and raw evidence remain outside this repository.
 The deterministic Track A assertions live in
 [evals/capability-manifest.json](evals/capability-manifest.json) — a live gate,
 not inert docs: `python evals/run_capability_manifest.py` resolves and runs
