@@ -33,12 +33,16 @@ _CODEGRAPH_STRONG_LANGS = {
 _PROJECT_GUIDANCE_HEADING = "## LoomGraph navigation policy"
 _PROJECT_GUIDANCE = f"""{_PROJECT_GUIDANCE_HEADING}
 
-- Use ordinary text navigation for exact text, string, or single-file lookup.
-- For cross-file relationships, caller/callee or change impact, module dependencies
-  or topology, and branch/history comparison, use LoomGraph first.
-- Resolve an entity with `loomgraph_find` before `loomgraph_graph`.
-- Check index freshness when the working tree may have changed. Do not treat an
-  empty, failed, stale, or partial graph result as proof that no relationship exists.
+- Use native tools first for exact text, string, single-file lookup, or a small
+  local change.
+- For an uncertain cross-file, impact, dependency, or time-comparison task, run
+  `loomgraph orient` before choosing an evidence path.
+- Use LoomGraph only when an appropriate existing workspace is available. Do not
+  create an index or snapshot merely to satisfy this policy.
+- Treat empty, stale, partial, semantic, or provider-derived results as bounded
+  evidence, never as proof that a relationship does not exist.
+- `refresh` and `branch_diff` are explicit maintenance or provisioning operations,
+  not read queries.
 """
 
 

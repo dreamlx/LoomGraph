@@ -2466,8 +2466,13 @@ class TestInitGuidance:
         assert data["data"]["updated"] is True
         guidance = guidance_path.read_text()
         assert "## LoomGraph navigation policy" in guidance
-        assert "cross-file relationships" in guidance
-        assert "exact text" in guidance
+        assert "exact text, string, single-file lookup" in guidance
+        assert "`loomgraph orient`" in guidance
+        assert "existing workspace" in guidance
+        assert "create an index or snapshot" in guidance
+        assert "`refresh` and `branch_diff`" in guidance
+        assert "loomgraph_find" not in guidance
+        assert {path.name for path in tmp_path.iterdir()} == {"CLAUDE.md"}
 
     def test_init_preserves_existing_content_and_is_idempotent(
         self, runner: CliRunner, tmp_path: Path
@@ -2483,3 +2488,20 @@ class TestInitGuidance:
         guidance = guidance_path.read_text()
         assert guidance.startswith("# Existing project guidance\n")
         assert guidance.count("## LoomGraph navigation policy") == 1
+
+    def test_init_does_not_rewrite_existing_user_owned_policy(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
+        """An existing policy block is user-owned and stays untouched."""
+        guidance_path = tmp_path / "CLAUDE.md"
+        original = (
+            "## LoomGraph navigation policy\n\n"
+            "- Keep this project-specific wording unchanged.\n"
+        )
+        guidance_path.write_text(original)
+
+        result = runner.invoke(main, ["init", "--path", str(guidance_path)])
+
+        assert result.exit_code == 0
+        assert json.loads(result.stdout)["data"]["updated"] is False
+        assert guidance_path.read_text() == original

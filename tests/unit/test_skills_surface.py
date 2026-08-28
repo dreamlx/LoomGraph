@@ -25,3 +25,14 @@ def test_only_init_and_setup_skills_remain():
         f"deprecated skills still bundled: {deprecated & present}"
     )
     assert {"loomgraph-init", "loomgraph-setup"}.issubset(present)
+
+
+def test_init_skill_delegates_policy_writing_to_cli() -> None:
+    """The bundled init skill must not drift into a second policy writer."""
+    skill = (SKILLS_DIR / "loomgraph-init" / "SKILL.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "`loomgraph init`" in skill
+    assert "不要手工编辑" in skill
+    assert "loomgraph find" not in skill
