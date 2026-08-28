@@ -35,6 +35,11 @@ customer identifier, source-bearing path, ref, SHA, solution, or trace excerpt.
 This cohort asks a narrow question: can the agent locate relevant source or
 structural evidence for a declared investigation?
 
+The versioned task, response, review, and private-runner handoff contract is
+[private-source-evidence-localization-v1.md](private-source-evidence-localization-v1.md).
+That document is the authoritative schema for this cohort; this page only
+defines the shared cohort boundary.
+
 The task must ask for a source-supported evidence table with claims labelled
 `confirmed`, `candidate`, or `unavailable`. It may ask for the next review
 locus, but must not ask the agent to choose a product policy or invent a code
