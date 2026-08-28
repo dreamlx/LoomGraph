@@ -1,57 +1,30 @@
 ---
 name: loomgraph-init
-description: Add LoomGraph usage instructions to project CLAUDE.md
+description: Add LoomGraph's orient-first evidence policy to a project CLAUDE.md
 disable-model-invocation: true
 ---
 
-## 配置项目使用 LoomGraph
+## 配置项目的 LoomGraph evidence policy
 
-此 skill 将在当前项目的 CLAUDE.md 中追加 LoomGraph 使用说明。
-
-### 要追加的内容
-
-```markdown
-## 代码智能 (LoomGraph)
-
-本项目已用 LoomGraph 索引，可使用以下命令：
-
-- `loomgraph find "<实体名>"` - 结构化实体发现（类、函数、模块）
-- `loomgraph find "<实体名>" --with-relations` - 实体 + 调用关系一次返回
-- `loomgraph graph "<实体名>"` - 精确关系遍历（callers/callees）
-- `loomgraph deps` - 模块依赖分析
-- `loomgraph overview` - 项目模块概览
-- `loomgraph workspace info` - 查看索引统计
-- `loomgraph status` - 检查服务状态
-
-如需重新索引：`loomgraph index .`
-```
+此 skill 只委托 `loomgraph init` 写入简短、跨宿主的项目策略。它不手工编辑
+`CLAUDE.md`，也不把命令清单复制进项目说明。
 
 ### 执行步骤
 
-1. **检查 CLAUDE.md 是否存在**
+1. 说明此操作会向当前项目的 `CLAUDE.md` 追加一段 policy；若该文件已有
+   LoomGraph policy，CLI 会保持原文不变。
+2. 在项目根目录执行：
+
    ```bash
-   ls CLAUDE.md
+   loomgraph init
    ```
-   - 如果不存在，创建新文件
-   - 如果存在，继续下一步
 
-2. **检查是否已有 LoomGraph 配置**
-   ```bash
-   grep -q "代码搜索 (LoomGraph)" CLAUDE.md
-   ```
-   - 如果已存在，提示："LoomGraph 配置已存在，跳过"
-   - 如果不存在，继续下一步
+3. 报告 CLI 返回的 `updated` 状态与目标路径。
 
-3. **追加内容到 CLAUDE.md**
-   - 在文件末尾添加上述 markdown 内容
-   - 确保前面有空行分隔
+### 边界
 
-4. **确认完成**
-   - 输出："✅ 已在 CLAUDE.md 添加 LoomGraph 使用说明"
-   - 提示：接下来执行 `loomgraph index .` 索引代码库
-
-### 为什么需要这一步？
-
-- **持久化记忆**：让 Claude Code 在后续会话中知道项目已配置 LoomGraph
-- **命令参考**：提供快速可用的命令说明
-- **避免重复配置**：下次进入项目不需要重新配置
+- 不要手工编辑 `CLAUDE.md`；`loomgraph init` 是唯一 policy writer。
+- 不运行 `loomgraph index`，不创建 snapshot 或数据库，不配置 MCP，不调用
+  provider 或 LLM。
+- 该 policy 只说明何时考虑结构/时间证据：小型或局部任务仍以 native tools
+  为默认；不确定的跨文件或时间任务先运行 `loomgraph orient`。
