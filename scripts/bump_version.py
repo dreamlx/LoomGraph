@@ -85,11 +85,11 @@ def bump(new_version: str) -> None:
         flags=re.MULTILINE,
     )
     PYPROJECT.write_text(content)
-    print(f"  ✓ pyproject.toml")
+    print("  ✓ pyproject.toml")
 
     # 2. customers/VERSION
     CUSTOMERS_VERSION.write_text(new_version + "\n")
-    print(f"  ✓ customers/VERSION")
+    print("  ✓ customers/VERSION")
 
     # 3. CHANGELOG.md: convert [Unreleased] section to versioned
     if CHANGELOG.exists():
@@ -106,8 +106,8 @@ def bump(new_version: str) -> None:
         # Update comparison links at bottom
         # [Unreleased]: ...compare/vOLD...HEAD → ...compare/vNEW...HEAD
         content = re.sub(
-            r'\[Unreleased\]:\s*(.*)/compare/v[^.]+\.\.\.',
-            f'[Unreleased]: \\1/compare/v{new_version}...',
+            r'(?m)^(\[Unreleased\]:\s*.+/compare/)v\d+\.\d+\.\d+\.\.\.HEAD$',
+            f'\\1v{new_version}...HEAD',
             content,
         )
 
@@ -124,8 +124,8 @@ def bump(new_version: str) -> None:
         print(f"  ✓ CHANGELOG.md ([Unreleased] → [{new_version}] - {today})")
 
     print(f"\nVersion bumped to {new_version}")
-    print(f"Next steps:")
-    print(f"  git add pyproject.toml customers/VERSION CHANGELOG.md")
+    print("Next steps:")
+    print("  git add pyproject.toml customers/VERSION CHANGELOG.md")
     print(f"  git commit -m 'chore: bump version to {new_version}'")
     print(f"  git tag v{new_version}")
 

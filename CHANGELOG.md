@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-08-28
+
 ### Added
 
 - Add `loomgraph orient`, a read-only Claude Code first-step navigation plan
@@ -19,11 +21,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   before declaring a provider-owned structural candidate; mismatches fall back
   to native unavailable without invoking CBM or rebuilding its index (#287).
 
+### Fixed
+
+- Prevent read-only queries for missing workspaces from creating SQLite files;
+  auto-detected misses now explain how to select an indexed workspace (#235, #236).
+- Aggregate resolved module-level IMPORTS edges in `loomgraph deps`, while
+  continuing to exclude external, unresolved, and ambiguous endpoints (#239).
+
 ### Changed
 
 - Close the v1 structural capability benchmark protocol and define the separate
   branch-diff agent-use entry boundary in ADR-016.
 - Add the proposed, independently scoped branch-diff agent-use v2 task design.
+- Correct the bundled Claude Code skill distribution documentation (#277).
 
 ## [0.22.0] - 2026-08-23
 
@@ -1828,7 +1838,8 @@ infrastructure was added.
 - System design document
 - Project roadmap, epics, and feature definitions
 
-[Unreleased]: https://github.com/dreamlx/LoomGraph/compare/v0.20.0...HEAD
+[Unreleased]: https://github.com/dreamlx/LoomGraph/compare/v0.23.0...HEAD
+[0.23.0]: https://github.com/dreamlx/LoomGraph/compare/v0.22.0...v0.23.0
 [0.22.0]: https://github.com/dreamlx/LoomGraph/compare/v0.21.1...v0.22.0
 [0.21.1]: https://github.com/dreamlx/LoomGraph/compare/v0.21.0...v0.21.1
 [0.21.0]: https://github.com/dreamlx/LoomGraph/compare/v0.20.0...v0.21.0
