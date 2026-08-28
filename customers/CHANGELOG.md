@@ -8,6 +8,26 @@
 
 > **更新方式**: `pipx upgrade loomgraph`（已装 `[embed]` extra 的用 `pipx upgrade loomgraph --include-extra`）。
 
+## [0.23.0] - 2026-08-28
+
+### 新增 — `loomgraph orient`（#284）
+
+- 新增 Claude Code 的只读首步导航命令：按 `local`、`cross-file` 或
+  `temporal-review` 返回 native、条件 structural 或时间比较建议；不会创建索引、
+  快照或数据库，也不会调用 provider。
+
+### 修复 — workspace 只读查询与分支切换提示（#235, #236）
+
+- 缺失 workspace 的只读查询不再留下空 SQLite 文件；自动推导到不存在的分支
+  workspace 时，stderr 会提示如何使用 `--workspace <name>` 选择已有索引。
+
+### 修复 — `loomgraph deps` 纳入已解析模块 import（#239）
+
+- 模块依赖结果现在包含已解析、两端唯一映射到源码模块的 IMPORTS 边；外部、
+  未解析和歧义 import 继续排除，避免把不可信边升级为依赖结论。
+
+## [0.22.0] - 2026-08-23
+
 ### 新增 — `resolved_ratio` 拆分为内部/外部未解析（#208）
 
 - 索引时把边按 codeindex 的解析判定拆成三个比率（同一分母）：

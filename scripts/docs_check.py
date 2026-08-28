@@ -110,7 +110,9 @@ def check_md_links(fails: list[str]) -> None:
     for md in ROOT.rglob("*.md"):
         rel = md.relative_to(ROOT)
         parts = rel.parts
-        if parts and parts[0] in {".venv", "node_modules", "dist", "customers"}:
+        if parts and parts[0] in {
+            ".venv", "node_modules", "dist", "customers", "test_output"
+        }:
             continue  # customers/ links outward; tool dirs are noise
         for target in MD_LINK.findall(md.read_text()):
             if target.startswith(("http://", "https://", "#", "mailto:")):
