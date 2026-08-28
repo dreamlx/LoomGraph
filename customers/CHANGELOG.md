@@ -8,6 +8,16 @@
 
 > **更新方式**: `pipx upgrade loomgraph`（已装 `[embed]` extra 的用 `pipx upgrade loomgraph --include-extra`）。
 
+## [0.24.0] - 2026-08-28
+
+### 改进 — 更清晰的 Claude Code 启用与导航（#295, #298）
+
+- `loomgraph mcp install-config` 现在默认输出 Claude Code 的本地 scope
+  启用命令；需要共享时可显式选择 project 或 user scope。
+- `loomgraph init` 写入面向实际任务的导航规则：小范围、明确任务优先使用原生工具；
+  只有跨文件、影响、依赖或时间比较存在不确定性时，才运行只读的
+  `loomgraph orient`。该规则不会自动创建索引、快照或数据库，也不会调用 provider。
+
 ## [0.23.0] - 2026-08-28
 
 ### 新增 — `loomgraph orient`（#284）
