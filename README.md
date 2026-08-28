@@ -101,6 +101,9 @@ loomgraph codeindex scan-all --ai   # whole tree (passthrough)
 # Index a repo (uses codeindex under the hood for parsing)
 loomgraph index .
 
+# Ask for a read-only, Claude Code-first navigation plan
+loomgraph orient --task-kind cross-file
+
 # Optional but recommended for Claude Code projects: add the project-level
 # rule describing when structural navigation is preferable to text lookup.
 loomgraph init
@@ -151,7 +154,10 @@ loomgraph workspace delete NAME --yes   # remove a workspace (unlinks the .db)
 If the current branch's workspace is empty (e.g. you're on a fresh branch that
 was never indexed), query commands **auto-fall-back** to `main` → `develop` →
 `master` so you still get results — index the current branch explicitly with
-`loomgraph index .` when you want branch-specific data.
+`loomgraph index .` when you want branch-specific data. A read-only query for a
+missing explicit workspace never creates an empty database: it reports the
+fallback or missing-workspace hint on stderr. Use `--workspace NAME` when you
+need to select a specific existing workspace.
 
 ## Configuration
 

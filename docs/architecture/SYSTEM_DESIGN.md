@@ -2,9 +2,9 @@
 
 **版本**: 0.7.0
 **更新日期**: 2026-07-06
-**状态**: ✅ 确认
+**状态**: 🗃️ 历史参考（非当前权威）
 
-> **本文已更新到 ADR-013 架构（SQLite + sqlite-vec + 本地 Ollama），H200 / LightRAG / Postgres 时代描述已移除（2026-07）。** v0.5.0 之前的三仓库"codeindex 看 / LoomGraph 想 / LightRAG 记"模型已被替换：LoomGraph 现在自带存储层（`SqliteGraphStore`），LightRAG 作为独立存储组件已退役。
+> **请勿以本文判断当前产品行为。** 本文保留 v0.7 的历史设计记录；当前 CLI 行为以 [README](../../README.md) 和 [CLI 设计](../api/CLI_DESIGN.md) 为准，架构决策以 [ADR-013](../adr/ADR-013-sqlite-vec-replace-lightrag.md) 与 [ADR-017](../adr/ADR-017-adaptive-code-understanding-orchestration.md) 为准。
 
 ---
 
