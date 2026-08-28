@@ -16,8 +16,9 @@ pipx install loomgraph
 pipx install ai-codeindex
 loomgraph index .
 
-# 3. tell Claude Code where to find loomgraph (writes ~/.claude/mcp.json)
-loomgraph mcp install-config --path ~/.claude/mcp.json
+# 3. register for this project's current Claude Code user (no JSON editing)
+claude mcp add --scope local loomgraph -- loomgraph mcp serve
+claude mcp get loomgraph
 
 # 4. opt in to project-level tool-selection guidance (writes CLAUDE.md)
 loomgraph init
@@ -319,7 +320,20 @@ omit for multi-workspace setups and rely on per-call.
 
 ## Claude Code config
 
-`loomgraph mcp install-config` writes (or prints) this:
+For a private, per-project setup, use Claude Code's current scoped command:
+
+```bash
+claude mcp add --scope local loomgraph -- loomgraph mcp serve
+claude mcp get loomgraph
+```
+
+Use `--scope project` only when the team intends to commit a shared `.mcp.json`
+and each member can install LoomGraph; Claude Code asks members to approve such
+servers. `--scope user` is for a private cross-project setup.
+
+`loomgraph mcp install-config` prints the same activation command by default
+and never writes a host config. Its explicit `--path` option remains for a
+compatible host that expects static JSON, for example:
 
 ```json
 {
@@ -410,7 +424,10 @@ calls in the same MCP session.
 
 1. **No streaming**: large `topology` / `deps` responses come back
    as one blob. Streaming via MCP is possible but deferred.
-2. **No write tools**: see "What's NOT exposed" above. By design.
+2. **Explicit write/provisioning tools**: `loomgraph_refresh` re-ingests
+   working-tree changes and `loomgraph_branch_diff` may provision isolated git
+   ref snapshots. They are not query-only operations; call them deliberately
+   and do not infer that a read tool has refreshed or provisioned evidence.
 3. **No long-running process management**: if the MCP server crashes
    mid-session, Claude Code restarts it on next tool call (Claude's
    built-in behavior). No state to recover.

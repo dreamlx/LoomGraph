@@ -1,8 +1,7 @@
 """CLI command: `loomgraph mcp serve` — start the MCP stdio server.
 
-This is the production entry point referenced from `~/.claude/mcp.json`
-(or equivalent) so Claude Code / Cursor / Codex can launch loomgraph
-as a native MCP server.
+This is the production entry point that Claude Code and other MCP-aware
+hosts launch as a native MCP server.
 
 The server itself is in `loomgraph.mcp.server`; this module is
 only the click wiring.
@@ -70,13 +69,21 @@ def serve(default_workspace: str | None) -> None:
 @click.option(
     "--path",
     default=None,
-    help="Path to Claude Code MCP config (default: ~/.claude/mcp.json).",
+    help="Explicit static MCP JSON config path for a compatible host.",
 )
-def install_config(path: str | None) -> None:
-    """Print or write the Claude Code MCP config entry for loomgraph.
+@click.option(
+    "--scope",
+    type=click.Choice(["local", "project", "user"]),
+    default="local",
+    show_default=True,
+    help="Claude Code scope used in the printed activation command.",
+)
+def install_config(path: str | None, scope: str) -> None:
+    """Print Claude Code activation guidance or write explicit static JSON.
 
-    By default prints to stdout so the user can copy-paste; pass a
-    --path to merge it in-place.
+    By default this prints a current ``claude mcp add`` command and never
+    writes host configuration. Pass ``--path`` only for a host that expects
+    a static JSON config file.
     """
     import json
     from pathlib import Path
@@ -87,12 +94,13 @@ def install_config(path: str | None) -> None:
             "args": ["mcp", "serve"],
         }
     }
-    snippet = json.dumps({"mcpServers": entry}, indent=2)
-
     if path is None:
-        click.echo("# Add this to your Claude Code MCP config")
-        click.echo("# (default location: ~/.claude/mcp.json)")
-        click.echo(snippet)
+        click.echo("# Register LoomGraph with Claude Code in the selected scope")
+        click.echo(
+            f"claude mcp add --scope {scope} loomgraph -- loomgraph mcp serve"
+        )
+        click.echo("# Verify that Claude Code can start the server")
+        click.echo("claude mcp get loomgraph")
         return
 
     p = Path(path).expanduser()

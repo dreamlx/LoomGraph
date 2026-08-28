@@ -264,11 +264,21 @@ LoomGraph speaks **MCP (Model Context Protocol)** natively as of v0.12.0.
 After `pipx install loomgraph` and one-time indexing (`loomgraph index .`):
 
 ```bash
-loomgraph mcp install-config --path ~/.claude/mcp.json
+# private to this project (Claude Code default)
+claude mcp add --scope local loomgraph -- loomgraph mcp serve
+claude mcp get loomgraph
+
 loomgraph init
 ```
 
-Restart Claude Code. `loomgraph_find` / `loomgraph_graph` /
+Use `--scope project` only when the team intends to commit a shared `.mcp.json`
+and each member can install `loomgraph`; Claude Code asks members to approve
+project-scoped servers. `--scope user` is for a private cross-project setup.
+`loomgraph mcp install-config` prints the matching command without writing host
+configuration. Its explicit `--path` option is only for MCP hosts that use a
+static JSON file.
+
+Restart Claude Code after registering the server. `loomgraph_find` / `loomgraph_graph` /
 `loomgraph_topology` / `loomgraph_impact` / `loomgraph_deps` /
 `loomgraph_overview` / `loomgraph_workspace_*` appear as native tools —
 no subprocess overhead, no `/skill-name` invocation. Full reference:
