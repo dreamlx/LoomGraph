@@ -16,10 +16,12 @@ from click.testing import CliRunner
 
 from loomgraph.cli._branch_diff import (
     BranchDiffBackendUnavailableError,
+    BranchDiffStorageLayoutError,
     _codegraph_file_limit,
     _decide_workspace,
     _parse_ref_range,
     ensure_branch_diff_backend,
+    ensure_branch_diff_storage_layout,
 )
 from loomgraph.cli.main import main
 from loomgraph.core.config import reset_settings
@@ -177,6 +179,56 @@ def test_backend_availability_only_checks_codeindex(
         ensure_branch_diff_backend("codeindex")
 
     ensure_branch_diff_backend("codegraph")
+
+
+def test_branch_diff_storage_layout_requires_workspace_template(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db_path = tmp_path / "fixed.db"
+    monkeypatch.setenv("LOOMGRAPH_STORAGE__DB_PATH", str(db_path))
+    reset_settings()
+
+    with pytest.raises(BranchDiffStorageLayoutError, match="separate SQLite"):
+        ensure_branch_diff_storage_layout()
+
+    assert not db_path.exists()
+
+
+def test_branch_diff_storage_layout_accepts_workspace_template(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _storage_at(tmp_path, monkeypatch)
+
+    ensure_branch_diff_storage_layout()
+
+
+def test_cli_fixed_storage_path_fails_before_provisioning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from loomgraph.cli import _branch_diff
+
+    db_path = tmp_path / "fixed.db"
+    monkeypatch.setenv("LOOMGRAPH_STORAGE__DB_PATH", str(db_path))
+    reset_settings()
+    monkeypatch.setattr(_branch_diff, "is_git_repository", lambda _repo: True)
+    monkeypatch.setattr(
+        _branch_diff,
+        "ensure_branch_diff_backend",
+        lambda _backend: pytest.fail("backend check must not run"),
+    )
+    monkeypatch.setattr(
+        _branch_diff,
+        "_provision_ref",
+        lambda *_args, **_kwargs: pytest.fail("provisioning must not run"),
+    )
+
+    result = CliRunner().invoke(main, ["branch-diff", "main..feature"])
+
+    assert result.exit_code == 1
+    payload = json.loads(result.stdout)
+    assert payload["error"]["code"] == "STORAGE_ERROR"
+    assert "{workspace}" in payload["error"]["suggestion"]
+    assert not db_path.exists()
 
 
 def test_cli_missing_codeindex_keeps_typed_error(

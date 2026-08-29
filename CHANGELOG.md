@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Fail closed before `branch-diff` provisioning when `storage.db_path` cannot
+  isolate the base and head snapshot workspaces (#308).
+
 ## [0.24.0] - 2026-08-28
 
 ### Added

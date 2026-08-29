@@ -174,6 +174,9 @@ embedding:
   enabled: false   # turn on later for vec0 semantic search
 ```
 
+`{workspace}` keeps workspace data in separate SQLite files and is required
+for multi-snapshot commands such as `loomgraph branch-diff`.
+
 ### Semantic search
 
 Default `provider: auto` (v0.18+): a local Ollama is probed first; if absent, the

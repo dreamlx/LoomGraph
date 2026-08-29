@@ -119,6 +119,8 @@ loomgraph branch-diff <base>..<head> [--backend codeindex|codegraph]
 
 命令会为两侧 ref 自动创建或复用隔离的 detached worktree + snapshot
 workspace，然后返回实体、边、调用链、内容变化和模块耦合的方向性 diff。
+`storage.db_path` 必须包含 `{workspace}`，使两侧 snapshot 使用独立 SQLite
+文件；固定路径仅适用于单 workspace 操作，`branch-diff` 会在 provision 前拒绝它。
 默认使用本地 `codeindex`；`--backend codegraph` 会在每个 detached worktree
 中调用 PATH 上解析到的 npm `codegraph` CLI（新 worktree 先 `init`，已有数据库才
 `sync`），再由 loomgraph 读取 `.codegraph/codegraph.db`。`diff` 的

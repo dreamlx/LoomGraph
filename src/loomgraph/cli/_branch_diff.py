@@ -56,6 +56,27 @@ class BranchDiffBackendUnavailableError(GraphExportError):
     """Selected branch-diff backend cannot be used in this environment."""
 
 
+class BranchDiffStorageLayoutError(ValueError):
+    """The configured storage layout cannot isolate two snapshot workspaces."""
+
+
+def ensure_branch_diff_storage_layout() -> None:
+    """Require a per-workspace database path before snapshot provisioning.
+
+    ``branch-diff`` keeps two independently queryable snapshots.  A fixed
+    database path maps both workspace names to the same SQLite file, which is
+    not a shared-workspace storage mode under the current storage model.
+    """
+    from loomgraph.core.config import get_settings
+
+    db_path = get_settings().storage.db_path
+    if "{workspace}" not in db_path:
+        raise BranchDiffStorageLayoutError(
+            "branch-diff requires storage.db_path to contain '{workspace}' "
+            "so base and head snapshots use separate SQLite databases"
+        )
+
+
 def ensure_branch_diff_backend(backend: str) -> None:
     """Apply branch-diff's shared backend availability rule.
 
@@ -378,7 +399,18 @@ def branch_diff(ref_range: str, backend: str) -> None:
     base_ref, head_ref = parsed
 
     try:
+        ensure_branch_diff_storage_layout()
         ensure_branch_diff_backend(backend)
+    except BranchDiffStorageLayoutError as e:
+        output_error(
+            code=ErrorCode.STORAGE_ERROR,
+            message=str(e),
+            suggestion=(
+                "Set storage.db_path to a template such as "
+                "'~/.loomgraph/{workspace}.db' and retry."
+            ),
+        )
+        return
     except BranchDiffBackendUnavailableError as e:
         output_error(
             code=ErrorCode.CODEINDEX_NOT_FOUND,
