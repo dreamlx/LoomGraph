@@ -9,7 +9,15 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from loomgraph.cli import _branch_diff as c_branch_diff
+from loomgraph.core.config import reset_settings
 from loomgraph.mcp.tools import branch_diff as t_branch_diff
+
+
+@pytest.fixture(autouse=True)
+def _reset_settings() -> None:
+    reset_settings()
+    yield
+    reset_settings()
 
 
 @pytest.mark.asyncio
@@ -119,6 +127,31 @@ async def test_branch_diff_missing_codeindex_stays_structured_error(
     assert payload["success"] is False
     assert payload["error"]["code"] == "BRANCH_DIFF_FAILED"
     assert "codeindex not found" in payload["error"]["message"]
+
+
+@pytest.mark.asyncio
+async def test_branch_diff_fixed_storage_path_fails_before_backend(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db_path = tmp_path / "fixed.db"
+    monkeypatch.setenv("LOOMGRAPH_STORAGE__DB_PATH", str(db_path))
+    reset_settings()
+    monkeypatch.setattr(t_branch_diff, "is_git_repository", lambda _repo: True)
+    monkeypatch.setattr(
+        t_branch_diff,
+        "ensure_branch_diff_backend",
+        lambda _backend: pytest.fail("backend check must not run"),
+    )
+
+    contents = await t_branch_diff.handle(
+        {"base_ref": "main", "head_ref": "feature", "repo_path": str(tmp_path)}
+    )
+
+    payload = json.loads(contents[0].text)
+    assert payload["success"] is False
+    assert payload["error"]["code"] == "BRANCH_DIFF_FAILED"
+    assert "{workspace}" in payload["error"]["message"]
+    assert not db_path.exists()
 
 
 def test_branch_diff_tool_registered() -> None:

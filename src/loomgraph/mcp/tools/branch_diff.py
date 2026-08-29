@@ -19,6 +19,7 @@ from loomgraph.cli._branch_diff import (
     _async_branch_diff,
     _provision_ref,
     ensure_branch_diff_backend,
+    ensure_branch_diff_storage_layout,
 )
 from loomgraph.cli._indexing import SUPPORTED_BACKENDS
 from loomgraph.core.git import is_git_repository, resolve_ref
@@ -84,6 +85,7 @@ async def _run_branch_diff(
     if not is_git_repository(repo):
         raise ValueError(f"Not a git repository: {repo}")
 
+    await asyncio.to_thread(ensure_branch_diff_storage_layout)
     try:
         await asyncio.to_thread(ensure_branch_diff_backend, backend)
     except BranchDiffBackendUnavailableError as e:
